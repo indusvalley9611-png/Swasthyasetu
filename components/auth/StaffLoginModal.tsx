@@ -26,8 +26,9 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
   const { sendOtp, verifyOtp, user } = useAuth();
   const { language } = useLanguage();
 
-  const staffList = Object.values(PRE_REGISTERED_STAFF);
-  const initialStaff = initialRole ? staffList.find(s => s.role === initialRole) : staffList[1];
+  const allStaff = Object.values(PRE_REGISTERED_STAFF);
+  const staffList = initialRole ? allStaff.filter(s => s.role === initialRole) : allStaff;
+  const initialStaff = initialRole ? allStaff.find(s => s.role === initialRole) : allStaff[1];
   
   const [phone, setPhone] = useState(initialStaff?.phone || '9422018374');
   const [otp, setOtp] = useState('');
