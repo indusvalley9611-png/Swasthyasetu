@@ -1,28 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Role } from '@/lib/types';
-
-export interface UserProfile {
-  id: string;
-  name: string;
-  role: Role;
-  roleTitleEn: string;
-  roleTitleMr: string;
-  phone: string;
-  facilityName: string;
-  facilityType: string;
-  hfrCode: string; // Health Facility Registry code
-  taluka: string;
-  district: string;
-  registrationNumber: string; // MMC or ASHA ID
-}
-
-export const PRE_REGISTERED_STAFF: Record<string, UserProfile> = {
-  '9822019284': {
-    id: 'user-asha-01',
-    name: 'Smt. Sunita Shinde',
-    role: 'asha',
+export type Role = 'asha' | 'phc_doctor' | 'specialist' | 'state_admin' | 'admin';
     roleTitleEn: 'ASHA Facilitator',
     roleTitleMr: 'आशा गट प्रवर्तक / सेविका',
     phone: '9822019284',
