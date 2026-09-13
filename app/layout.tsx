@@ -4,6 +4,7 @@ import './globals.css';
 import { AuthProvider } from '@/context/AuthContext';
 import { LanguageProvider } from '@/context/LanguageContext';
 import { SyncProvider } from '@/context/SyncContext';
+import { ServiceWorkerRegister } from '@/components/layout/ServiceWorkerRegister';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -19,11 +20,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="h-full bg-slate-100 dark:bg-slate-950">
+    <html lang="en" suppressHydrationWarning className="h-full bg-slate-100 dark:bg-slate-950">
       <head>
         <meta name="theme-color" content="#1e3a8a" />
       </head>
-      <body className={`min-h-full flex flex-col font-sans antialiased text-slate-800 dark:text-slate-100 bg-slate-100 dark:bg-slate-950 ${inter.className}`}>
+      <body suppressHydrationWarning className={`min-h-full flex flex-col font-sans antialiased text-slate-800 dark:text-slate-100 bg-slate-100 dark:bg-slate-950 ${inter.className}`}>
         <AuthProvider>
           <LanguageProvider>
             <SyncProvider>
@@ -32,20 +33,8 @@ export default function RootLayout({
           </LanguageProvider>
         </AuthProvider>
 
-        {/* Service Worker registration script */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').catch(function(err) {
-                    console.log('SW registration skipped:', err);
-                  });
-                });
-              }
-            `,
-          }}
-        />
+        {/* Service Worker registration via client component */}
+        <ServiceWorkerRegister />
       </body>
     </html>
   );

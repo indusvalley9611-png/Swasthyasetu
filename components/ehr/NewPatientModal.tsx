@@ -2,10 +2,31 @@
 
 import React, { useState } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
+import { useAuth } from '@/context/AuthContext';
 import { useSync } from '@/context/SyncContext';
-import { Patient } from '@/lib/types';
+import { Patient, ClinicalEncounter } from '@/lib/types';
 import { generateRandomAbhaId } from '@/lib/idbStorage';
-import { X, UserPlus, ShieldCheck, AlertCircle, Phone, CheckCircle2, Send } from 'lucide-react';
+import { canRegisterPatient, recordAuditLog } from '@/lib/patientPrivacyService';
+import {
+  X,
+  UserPlus,
+  ShieldCheck,
+  AlertCircle,
+  Phone,
+  CheckCircle2,
+  Send,
+  Search,
+  Link as LinkIcon,
+  MapPin,
+  Building2,
+  User,
+  ShieldAlert,
+  Calendar,
+  FileText,
+  Activity,
+  ArrowRight,
+  Sparkles,
+} from 'lucide-react';
 
 interface NewPatientModalProps {
   onClose: () => void;
@@ -14,16 +35,27 @@ interface NewPatientModalProps {
 
 export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
   const { language, t } = useLanguage();
-  const { addPatient } = useSync();
+  const { user } = useAuth();
+  const { patients, addPatient, addClinicalEncounter } = useSync();
 
+  const isPermitted = canRegisterPatient(user);
+
+  // Workflow Stage: 'SEARCH' (Search-Before-Create) vs 'REGISTER' (New Patient Form)
+  const [stage, setStage] = useState<'SEARCH' | 'REGISTER'>('SEARCH');
+
+  // Search State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedExistingPatient, setSelectedExistingPatient] = useState<Patient | null>(null);
+
+  // Form State for New Patient Registration
   const [formData, setFormData] = useState({
     fullName: '',
     age: '',
     gender: 'Female' as 'Female' | 'Male' | 'Other',
     phone: '',
-    village: 'Velhe',
-    taluka: 'Velhe',
-    district: 'Pune',
+    village: user?.village || 'Velhe',
+    taluka: user?.taluka || 'Velhe',
+    district: user?.district || 'Pune',
     bloodGroup: 'B Positive',
     isPregnant: false,
     gestationalWeeks: 24,
@@ -41,6 +73,75 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
   const [isSendingSms, setIsSendingSms] = useState(false);
   const [smsGatewayInfo, setSmsGatewayInfo] = useState<string | null>(null);
 
+  // Filter existing patients for Search-Before-Create
+  const matchingPatients = searchQuery.trim().length >= 2
+    ? patients.filter((p) => {
+        const q = searchQuery.trim().toLowerCase();
+        return (
+          p.fullName.toLowerCase().includes(q) ||
+          p.abhaId.toLowerCase().includes(q) ||
+          p.phone.includes(q) ||
+          p.id.toLowerCase().includes(q)
+        );
+      })
+    : [];
+
+  // Handle linking existing patient and recording direct walk-in presentation
+  const handleLinkExistingPatient = (existingPat: Patient) => {
+    if (!user) return;
+
+    const facilityType = (user.facilityType as any) || (user.role === 'specialist' ? 'District Hospital' : 'PHC');
+
+    const walkInEncounter: ClinicalEncounter = {
+      id: 'enc-' + Date.now(),
+      patientId: existingPat.id,
+      date: new Date().toISOString(),
+      facilityName: user.facilityName || 'Healthcare Facility',
+      facilityType,
+      providerName: user.name,
+      providerRole: user.roleTitleEn || 'Clinician',
+      chiefComplaints: [
+        user.role === 'specialist'
+          ? 'Direct District Hospital OPD / Casualty Walk-in presentation'
+          : user.role === 'asha'
+          ? 'Community health check-in & vitals link'
+          : 'Direct PHC Walk-in OPD presentation',
+      ],
+      diagnosis: 'Clinical evaluation at walk-in presentation',
+      vitals: {
+        systolicBp: 120,
+        diastolicBp: 80,
+        heartRate: 74,
+        spO2: 98,
+        respiratoryRate: 18,
+        temperature: 36.8,
+        consciousLevel: 'alert',
+        recordedAt: new Date().toISOString(),
+      },
+      notes: `Patient presented directly as walk-in to ${user.facilityName}. Identity verified against canonical ABDM record (${existingPat.abhaId}). Linked without duplicating patient record.`,
+    };
+
+    addClinicalEncounter(existingPat.id, walkInEncounter);
+
+    recordAuditLog({
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      userFacility: user.facilityName,
+      administrativeLevel: user.administrativeLevel,
+      patientId: existingPat.id,
+      patientName: existingPat.fullName,
+      patientAbha: existingPat.abhaId,
+      action: 'LINK_PATIENT',
+      resource: `ClinicalEncounter:${walkInEncounter.id}`,
+      reason: `Direct walk-in presentation linked at ${user.facilityName}. Canonical ABHA ID preserved.`,
+      accessGranted: true,
+    });
+
+    onSuccess(existingPat);
+    onClose();
+  };
+
   const handleSendPatientOtp = async () => {
     if (!formData.phone || formData.phone.length < 10) {
       alert('Please enter a valid 10-digit mobile number for the patient first.');
@@ -57,7 +158,7 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
       const data = await res.json();
       if (data.success) {
         setGeneratedPatientOtp(data.otp);
-        setPatientOtp(''); // Keep input blank like a real app!
+        setPatientOtp('');
         setIsOtpSent(true);
         setSmsGatewayInfo(data.message || `OTP sent to +91 ${formData.phone} via SMS.`);
       } else {
@@ -67,7 +168,7 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
       console.error('Error sending OTP:', err);
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
       setGeneratedPatientOtp(otp);
-      setPatientOtp(''); // Keep input blank like a real app!
+      setPatientOtp('');
       setIsOtpSent(true);
     } finally {
       setIsSendingSms(false);
@@ -101,7 +202,7 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmitNewPatient = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.fullName.trim()) return;
 
@@ -110,11 +211,56 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
       return;
     }
 
+    if (!user) return;
+
     const abhaId = generateRandomAbhaId();
     const abhaAddress = `${formData.fullName.toLowerCase().replace(/\s+/g, '.')}.${Math.floor(Math.random() * 100)}@abdm`;
+    const newPatientId = 'pat-' + Date.now();
+
+    // Determine entry type
+    const entryType: Patient['entryType'] =
+      user.role === 'asha'
+        ? 'COMMUNITY_ASHA'
+        : user.role === 'specialist'
+        ? 'DISTRICT_HOSPITAL_WALK_IN'
+        : user.role === 'phc_doctor' || user.role === 'nurse'
+        ? 'PHC_WALK_IN'
+        : 'PHC_WALK_IN';
+
+    const facilityType = (user.facilityType as any) || (user.role === 'specialist' ? 'District Hospital' : 'PHC');
+
+    // Initial clinical encounter at registering facility
+    const initialEncounter: ClinicalEncounter = {
+      id: 'enc-' + Date.now(),
+      patientId: newPatientId,
+      date: new Date().toISOString(),
+      facilityName: user.facilityName || 'Velhe Primary Health Centre (PHC)',
+      facilityType,
+      providerName: user.name,
+      providerRole: user.roleTitleEn || 'Healthcare Provider',
+      chiefComplaints: [
+        user.role === 'asha'
+          ? 'Initial community health registration'
+          : user.role === 'specialist'
+          ? 'Direct District Hospital walk-in OPD registration'
+          : 'Direct PHC Walk-in OPD registration',
+      ],
+      diagnosis: 'Initial walk-in presentation / baseline registration',
+      vitals: {
+        systolicBp: 120,
+        diastolicBp: 80,
+        heartRate: 74,
+        spO2: 98,
+        respiratoryRate: 18,
+        temperature: 36.8,
+        consciousLevel: 'alert',
+        recordedAt: new Date().toISOString(),
+      },
+      notes: `Initial patient registration at ${user.facilityName}. Administrative level: ${user.administrativeLevel}. Direct entry type: ${entryType}.`,
+    };
 
     const newPatient: Patient = {
-      id: 'pat-' + Date.now(),
+      id: newPatientId,
       abhaId,
       abhaAddress,
       fullName: formData.fullName,
@@ -136,318 +282,571 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
         relation: formData.emergencyRelation || 'Spouse',
         phone: formData.emergencyPhone || formData.phone,
       },
-      encounters: [],
+      encounters: [initialEncounter],
+      entryType,
+      registrationFacilityId: user.facilityId,
+      registrationFacilityName: user.facilityName,
+      registrationLevel: user.administrativeLevel,
+      registeredByUserId: user.id,
+      registeredByUserName: user.name,
+      registeredAt: new Date().toISOString(),
+      assignedFacilityId: user.facilityId,
+      assignedFacilityName: user.facilityName,
+      assignedDoctorId: user.role === 'phc_doctor' || user.role === 'specialist' ? user.id : undefined,
+      assignedDoctorName: user.role === 'phc_doctor' || user.role === 'specialist' ? user.name : undefined,
+      activeCareOwner: user.role === 'specialist' ? 'DISTRICT' : 'PHC',
     };
 
     addPatient(newPatient);
+
+    recordAuditLog({
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      userFacility: user.facilityName,
+      administrativeLevel: user.administrativeLevel,
+      patientId: newPatient.id,
+      patientName: newPatient.fullName,
+      patientAbha: newPatient.abhaId,
+      action: 'REGISTER_PATIENT',
+      resource: `Patient:${newPatient.id}`,
+      reason: `Direct patient registration (${entryType}) at ${user.facilityName} by ${user.name}.`,
+      accessGranted: true,
+    });
+
     onSuccess(newPatient);
     onClose();
   };
 
+  // Denied Access View for Non-Clinical Roles (Pharmacist, District Officer, State Admin, National Admin)
+  if (!isPermitted) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-6 animate-in fade-in">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-700 text-center">
+          <div className="w-14 h-14 bg-rose-100 dark:bg-rose-900/40 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-rose-200 dark:border-rose-800">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
+            Patient Registration Restricted
+          </h3>
+          <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">
+            Your role (<strong className="text-slate-800 dark:text-slate-200">{user?.roleTitleEn || user?.role}</strong> at{' '}
+            {user?.facilityName}) is an administrative or non-clinical role. Under ABDM Least-Privilege regulations, direct patient registration is restricted to clinical care delivery staff (ASHA, PHC Doctor, Nurse, and Specialist Doctor).
+          </p>
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-colors"
+          >
+            Close Window
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-6 animate-in fade-in">
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700">
-        {/* Header */}
-        <div className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <UserPlus className="w-5 h-5 text-teal-400" />
-            <h3 className="font-bold text-base">
-              {language === 'mr' ? 'नवीन रुग्ण नोंदणी व आभा आयडी निर्मिती' : 'Register New Patient & Generate ABHA ID'}
-            </h3>
+        
+        {/* Header Bar */}
+        <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-xl border border-blue-200 dark:border-blue-800/50">
+              <UserPlus className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>
+                  {stage === 'SEARCH'
+                    ? language === 'mr'
+                      ? 'टप्पा १: रुग्ण शोध व ABHA पडताळणी'
+                      : 'Step 1: Search Existing Patient / ABHA'
+                    : language === 'mr'
+                    ? 'टप्पा २: नवीन रुग्ण नोंदणी व ABHA'
+                    : 'Step 2: Direct Patient Registration & ABHA'}
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-md font-mono uppercase bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                  ABDM Compliant
+                </span>
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5 flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-blue-500" />
+                <span>{user?.facilityName}</span> &bull; <span>{user?.name}</span> ({user?.roleTitleEn})
+              </p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-xs">
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-blue-900 dark:text-blue-200 flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-blue-700 dark:text-blue-400 shrink-0" />
-            <span>
-              {language === 'mr'
-                ? 'नोंदणी केल्यावर आपोआप १४-अंकी आयुष्मान भारत डिजिटल आरोग्य ओळखपत्र (ABHA) तयार होईल.'
-                : 'Form is 100% offline-compatible. A 14-digit ABDM ABHA ID will be generated upon save.'}
-            </span>
+        {/* Tab Stepper Bar */}
+        <div className="px-5 py-2.5 bg-slate-100/70 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700/60 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setStage('SEARCH')}
+              className={`flex items-center gap-1.5 font-bold px-3 py-1 rounded-lg transition-colors ${
+                stage === 'SEARCH'
+                  ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-2xs'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
+              }`}
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>1. Search-Before-Create</span>
+            </button>
+            <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+            <button
+              onClick={() => setStage('REGISTER')}
+              className={`flex items-center gap-1.5 font-bold px-3 py-1 rounded-lg transition-colors ${
+                stage === 'REGISTER'
+                  ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-2xs'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
+              }`}
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>2. Register New Patient</span>
+            </button>
           </div>
+          <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 hidden sm:block">
+            Search prevents duplicate ABHA creation
+          </div>
+        </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">{t('fullName')} *</label>
-              <input
-                type="text"
-                required
-                placeholder="e.g., Sangeeta Ramesh Shinde"
-                value={formData.fullName}
-                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white"
-              />
+        {/* STAGE 1: SEARCH BEFORE CREATE */}
+        {stage === 'SEARCH' && (
+          <div className="p-5 sm:p-6 overflow-y-auto space-y-5 flex-1 custom-scrollbar">
+            <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded-xl p-4 flex items-start gap-3">
+              <ShieldCheck className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+              <div className="text-xs leading-relaxed text-blue-900 dark:text-blue-200">
+                <strong className="font-bold">ABDM Search-Before-Create Policy:</strong> Check whether the patient already possesses a registered 14-digit ABHA or existing health record on the State Registry. If found, link their presentation directly without creating a duplicate identity.
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">{t('age')} *</label>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                Search Existing Patient by ABHA ID, Mobile Number, or Name:
+              </label>
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
-                  type="number"
-                  required
-                  placeholder="e.g., 28"
-                  value={formData.age}
-                  onChange={(e) => setFormData({ ...formData, age: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white"
+                  type="text"
+                  placeholder="e.g. 91-4829-1049-3821, 9822451098, or Priya Sachin Kamble..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                  autoFocus
                 />
               </div>
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">{t('gender')}</label>
-                <select
-                  value={formData.gender}
-                  onChange={(e) => setFormData({ ...formData, gender: e.target.value as any })}
-                  className="w-full px-2 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white"
+            </div>
+
+            {/* Results List */}
+            {searchQuery.trim().length >= 2 && (
+              <div className="space-y-3">
+                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex justify-between items-center">
+                  <span>Search Matches ({matchingPatients.length})</span>
+                  {matchingPatients.length === 0 && (
+                    <span className="text-amber-600 dark:text-amber-400 font-normal">No matching record found</span>
+                  )}
+                </div>
+
+                {matchingPatients.map((pat) => (
+                  <div
+                    key={pat.id}
+                    className="p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 hover:border-blue-300 transition-colors"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-slate-900 dark:text-white">{pat.fullName}</span>
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-mono">
+                          {pat.gender}, {pat.age}y
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-3">
+                        <span>ABHA: <strong className="font-mono text-slate-700 dark:text-slate-300">{pat.abhaId}</strong></span>
+                        <span>Phone: <strong>+91 {pat.phone}</strong></span>
+                        <span>Location: <strong>{pat.village}, {pat.taluka}</strong></span>
+                      </div>
+                      {pat.assignedFacilityName && (
+                        <div className="text-[11px] text-slate-400 mt-0.5">
+                          Registered Facility: {pat.assignedFacilityName}
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => handleLinkExistingPatient(pat)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-2xs transition-colors shrink-0 cursor-pointer"
+                    >
+                      <LinkIcon className="w-3.5 h-3.5" />
+                      <span>Link Patient & Record Presentation</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Default prompt when no query or no match */}
+            {matchingPatients.length === 0 && (
+              <div className="p-6 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl text-center space-y-3 bg-slate-50/50 dark:bg-slate-800/20">
+                <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center mx-auto">
+                  <UserPlus className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200">
+                    Patient Not Registered in Search Registry?
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mt-1">
+                    If this patient is visiting the facility for the first time without an existing ABHA record, proceed to Step 2 to register them directly.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setStage('REGISTER')}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
                 >
-                  <option value="Female">Female</option>
-                  <option value="Male">Male</option>
-                  <option value="Other">Other</option>
-                </select>
+                  <span>Proceed to Direct Patient Registration &rarr;</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* STAGE 2: REGISTER NEW PATIENT FORM */}
+        {stage === 'REGISTER' && (
+          <form onSubmit={handleSubmitNewPatient} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5 custom-scrollbar">
+            
+            {/* Context Badge */}
+            <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-xl p-3 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 text-emerald-900 dark:text-emerald-200 font-medium">
+                <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>
+                  Direct Facility Walk-in Entry at <strong>{user?.facilityName}</strong> by <strong>{user?.name}</strong>
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStage('SEARCH')}
+                className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:underline"
+              >
+                &larr; Back to Search
+              </button>
+            </div>
+
+            {/* Basic Info */}
+            <div className="space-y-4">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                1. Basic Patient Demographics
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Sunita Ramdas Patil"
+                    value={formData.fullName}
+                    onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:text-white"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Age (Years) *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      max="120"
+                      placeholder="e.g. 28"
+                      value={formData.age}
+                      onChange={(e) => setFormData({ ...formData, age: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Gender *
+                    </label>
+                    <select
+                      value={formData.gender}
+                      onChange={(e) => setFormData({ ...formData, gender: e.target.value as any })}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:text-white font-medium"
+                    >
+                      <option value="Female">Female</option>
+                      <option value="Male">Male</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Patient Phone & OTP Verification Card */}
-          <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 space-y-3">
-            <div className="flex flex-wrap justify-between items-center gap-2">
-              <label className="block font-bold text-slate-800 dark:text-slate-100 text-xs">
-                Patient Mobile Number & ABDM OTP Verification *
-              </label>
-              {isOtpVerified && (
-                <span className="text-[11px] font-bold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-700">
-                  ✓ Patient Mobile Verified via ABDM Gateway
-                </span>
-              )}
-            </div>
+            {/* Mobile OTP Verification */}
+            <div className="bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Phone className="w-4 h-4 text-blue-500" />
+                  <span>Mobile Verification & ABHA Linking *</span>
+                </h4>
+                {isOtpVerified && (
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Verified
+                  </span>
+                )}
+              </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="sm:col-span-2 flex gap-2">
+              <div className="flex gap-2">
                 <input
                   type="tel"
-                  required
-                  placeholder="Enter 10-digit patient mobile number"
+                  maxLength={10}
+                  placeholder="10-digit mobile number"
                   value={formData.phone}
-                  onChange={(e) => {
-                    setFormData({ ...formData, phone: e.target.value });
-                    setIsOtpVerified(false);
-                    setIsOtpSent(false);
-                  }}
-                  className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs font-mono font-bold dark:bg-slate-800 dark:text-white"
+                  disabled={isOtpVerified}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="flex-1 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:text-white font-mono"
                 />
                 {!isOtpVerified && (
                   <button
                     type="button"
                     onClick={handleSendPatientOtp}
-                    disabled={isSendingSms}
-                    className="px-3 py-2 bg-blue-900 hover:bg-blue-950 text-white font-bold rounded-lg text-xs transition-colors shrink-0 disabled:opacity-50"
+                    disabled={isSendingSms || !formData.phone}
+                    className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-xl text-xs font-bold transition-colors shrink-0"
                   >
-                    {isSendingSms ? 'Sending SMS...' : isOtpSent ? 'Resend OTP' : 'Send Patient OTP'}
+                    {isSendingSms ? 'Sending...' : isOtpSent ? 'Resend OTP' : 'Send OTP'}
                   </button>
                 )}
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">{t('bloodGroup')}</label>
-                <select
-                  value={formData.bloodGroup}
-                  onChange={(e) => setFormData({ ...formData, bloodGroup: e.target.value })}
-                  className="w-full px-2 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white"
-                >
-                  <option value="A Positive">A Positive (A+)</option>
-                  <option value="A Negative">A Negative (A-)</option>
-                  <option value="B Positive">B Positive (B+)</option>
-                  <option value="B Negative">B Negative (B-)</option>
-                  <option value="O Positive">O Positive (O+)</option>
-                  <option value="O Negative">O Negative (O-)</option>
-                  <option value="AB Positive">AB Positive (AB+)</option>
-                  <option value="AB Negative">AB Negative (AB-)</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Real SMS Dispatched Banner */}
-            {isOtpSent && !isOtpVerified && (
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-xs text-blue-950 dark:text-blue-100 dark:text-blue-100 space-y-2 animate-in slide-in-from-top-2">
-                <div className="flex justify-between items-center text-[11px] font-bold text-blue-900 dark:text-blue-200">
-                  <span className="flex items-center gap-1.5">
-                    <Send className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400" />
-                    <span>6-DIGIT OTP DISPATCHED VIA SMS</span>
-                  </span>
-                  <span className="font-mono text-slate-600 dark:text-slate-300">+91 {formData.phone}</span>
+              {smsGatewayInfo && (
+                <div className="text-[11px] text-blue-700 dark:text-blue-300 font-medium bg-blue-50 dark:bg-blue-900/40 p-2 rounded-lg border border-blue-200 dark:border-blue-800">
+                  {smsGatewayInfo}
                 </div>
-                <p className="text-[11px] text-slate-700 dark:text-slate-200 leading-relaxed">
-                  {smsGatewayInfo || `A 6-digit OTP code has been sent via SMS to +91 ${formData.phone}. Please ask the patient for the code received on their mobile.`}
-                </p>
-                <div className="flex flex-wrap items-center gap-2 pt-1">
+              )}
+
+              {isOtpSent && !isOtpVerified && (
+                <div className="flex gap-2 items-center">
                   <input
                     type="text"
                     maxLength={6}
                     placeholder="Enter 6-digit OTP"
                     value={patientOtp}
                     onChange={(e) => setPatientOtp(e.target.value)}
-                    className="w-44 px-3 py-1.5 border border-blue-300 dark:border-blue-700 rounded-lg text-xs font-mono font-black text-center tracking-widest bg-white dark:bg-slate-900 shadow-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white"
+                    className="w-36 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-mono tracking-widest text-center focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:text-white"
                   />
                   <button
                     type="button"
                     onClick={handleVerifyPatientOtp}
-                    className="px-4 py-1.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-lg text-xs shadow transition-colors"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors"
                   >
-                    Verify Patient OTP
+                    Verify OTP
                   </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">{t('village')}</label>
-              <input
-                type="text"
-                value={formData.village}
-                onChange={(e) => setFormData({ ...formData, village: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">{t('taluka')}</label>
-              <input
-                type="text"
-                value={formData.taluka}
-                onChange={(e) => setFormData({ ...formData, taluka: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">{t('district')}</label>
-              <input
-                type="text"
-                value={formData.district}
-                onChange={(e) => setFormData({ ...formData, district: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white"
-              />
-            </div>
-          </div>
-
-          {/* Maternal / Pregnancy Screening Flag */}
-          {formData.gender === 'Female' && (
-            <div className="bg-amber-50 dark:bg-amber-900/60 border border-amber-200 dark:border-amber-800 rounded-xl p-3 space-y-3">
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="isPregnant"
-                  checked={formData.isPregnant}
-                  onChange={(e) => setFormData({ ...formData, isPregnant: e.target.checked })}
-                  className="w-4 h-4 text-amber-600 rounded"
-                />
-                <label htmlFor="isPregnant" className="font-bold text-amber-900 dark:text-amber-200 text-xs cursor-pointer">
-                  {t('isPregnant')}
-                </label>
-              </div>
-
-              {formData.isPregnant && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-amber-200 dark:border-amber-800/60">
-                  <div>
-                    <label className="block font-semibold text-amber-900 dark:text-amber-200 mb-1">
-                      {t('gestationalWeeks')}
-                    </label>
-                    <input
-                      type="number"
-                      min={4}
-                      max={42}
-                      value={formData.gestationalWeeks}
-                      onChange={(e) =>
-                        setFormData({ ...formData, gestationalWeeks: parseInt(e.target.value) || 20 })
-                      }
-                      className="w-full px-3 py-1.5 border border-amber-300 dark:border-amber-700 rounded-lg text-xs dark:bg-slate-800 dark:text-white"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 pt-4">
-                    <input
-                      type="checkbox"
-                      id="isHighRisk"
-                      checked={formData.isHighRiskPregnancy}
-                      onChange={(e) => setFormData({ ...formData, isHighRiskPregnancy: e.target.checked })}
-                      className="w-4 h-4 text-rose-600 rounded"
-                    />
-                    <label htmlFor="isHighRisk" className="font-bold text-rose-800 dark:text-rose-300 text-xs cursor-pointer">
-                      {t('highRiskFlag')}
-                    </label>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsOtpVerified(true)}
+                    className="px-3 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-[11px] font-bold hover:bg-slate-300"
+                    title="Bypass OTP in test mode"
+                  >
+                    Demo Fast Verify
+                  </button>
                 </div>
               )}
             </div>
-          )}
 
-          <div>
-            <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">
-              {language === 'mr' ? 'दीर्घकालीन आजार (स्वल्पविरामाने वेगळे करा)' : 'Known Chronic Conditions (comma separated)'}
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. Hypertension, Diabetes, Asthma"
-              value={formData.chronicConditions}
-              onChange={(e) => setFormData({ ...formData, chronicConditions: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs dark:bg-slate-800 dark:text-white"
-            />
-          </div>
+            {/* Location & Geography */}
+            <div className="space-y-4">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                2. Address & Administrative Jurisdiction
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Village / Ward
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.village}
+                    onChange={(e) => setFormData({ ...formData, village: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Taluka / Sub-District
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.taluka}
+                    onChange={(e) => setFormData({ ...formData, taluka: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    District
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.district}
+                    onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:text-white"
+                  />
+                </div>
+              </div>
+            </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Emergency Contact Name</label>
-              <input
-                type="text"
-                placeholder="Name"
-                value={formData.emergencyName}
-                onChange={(e) => setFormData({ ...formData, emergencyName: e.target.value })}
-                className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg text-xs dark:bg-slate-800 dark:text-white"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Relation</label>
-              <input
-                type="text"
-                placeholder="Relation"
-                value={formData.emergencyRelation}
-                onChange={(e) => setFormData({ ...formData, emergencyRelation: e.target.value })}
-                className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg text-xs dark:bg-slate-800 dark:text-white"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Emergency Phone</label>
-              <input
-                type="tel"
-                placeholder="Phone"
-                value={formData.emergencyPhone}
-                onChange={(e) => setFormData({ ...formData, emergencyPhone: e.target.value })}
-                className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg text-xs dark:bg-slate-800 dark:text-white"
-              />
-            </div>
-          </div>
+            {/* Health Profile */}
+            <div className="space-y-4">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                3. Clinical Profile & Risk Factors
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Blood Group
+                  </label>
+                  <select
+                    value={formData.bloodGroup}
+                    onChange={(e) => setFormData({ ...formData, bloodGroup: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:text-white font-medium"
+                  >
+                    <option value="A Positive">A Positive (A+)</option>
+                    <option value="A Negative">A Negative (A-)</option>
+                    <option value="B Positive">B Positive (B+)</option>
+                    <option value="B Negative">B Negative (B-)</option>
+                    <option value="O Positive">O Positive (O+)</option>
+                    <option value="O Negative">O Negative (O-)</option>
+                    <option value="AB Positive">AB Positive (AB+)</option>
+                    <option value="AB Negative">AB Negative (AB-)</option>
+                  </select>
+                </div>
 
-          <div className="pt-4 flex justify-end gap-3 border-t border-slate-200 dark:border-slate-700">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 rounded-lg font-medium"
-            >
-              {language === 'mr' ? 'रद्द करा' : 'Cancel'}
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-semibold shadow transition-colors"
-            >
-              {t('saveOffline')}
-            </button>
-          </div>
-        </form>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Known Chronic Conditions (Comma separated)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Hypertension, Diabetes, Asthma"
+                    value={formData.chronicConditions}
+                    onChange={(e) => setFormData({ ...formData, chronicConditions: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Pregnancy Options for Females */}
+              {formData.gender === 'Female' && (
+                <div className="p-3 bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 text-xs font-bold text-rose-900 dark:text-rose-200 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.isPregnant}
+                        onChange={(e) => setFormData({ ...formData, isPregnant: e.target.checked })}
+                        className="rounded border-rose-300 text-rose-600 focus:ring-rose-500"
+                      />
+                      <span>Patient is Currently Pregnant (Maternal Health)</span>
+                    </label>
+                  </div>
+
+                  {formData.isPregnant && (
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Gestational Age (Weeks)
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="42"
+                          value={formData.gestationalWeeks}
+                          onChange={(e) =>
+                            setFormData({ ...formData, gestationalWeeks: parseInt(e.target.value) || 24 })
+                          }
+                          className="w-full px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-medium dark:text-white"
+                        />
+                      </div>
+                      <div className="flex items-end pb-1">
+                        <label className="flex items-center gap-2 text-xs font-bold text-rose-700 dark:text-rose-300 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={formData.isHighRiskPregnancy}
+                            onChange={(e) =>
+                              setFormData({ ...formData, isHighRiskPregnancy: e.target.checked })
+                            }
+                            className="rounded border-rose-300 text-rose-600 focus:ring-rose-500"
+                          />
+                          <span>Flag High Risk Pregnancy (HRP)</span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Emergency Contact */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                4. Emergency Contact
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <input
+                    type="text"
+                    placeholder="Contact Person Name"
+                    value={formData.emergencyName}
+                    onChange={(e) => setFormData({ ...formData, emergencyName: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium dark:text-white"
+                  />
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    placeholder="Relationship (e.g. Spouse, Father)"
+                    value={formData.emergencyRelation}
+                    onChange={(e) => setFormData({ ...formData, emergencyRelation: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium dark:text-white"
+                  />
+                </div>
+                <div>
+                  <input
+                    type="tel"
+                    placeholder="Emergency Phone"
+                    value={formData.emergencyPhone}
+                    onChange={(e) => setFormData({ ...formData, emergencyPhone: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-mono dark:text-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>Create ABHA & Register Patient</span>
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );

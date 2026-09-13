@@ -21,10 +21,10 @@ export function BedMatrixModal({ onClose }: BedMatrixModalProps) {
   const [resource, setResource] = useState<BedResourceType>('ICU');
   const [detail, setDetail] = useState<Facility | null>(null);
   const [destination, setDestination] = useState<Facility | null>(null);
-  const [patientId, setPatientId] = useState('');
+  const [patientId, setPatientId] = useState(patients[0]?.id || '');
   const [urgency, setUrgency] = useState<'green' | 'yellow' | 'red'>('red');
   const [note, setNote] = useState('');
-  const origin = facilities.find(f => f.id === 'fac-phc-velhe') ?? facilities[0];
+  const origin = facilities.find(f => f.id === user?.facilityId) ?? facilities.find(f => f.id === 'fac-phc-velhe') ?? facilities[0];
   const rows = useMemo(() => facilities.map(facility => ({ facility, status: getFacilityStatus(facility), available: getAvailableResource(facility, resource), distance: origin ? getDistanceKm(origin, facility) : null, reserved: referrals.filter(ref => ref.targetFacility === facility.name && (ref.status === 'PENDING' || ref.status === 'ACCEPTED')).length })).sort((a, b) => (b.available - a.available) || ((a.distance ?? Infinity) - (b.distance ?? Infinity))), [facilities, referrals, origin, resource]);
   const matches = rows.filter(row => row.available > 0 && row.facility.id !== origin?.id);
   const totals = facilities.reduce((sum, f) => ({ total: sum.total + f.totalBeds, occupied: sum.occupied + f.occupiedBeds, available: sum.available + getAvailableResource(f, 'GENERAL'), reserved: sum.reserved + referrals.filter(r => r.targetFacility === f.name && ['PENDING', 'ACCEPTED'].includes(r.status)).length, icu: sum.icu + getAvailableResource(f, 'ICU'), oxygen: sum.oxygen + getAvailableResource(f, 'OXYGEN'), ventilators: sum.ventilators + getAvailableResource(f, 'VENTILATOR') }), { total: 0, occupied: 0, available: 0, reserved: 0, icu: 0, oxygen: 0, ventilators: 0 });
@@ -32,7 +32,7 @@ export function BedMatrixModal({ onClose }: BedMatrixModalProps) {
   const submitReferral = () => {
     const patient = patients.find(item => item.id === patientId);
     if (!patient || !destination) return;
-    const referral: Referral = { id: `ref-resource-${Date.now()}`, tokenCode: `MH-REF-2026-${String(Date.now()).slice(-4)}`, patientId: patient.id, patientName: patient.fullName, patientAbha: patient.abhaId, patientAge: patient.age, patientGender: patient.gender, referringFacility: user.facilityName, targetFacility: destination.name, specialtyRequired: `${labels[resource]} support`, referralReason: note || `Resource referral requiring ${labels[resource]}.`, triagePriority: urgency, triageScore: urgency === 'red' ? 8 : urgency === 'yellow' ? 5 : 2, triageReasons: [`${labels[resource]} requested through the command center.`], vitalsAtReferral: patient.encounters[0]?.vitals ?? { systolicBp: 120, diastolicBp: 80, heartRate: 76, spO2: 98, respiratoryRate: 18, temperature: 37, consciousLevel: 'alert', recordedAt: new Date().toISOString() }, referringDoctorName: user.name, createdAt: new Date().toISOString(), status: 'PENDING', qrPayload: JSON.stringify({ patient: patient.abhaId, destination: destination.name, resource }) };
+    const referral: Referral = { id: `ref-resource-${Date.now()}`, tokenCode: `MH-REF-2026-${String(Date.now()).slice(-4)}`, patientId: patient.id, patientName: patient.fullName, patientAbha: patient.abhaId, patientAge: patient.age, patientGender: patient.gender, referringFacility: user?.facilityName ?? origin?.name ?? 'Velhe PHC', targetFacility: destination.name, specialtyRequired: `${labels[resource]} support`, referralReason: note || `Resource referral requiring ${labels[resource]}.`, triagePriority: urgency, triageScore: urgency === 'red' ? 8 : urgency === 'yellow' ? 5 : 2, triageReasons: [`${labels[resource]} requested through the command center.`], vitalsAtReferral: patient.encounters[0]?.vitals ?? { systolicBp: 120, diastolicBp: 80, heartRate: 76, spO2: 98, respiratoryRate: 18, temperature: 37, consciousLevel: 'alert', recordedAt: new Date().toISOString() }, referringDoctorName: user?.name ?? 'Medical Officer', createdAt: new Date().toISOString(), status: 'PENDING', qrPayload: JSON.stringify({ patient: patient.abhaId, destination: destination.name, resource }) };
     createReferral(referral); setDestination(null); setPatientId(''); setNote('');
   };
 

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import React, { useState } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import { useSync } from '@/context/SyncContext';
@@ -55,8 +55,11 @@ export function PatientDownloadModal({ onClose }: PatientDownloadModalProps) {
       setLoading(true);
       const res = await fetch('/api/patient/' + foundPatient.id + '/pdf', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(foundPatient)
+        headers: {
+          'Content-Type': 'application/json',
+          'x-patient-abha': foundPatient.abhaId,
+        },
+        body: JSON.stringify({ ...foundPatient, abhaId: foundPatient.abhaId })
       });
       if (!res.ok) throw new Error('Failed to generate PDF');
       

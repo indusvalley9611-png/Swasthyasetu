@@ -27,7 +27,7 @@ export function getMedicineStatus(stock: DrugStockItem): ResourceStatus {
 
 export function getSafeTransferableQuantity(stock: DrugStockItem, transfers: StockTransfer[] = []): number {
   const reserved = transfers
-    .filter(transfer => transfer.sourceStockId === stock.id && !['REJECTED', 'COMPLETED'].includes(transfer.status))
+    .filter(transfer => transfer.sourceStockId === stock.id && transfer.donorAllocated !== false && !['REJECTED', 'COMPLETED'].includes(transfer.status))
     .reduce((total, transfer) => total + transfer.requestedQuantity, 0);
   return Math.max(0, stock.currentStock - stock.bufferStock - reserved);
 }

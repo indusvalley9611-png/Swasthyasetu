@@ -1,9 +1,10 @@
-﻿'use client';
+'use client';
 import React, { useState } from 'react';
 import { Patient, Referral } from '@/lib/types';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
 import { useSync } from '@/context/SyncContext';
+import { recordAuditLog } from '@/lib/patientPrivacyService';
 import {
   X, Send, Activity, AlertTriangle, CheckCircle2, ChevronRight, 
   Stethoscope, Clock, ShieldCheck
@@ -42,6 +43,7 @@ export function SmartReferralModal({
       patientGender: patient.gender,
       referringFacility: user.facilityName,
       referringDoctorName: user.name,
+      referringUserId: user.id,
       targetFacility: selectedFacility,
       specialtyRequired: selectedSpecialty,
       triagePriority: (priority === 'high' ? 'red' : 'green') as 'red' | 'yellow' | 'green',
@@ -54,6 +56,22 @@ export function SmartReferralModal({
       createdAt: new Date().toISOString(),
     };
     createReferral(newRef);
+
+    recordAuditLog({
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      userFacility: user.facilityName,
+      administrativeLevel: user.administrativeLevel,
+      patientId: patient.id,
+      patientName: patient.fullName,
+      patientAbha: patient.abhaId,
+      action: 'CREATE_REFERRAL',
+      resource: `Referral Token ${newRef.tokenCode} to ${selectedFacility}`,
+      accessGranted: true,
+      reason: `Clinical Referral Created: ${selectedSpecialty} - ${reason || 'Specialist Evaluation'}`,
+    });
+
     onReferralCreated(newRef);
     onClose();
   };

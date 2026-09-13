@@ -24,7 +24,10 @@ import {
   CalendarCheck,
   BellRing,
   Phone,
+  Flame,
+  Siren,
 } from 'lucide-react';
+import Link from 'next/link';
 
 interface AshaDashboardProps {
   onOpenNewPatient: () => void;
@@ -192,6 +195,32 @@ export function AshaDashboard({
             </span>
           </div>
         )}
+      </div>
+
+      {/* Urgent Medicine Support Banner (Direct from User's Design Mockup) */}
+      <div className="rounded-2xl p-4 sm:p-5 bg-gradient-to-r from-rose-50 via-red-50 to-amber-50 dark:from-rose-950/40 dark:via-red-950/30 dark:to-slate-900 border border-rose-200 dark:border-rose-900/60 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-xl bg-rose-600 flex items-center justify-center text-white shadow-md shadow-rose-600/30 shrink-0">
+            <Flame className="w-6 h-6 text-white animate-pulse" />
+          </div>
+          <div>
+            <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
+              {language === 'mr' ? 'तातडीने औषध पुरवठा हवा आहे का?' : 'Need Urgent Medicine Support?'}
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+              {language === 'mr'
+                ? 'तुमच्या गावातून किंवा उपकेंद्रातून औषधांचा तुटवडा नोंदवा.'
+                : 'Report medicine shortage or emergency need from your village.'}
+            </p>
+          </div>
+        </div>
+        <Link
+          href="/maha-aushadhi"
+          className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-sm transition-all flex items-center gap-2 self-start sm:self-auto shrink-0"
+        >
+          <Siren className="w-4 h-4" />
+          <span>{language === 'mr' ? 'आपत्कालीन औषध मागणी' : 'Request Emergency Medicine'}</span>
+        </Link>
       </div>
 
       {/* Quick Action Statistics Bar */}

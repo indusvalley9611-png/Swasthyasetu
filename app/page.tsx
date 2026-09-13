@@ -6,11 +6,13 @@ import { useLanguage } from '@/context/LanguageContext';
 import { useSync } from '@/context/SyncContext';
 import { Role, Patient, Referral } from '@/lib/types';
 import { Header } from '@/components/layout/Header';
+import { AppShell } from '@/components/layout/AppShell';
 import { Footer } from '@/components/layout/Footer';
 import { AshaDashboard } from '@/components/dashboards/AshaDashboard';
 import { PhcDoctorDashboard } from '@/components/dashboards/PhcDoctorDashboard';
 import { SpecialistDashboard } from '@/components/dashboards/SpecialistDashboard';
 import { StateAdminDashboard } from '@/components/dashboards/StateAdminDashboard';
+import { NationalAdminDashboard } from '@/components/dashboards/NationalAdminDashboard';
 import WorkerWorkspace from '@/components/directory/WorkerWorkspace';
 import { NewPatientModal } from '@/components/ehr/NewPatientModal';
 import { PatientTimelineModal } from '@/components/ehr/PatientTimelineModal';
@@ -22,6 +24,7 @@ import { DrugStockModal } from '@/components/inventory/DrugStockModal';
 import { GlobalPatientSearchModal } from '@/components/ehr/GlobalPatientSearchModal';
 import { StaffLoginModal } from '@/components/auth/StaffLoginModal';
 import { PatientDownloadModal } from '@/components/auth/PatientDownloadModal';
+import { AuditTrailModal } from '@/components/compliance/AuditTrailModal';
 import {
   Users, User,
   Stethoscope,
@@ -32,6 +35,8 @@ import {
   Languages,
     Moon,
     Sun,
+  Pill,
+  Globe,
 } from 'lucide-react';
 
 export default function Home() {
@@ -39,15 +44,19 @@ export default function Home() {
   const { language, toggleLanguage, t } = useLanguage();
   const { referrals } = useSync();
 
+  const [mounted, setMounted] = useState(false);
+
   // Modal states
   const [isNewPatientOpen, setIsNewPatientOpen] = useState(false);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
   const [isBedMatrixOpen, setIsBedMatrixOpen] = useState(false);
   const [isDrugStockOpen, setIsDrugStockOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isAuditTrailOpen, setIsAuditTrailOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     // Only use dark mode if user explicitly saved it
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark' || (!savedTheme && document.documentElement.classList.contains('dark'))) {
@@ -81,54 +90,92 @@ export default function Home() {
   const [referralPatient, setReferralPatient] = useState<Patient | null>(null);
   const [referralToken, setReferralToken] = useState<Referral | null>(null);
 
+  // Active navigation view managed across left sidebar and main content
+  const getDefaultNavItem = (r?: Role) => {
+    if (r === 'state_admin' || r === 'national_admin' || r === 'district_officer') return 'overview';
+    if (r === 'specialist') return 'incoming';
+    if (r === 'phc_doctor') return 'dashboard';
+    if (r === 'nurse') return 'dashboard';
+    if (r === 'pharmacist') return 'dashboard';
+    if (r === 'asha') return 'directory';
+    return 'directory';
+  };
+
+  const [activeNavItem, setActiveNavItem] = useState<string>('directory');
+
+  useEffect(() => {
+    if (role) {
+      setActiveNavItem(getDefaultNavItem(role));
+    }
+  }, [role]);
+
   const rolesNavigation = [
     {
       id: 'asha' as Role,
       titleEn: '1. ASHA / Sub-Centre',
       titleMr: '१. आशा सेविका / उपकेंद्र',
       icon: Users,
-      descEn: 'Mobile Vitals, Screening & HRP Flags',
-      descMr: 'जलद शारीरिक तपासणी व HRP माता निरीक्षण',
+      descEn: 'Mobile Vitals, Screening & Maternal Health across 2 PHC Catchment Areas',
+      descMr: 'जलद शारीरिक तपासणी, समुदाय सर्व्हे व HRP माता निरीक्षण',
     },
     {
       id: 'phc_doctor' as Role,
-      titleEn: '2. PHC Medical Officer',
-      titleMr: '२. वैद्यकीय अधिकारी (PHC)',
+      titleEn: '2. PHC Medical Officer & Staff',
+      titleMr: '२. प्राथमिक आरोग्य केंद्र (PHC)',
       icon: Stethoscope,
-      descEn: 'EHR, Rx Writer & Smart Referral Generator',
-      descMr: 'रुग्ण इतिहास, औषध योजना व स्मार्ट रेफरल',
+      descEn: 'Medical Officers, Staff Nurse & Pharmacist across Velhe & Nasrapur PHCs',
+      descMr: 'वैद्यकीय अधिकारी, परिचारिका व औषध निर्माण अधिकारी (वेल्हे व नसरापूर)',
     },
     {
       id: 'specialist' as Role,
-      titleEn: '3. District Specialist',
-      titleMr: '३. जिल्हा रुग्णालय तज्ज्ञ',
+      titleEn: '3. District Hospital Team',
+      titleMr: '३. जिल्हा रुग्णालय',
       icon: Building2,
-      descEn: 'Triage Queue, QR Intake & Bed Allocation',
-      descMr: 'कॅज्युअल्टी ट्रायज, QR टोकन व खाटा वाटप',
+      descEn: 'Specialists, DHO & Resource Coordinators across Pune & Nashik District Hospitals',
+      descMr: 'कॅज्युअल्टी ट्रायज तज्ज्ञ, जिल्हा आरोग्य अधिकारी व संसाधन समन्वयक (पुणे व नाशिक)',
     },
     {
       id: 'state_admin' as Role,
-      titleEn: '4. State Administrator',
-      titleMr: '४. राज्य आरोग्य संचालक',
+      titleEn: '4. State Health Authority',
+      titleMr: '४. राज्य आरोग्य प्राधिकरण (DHS)',
       icon: BarChart3,
-      descEn: 'Outbreak Maps, Bottlenecks & Emergency Stock',
-      descMr: 'रोग प्रादुर्भाव नकाशे, अडथळे व औषध साठा',
+      descEn: 'Directorate of Health Services (DHS), Maharashtra State HQ, Mumbai',
+      descMr: 'आरोग्य सेवा संचालनालय (DHS), महाराष्ट्र शासन, मुंबई',
+    },
+    {
+      id: 'national_admin' as Role,
+      titleEn: '5. National Health Authority',
+      titleMr: '५. राष्ट्रीय आरोग्य प्राधिकरण (NHA)',
+      icon: Globe,
+      descEn: 'National Health Authority (NHA) & MoHFW Apex Mission Control, New Delhi',
+      descMr: 'राष्ट्रीय आरोग्य प्राधिकरण (NHA) व आरोग्य मंत्रालय, नवी दिल्ली',
     },
     {
       id: 'patient' as any,
-      titleEn: 'Patient Access',
-      titleMr: 'रुग्ण प्रवेश',
+      titleEn: 'Citizen Patient Access',
+      titleMr: 'नागरिक / रुग्ण प्रवेश',
       icon: User,
-      descEn: 'Download your official EHR record via ABHA.',
+      descEn: 'Download your official EHR record via ABHA OTP.',
       descMr: 'आभा द्वारे तुमचा अधिकृत आरोग्य अहवाल डाउनलोड करा.',
     },
   ];
 
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
+        <div className="flex items-center gap-3">
+          <div className="w-3 h-3 rounded-full bg-teal-400 animate-ping" />
+          <span className="text-sm font-semibold tracking-wider text-slate-300">Loading SwasthyaSetu...</span>
+        </div>
+      </div>
+    );
+  }
+
   if (!role) {
     return (
-      <div className="min-h-screen flex flex-col lg:flex-row bg-white dark:bg-slate-900 font-sans">
+      <div suppressHydrationWarning className="min-h-screen flex flex-col lg:flex-row bg-white dark:bg-slate-900 font-sans">
         {/* Left Side - Branding & Beautiful Background */}
-        <div className="lg:w-5/12 text-white flex flex-col justify-between p-8 lg:p-12 relative overflow-hidden bg-slate-900">
+        <div suppressHydrationWarning className="lg:w-5/12 text-white flex flex-col justify-between p-8 lg:p-12 relative overflow-hidden bg-slate-900">
           {/* Stunning Background Image with Overlay */}
           <div 
             className="absolute inset-0 z-0 opacity-40 bg-cover bg-center mix-blend-luminosity"
@@ -247,42 +294,63 @@ export default function Home() {
 
   // Dashboard View for Logged-In Users
   return (
-    <div className="min-h-screen flex flex-col bg-slate-100 dark:bg-slate-950">
-      <Header
-        onOpenNewPatient={() => setIsNewPatientOpen(true)}
-        onOpenSearch={() => setIsGlobalSearchOpen(true)}
-        onOpenBedMatrix={() => setIsBedMatrixOpen(true)}
-        onOpenStockLedger={() => setIsDrugStockOpen(true)}
-        onOpenLogin={() => setIsLoginModalOpen(true)}
-      />
+    <AppShell
+      activeNavItem={activeNavItem}
+      onSelectNavItem={(item) => {
+        setActiveNavItem(item);
+        if (item === 'audit') {
+          setIsAuditTrailOpen(true);
+        }
+      }}
+      onOpenNewPatient={() => setIsNewPatientOpen(true)}
+      onOpenSearch={() => setIsGlobalSearchOpen(true)}
+      onOpenBedMatrix={() => setIsBedMatrixOpen(true)}
+      onOpenStockLedger={() => setIsDrugStockOpen(true)}
+      onOpenAuditLogs={() => setIsAuditTrailOpen(true)}
+      isDarkMode={isDarkMode}
+      onToggleDarkMode={toggleDarkMode}
+    >
+      {role === 'national_admin' && (
+        <NationalAdminDashboard
+          onOpenBedMatrix={() => setIsBedMatrixOpen(true)}
+          onOpenStockLedger={() => setIsDrugStockOpen(true)}
+          activeTab={activeNavItem as any}
+          onTabChange={(tab) => setActiveNavItem(tab)}
+        />
+      )}
 
-      <main className="flex-1 w-full mx-auto max-w-7xl px-2 sm:px-6 lg:px-8 py-4 sm:py-6">
-        {role === 'state_admin' && (
-          <StateAdminDashboard
-            onOpenBedMatrix={() => setIsBedMatrixOpen(true)}
-            onOpenStockLedger={() => setIsDrugStockOpen(true)}
-          />
-        )}
+      {(role === 'state_admin' || role === 'district_officer') && (
+        <StateAdminDashboard
+          onOpenBedMatrix={() => setIsBedMatrixOpen(true)}
+          onOpenStockLedger={() => setIsDrugStockOpen(true)}
+          activeTab={activeNavItem as any}
+          onTabChange={(tab) => setActiveNavItem(tab)}
+        />
+      )}
 
-        {role === 'specialist' && (
-          <SpecialistDashboard
-            onOpenReferralToken={(ref) => setReferralToken(ref)}
-            onOpenPatientTimeline={(patient) => setTimelinePatient(patient)}
-            onOpenBedMatrix={() => setIsBedMatrixOpen(true)}
-          />
-        )}
+      {role === 'specialist' && (
+        <SpecialistDashboard
+          onOpenReferralToken={(ref) => setReferralToken(ref)}
+          onOpenPatientTimeline={(patient) => setTimelinePatient(patient)}
+          onOpenBedMatrix={() => setIsBedMatrixOpen(true)}
+          onOpenNewPatient={() => setIsNewPatientOpen(true)}
+          activeTab={activeNavItem as any}
+          onTabChange={(tab) => setActiveNavItem(tab)}
+        />
+      )}
 
-        {(role === 'asha' || role === 'phc_doctor') && (
-          <WorkerWorkspace
-            role={role as any}
-            onOpenNewPatient={() => setIsNewPatientOpen(true)}
-            onOpenPatientTimeline={(patient) => setTimelinePatient(patient)}
-            onOpenAbhaCard={(patient) => setAbhaCardPatient(patient)}
-            onOpenReferral={(patient) => setReferralPatient(patient)}
-            onOpenReferralToken={(ref) => setReferralToken(ref)}
-          />
-        )}
-      </main>
+      {(role === 'asha' || role === 'phc_doctor' || role === 'nurse' || role === 'pharmacist') && (
+        <WorkerWorkspace
+          role={role as any}
+          activeSubView={activeNavItem === 'dashboard' ? 'dashboard' : 'directory'}
+          onSubViewChange={(subView) => setActiveNavItem(subView)}
+          onOpenNewPatient={() => setIsNewPatientOpen(true)}
+          onOpenPatientTimeline={(patient) => setTimelinePatient(patient)}
+          onOpenAbhaCard={(patient) => setAbhaCardPatient(patient)}
+          onOpenReferral={(patient) => setReferralPatient(patient)}
+          onOpenReferralToken={(ref) => setReferralToken(ref)}
+        />
+      )}
 
       {/* Shared Dashboard Modals */}
       {isNewPatientOpen && (
@@ -345,16 +413,13 @@ export default function Home() {
         <DrugStockModal onClose={() => setIsDrugStockOpen(false)} />
       )}
 
-      {isLoginModalOpen && (
-        <StaffLoginModal 
-          onClose={() => {
-            setIsLoginModalOpen(false);
-            setSelectedLoginRole(undefined);
-          }}
-        />
+      {isAuditTrailOpen && (
+        <AuditTrailModal onClose={() => setIsAuditTrailOpen(false)} />
       )}
 
-      <Footer />
-    </div>
+      <div className="mt-12">
+        <Footer />
+      </div>
+    </AppShell>
   );
 }

@@ -2,10 +2,18 @@
 
 import React, { useState } from 'react';
 import { Role, Patient, Referral } from '@/lib/types';
+import Link from 'next/link';
 import { useSync } from '@/context/SyncContext';
+import { useAuth } from '@/context/AuthContext';
+import { useLanguage } from '@/context/LanguageContext';
 import MemberDirectory from './MemberDirectory';
 import MemberProfile from './MemberProfile';
 import RapidScreeningModal from '@/components/ehr/RapidScreeningModal';
+import { PhcDoctorDashboard } from '@/components/dashboards/PhcDoctorDashboard';
+import { AshaDashboard } from '@/components/dashboards/AshaDashboard';
+import { NurseDashboard } from '@/components/dashboards/NurseDashboard';
+import { PharmacistDashboard } from '@/components/dashboards/PharmacistDashboard';
+import { Users, Stethoscope, ClipboardList, ShieldCheck, Flame } from 'lucide-react';
 
 interface WorkerWorkspaceProps {
   role: Role;
@@ -14,8 +22,9 @@ interface WorkerWorkspaceProps {
   onOpenAbhaCard: (patient: Patient) => void;
   onOpenReferral: (patient: Patient) => void;
   onOpenReferralToken?: (referral: Referral) => void;
-  // Fallback for custom modals like Rapid Screening if they don't exist in page.tsx yet
   onOpenRapidScreening?: (patient: Patient) => void;
+  activeSubView?: 'directory' | 'dashboard';
+  onSubViewChange?: (view: 'directory' | 'dashboard') => void;
 }
 
 export default function WorkerWorkspace({
@@ -25,27 +34,37 @@ export default function WorkerWorkspace({
   onOpenAbhaCard,
   onOpenReferral,
   onOpenReferralToken,
-  onOpenRapidScreening
+  onOpenRapidScreening,
+  activeSubView: externalSubView,
+  onSubViewChange,
 }: WorkerWorkspaceProps) {
+  const { user } = useAuth();
+  const { language } = useLanguage();
   const { patients, referrals } = useSync();
   const [selectedMember, setSelectedMember] = useState<Patient | null>(null);
   const [isRapidScreeningOpen, setIsRapidScreeningOpen] = useState(false);
+  const [internalSubView, setInternalSubView] = useState<'directory' | 'dashboard'>(
+    externalSubView || 'directory'
+  );
 
-  // Derive worker info based on role for the directory header
-  const getWorkerInfo = () => {
-    switch(role) {
-      case 'asha': return { name: 'Priya Sharma', roleName: 'ASHA Worker', location: 'Velhe, Pune' };
-      case 'phc_doctor': return { name: 'Dr. Ramesh Kumar', roleName: 'PHC Medical Officer', location: 'Velhe PHC' };
-      case 'specialist': return { name: 'Dr. Anjali Desai', roleName: 'Cardiologist', location: 'District Hospital, Pune' };
-      default: return { name: 'Healthcare Worker', roleName: 'Worker', location: 'Maharashtra' };
-    }
+  const activeSubView = externalSubView !== undefined ? externalSubView : internalSubView;
+  const setActiveSubView = (v: 'directory' | 'dashboard') => {
+    setInternalSubView(v);
+    if (onSubViewChange) onSubViewChange(v);
   };
 
-  const workerInfo = getWorkerInfo();
+  // Derive worker info from currently authenticated individual account
+  const workerInfo = {
+    name: user?.name || (role === 'phc_doctor' ? 'Medical Officer' : 'Healthcare Worker'),
+    roleName: language === 'mr' ? user?.roleTitleMr || user?.roleTitleEn : user?.roleTitleEn || 'Staff',
+    location: user?.facilityName || 'Maharashtra',
+  };
 
-  const handleOpenAction = (action: 'VITALS' | 'REFERRAL' | 'ABHA' | 'TIMELINE' | 'REFERRAL_STATUS') => {
+  const handleOpenAction = (
+    action: 'VITALS' | 'REFERRAL' | 'ABHA' | 'TIMELINE' | 'REFERRAL_STATUS'
+  ) => {
     if (!selectedMember) return;
-    
+
     if (action === 'TIMELINE') {
       onOpenPatientTimeline(selectedMember);
     } else if (action === 'ABHA') {
@@ -54,7 +73,7 @@ export default function WorkerWorkspace({
       onOpenReferral(selectedMember);
     } else if (action === 'REFERRAL_STATUS') {
       if (onOpenReferralToken && selectedMember.activeReferralId) {
-        const activeRef = referrals.find(r => r.id === selectedMember.activeReferralId);
+        const activeRef = referrals.find((r) => r.id === selectedMember.activeReferralId);
         if (activeRef) onOpenReferralToken(activeRef);
       }
     } else if (action === 'VITALS') {
@@ -62,30 +81,72 @@ export default function WorkerWorkspace({
     }
   };
 
+  // Check if current role has a dedicated console
+  const hasConsoleToggle = role === 'phc_doctor' || role === 'asha' || role === 'nurse' || role === 'pharmacist';
+
   return (
-    <div className="w-full h-full relative">
-      {!selectedMember ? (
-        <MemberDirectory 
-          patients={patients}
-          onSelectMember={setSelectedMember}
-          workerName={workerInfo.name}
-          workerRoleName={workerInfo.roleName}
-          workerLocation={workerInfo.location}
-        />
-      ) : (
-        <MemberProfile 
-          patient={selectedMember}
-          role={role}
-          onBack={() => setSelectedMember(null)}
-          onOpenAction={handleOpenAction}
+    <div className="w-full h-full relative space-y-4">
+      {/* Subview Content: Directly rendered per Sidebar selection without duplicate in-page navigation bars */}
+
+      {/* Subview Content */}
+      {activeSubView === 'dashboard' && !selectedMember && role === 'phc_doctor' && (
+        <PhcDoctorDashboard
+          onOpenNewPatient={onOpenNewPatient}
+          onOpenPatientTimeline={onOpenPatientTimeline}
+          onOpenAbhaCard={onOpenAbhaCard}
+          onOpenReferral={onOpenReferral}
         />
       )}
 
-      {isRapidScreeningOpen && selectedMember && (
-        <RapidScreeningModal 
-          patient={selectedMember} 
-          onClose={() => setIsRapidScreeningOpen(false)} 
+      {activeSubView === 'dashboard' && !selectedMember && role === 'asha' && (
+        <AshaDashboard
+          onOpenNewPatient={onOpenNewPatient}
+          onOpenPatientTimeline={onOpenPatientTimeline}
+          onOpenAbhaCard={onOpenAbhaCard}
+          onOpenReferral={onOpenReferral}
         />
+      )}
+
+      {activeSubView === 'dashboard' && !selectedMember && role === 'nurse' && (
+        <NurseDashboard
+          onOpenNewPatient={onOpenNewPatient}
+          onOpenPatientTimeline={onOpenPatientTimeline}
+          onOpenAbhaCard={onOpenAbhaCard}
+          onOpenReferral={onOpenReferral}
+        />
+      )}
+
+      {activeSubView === 'dashboard' && !selectedMember && role === 'pharmacist' && (
+        <PharmacistDashboard />
+      )}
+
+      {(activeSubView === 'directory' || selectedMember || (!hasConsoleToggle)) && (
+        <div className="w-full h-full relative">
+          {!selectedMember ? (
+            <MemberDirectory
+              patients={patients}
+              onSelectMember={setSelectedMember}
+              workerName={workerInfo.name}
+              workerRoleName={workerInfo.roleName}
+              workerLocation={workerInfo.location}
+              onOpenNewPatient={onOpenNewPatient}
+            />
+          ) : (
+            <MemberProfile
+              patient={selectedMember}
+              role={role}
+              onBack={() => setSelectedMember(null)}
+              onOpenAction={handleOpenAction}
+            />
+          )}
+
+          {isRapidScreeningOpen && selectedMember && (
+            <RapidScreeningModal
+              patient={selectedMember}
+              onClose={() => setIsRapidScreeningOpen(false)}
+            />
+          )}
+        </div>
       )}
     </div>
   );

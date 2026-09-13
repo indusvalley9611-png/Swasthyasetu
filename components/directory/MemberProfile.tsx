@@ -3,10 +3,12 @@
 import React from 'react';
 import { Patient, Role } from '@/lib/types';
 import { useLanguage } from '@/context/LanguageContext';
+import { useAuth } from '@/context/AuthContext';
 import { useSync } from '@/context/SyncContext';
+import { canAccessPatientReport, maskPatientForUnauthorizedView } from '@/lib/patientPrivacyService';
 import { 
   ArrowLeft, HeartPulse, Activity, BrainCircuit, ActivitySquare, AlertTriangle, 
-  MapPin, Phone, History, FileText, ClipboardList, User
+  MapPin, Phone, History, FileText, ClipboardList, User, ShieldCheck, Lock, UserCheck, Building2
 } from 'lucide-react';
 
 interface MemberProfileProps {
@@ -18,6 +20,7 @@ interface MemberProfileProps {
 
 export default function MemberProfile({ patient, role, onBack, onOpenAction }: MemberProfileProps) {
   const { language } = useLanguage();
+  const { user } = useAuth();
   const { referrals, updateReferralStatus } = useSync();
   const [isCancelModalOpen, setIsCancelModalOpen] = React.useState(false);
   const [cancelReason, setCancelReason] = React.useState('');
@@ -25,6 +28,10 @@ export default function MemberProfile({ patient, role, onBack, onOpenAction }: M
   const activeReferral = patient.activeReferralId ? referrals.find(r => r.id === patient.activeReferralId) : null;
   const isAdmitted = activeReferral?.status === 'ADMITTED';
   const isLocked = !!activeReferral && (role === 'asha' || role === 'phc_doctor'); // Strict RBAC lock: referring workers cannot edit if referral is actively in flight
+
+  const decision = canAccessPatientReport(user, patient, { referrals });
+  const isAuthorized = decision.allowed;
+  const maskedPatient = maskPatientForUnauthorizedView(patient, decision);
 
   return (
     <div className="flex flex-col h-full animate-in fade-in duration-500 pb-20">
@@ -124,14 +131,79 @@ export default function MemberProfile({ patient, role, onBack, onOpenAction }: M
               <div>
                 <div className="text-[10px] text-slate-500 uppercase font-semibold">Contact</div>
                 <div className="text-sm font-medium text-slate-900 dark:text-white flex items-center gap-2 mt-0.5">
-                  <Phone className="w-3 h-3 text-slate-400" /> {patient.phone}
+                  <Phone className="w-3 h-3 text-slate-400" /> {maskedPatient.phone}
                 </div>
               </div>
               <div>
                 <div className="text-[10px] text-slate-500 uppercase font-semibold">Address</div>
                 <div className="text-sm font-medium text-slate-900 dark:text-white flex items-center gap-2 mt-0.5">
-                  <MapPin className="w-3 h-3 text-slate-400" /> {patient.village}, Pune District
+                  <MapPin className="w-3 h-3 text-slate-400" /> {patient.village}, {patient.district} District
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Care Assignment & Privacy Protection Status */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+            <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-indigo-500" /> Care Assignment & Privacy
+            </h3>
+            <div className="space-y-3 text-xs">
+              <div>
+                <div className="text-[10px] text-slate-500 uppercase font-semibold">Primary Attending Doctor</div>
+                <div className="font-bold text-slate-900 dark:text-white mt-0.5 flex items-center gap-1.5">
+                  <UserCheck className="w-3.5 h-3.5 text-blue-600" />
+                  <span>{patient.assignedDoctorName || 'Dr. Rajesh Deshmukh'}</span>
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-500 uppercase font-semibold">Registered Facility</div>
+                <div className="font-medium text-slate-700 dark:text-slate-300 mt-0.5 flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="truncate">{patient.assignedFacilityName || 'Velhe Primary Health Centre (PHC)'}</span>
+                </div>
+              </div>
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                <div className="text-[10px] text-slate-500 uppercase font-semibold mb-1">Your Access Status</div>
+                {isAuthorized ? (
+                  <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <div>
+                      <div className="font-bold text-[11px]">Authorized Care Relationship</div>
+                      <div className="text-[10px] text-emerald-700 dark:text-emerald-400">Full clinical report access verified</div>
+                    </div>
+                  </div>
+                ) : decision.accessLevel === 'MEDICATION_ONLY' ? (
+                  <div className="p-2.5 rounded-xl bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/50 text-teal-800 dark:text-teal-300 space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-[11px]">
+                      <ShieldCheck className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                      <span>Pharmacist Dispensing View</span>
+                    </div>
+                    <p className="text-[10px] leading-tight text-teal-700 dark:text-teal-400">
+                      Prescriptions accessible for medicine dispensing. Clinical notes and diagnoses restricted.
+                    </p>
+                  </div>
+                ) : decision.accessLevel === 'CLINICAL_LIMITED' ? (
+                  <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 text-blue-800 dark:text-blue-300 space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-[11px]">
+                      <ShieldCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                      <span>Nursing & Triage View</span>
+                    </div>
+                    <p className="text-[10px] leading-tight text-blue-700 dark:text-blue-400">
+                      Vitals and basic care accessible. Diagnostic lab reports restricted.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 text-amber-800 dark:text-amber-300 space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-[11px]">
+                      <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span>Protected Medical Record</span>
+                    </div>
+                    <p className="text-[10px] leading-tight text-amber-700 dark:text-amber-400">
+                      Under ABDM least-privilege policy, clinical encounter notes and lab reports are restricted to the attending doctor.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -140,36 +212,61 @@ export default function MemberProfile({ patient, role, onBack, onOpenAction }: M
             <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
               <HeartPulse className="w-4 h-4" /> Latest Vitals
             </h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold">Blood Pressure</div>
-                <div className="text-lg font-black text-slate-900 dark:text-white mt-1">138/88 <span className="text-xs font-medium text-slate-400">mmHg</span></div>
-              </div>
-              <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold">Heart Rate</div>
-                <div className="text-lg font-black text-slate-900 dark:text-white mt-1">76 <span className="text-xs font-medium text-slate-400">bpm</span></div>
-              </div>
-              <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold">SpO2</div>
-                <div className="text-lg font-black text-slate-900 dark:text-white mt-1">98 <span className="text-xs font-medium text-slate-400">%</span></div>
-              </div>
-              <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold">Weight</div>
-                <div className="text-lg font-black text-slate-900 dark:text-white mt-1">62 <span className="text-xs font-medium text-slate-400">kg</span></div>
-              </div>
-            </div>
-            {isLocked ? (
-              <div className="w-full mt-4 p-3 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span className="text-[10px] font-bold leading-tight">Record Locked<br/>Managed by {activeReferral?.targetFacility}</span>
-              </div>
+            {isAuthorized || decision.accessLevel === 'CLINICAL_LIMITED' ? (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold">Blood Pressure</div>
+                    <div className="text-lg font-black text-slate-900 dark:text-white mt-1">
+                      {patient.encounters[0]?.vitals
+                        ? `${patient.encounters[0].vitals.systolicBp}/${patient.encounters[0].vitals.diastolicBp}`
+                        : '120/80'}{' '}
+                      <span className="text-xs font-medium text-slate-400">mmHg</span>
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold">Heart Rate</div>
+                    <div className="text-lg font-black text-slate-900 dark:text-white mt-1">
+                      {patient.encounters[0]?.vitals?.heartRate || 74}{' '}
+                      <span className="text-xs font-medium text-slate-400">bpm</span>
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold">SpO2</div>
+                    <div className="text-lg font-black text-slate-900 dark:text-white mt-1">
+                      {patient.encounters[0]?.vitals?.spO2 || 98}{' '}
+                      <span className="text-xs font-medium text-slate-400">%</span>
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold">Temp / Resp</div>
+                    <div className="text-lg font-black text-slate-900 dark:text-white mt-1">
+                      {patient.encounters[0]?.vitals?.temperature || 37.0}°C
+                    </div>
+                  </div>
+                </div>
+                {isLocked ? (
+                  <div className="w-full mt-4 p-3 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span className="text-[10px] font-bold leading-tight">Record Locked<br/>Managed by {activeReferral?.targetFacility}</span>
+                  </div>
+                ) : (
+                  <button 
+                    onClick={() => onOpenAction('VITALS')}
+                    className="w-full mt-4 py-2 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-400 font-bold text-xs rounded-lg transition-colors border border-blue-100 dark:border-blue-800/30"
+                  >
+                    + Update Vitals
+                  </button>
+                )}
+              </>
             ) : (
-              <button 
-                onClick={() => onOpenAction('VITALS')}
-                className="w-full mt-4 py-2 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-400 font-bold text-xs rounded-lg transition-colors border border-blue-100 dark:border-blue-800/30"
-              >
-                + Update Vitals
-              </button>
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-center space-y-2">
+                <Lock className="w-5 h-5 text-amber-500 mx-auto" />
+                <div className="text-xs font-bold text-slate-700 dark:text-slate-300">Clinical Vitals Protected</div>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                  Hemodynamic vitals are restricted to authorized clinicians under ABDM Least-Privilege Policy.
+                </p>
+              </div>
             )}
           </div>
 
@@ -187,9 +284,19 @@ export default function MemberProfile({ patient, role, onBack, onOpenAction }: M
               <div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold mb-2">Known Conditions</div>
                 <div className="flex flex-wrap gap-2">
-                  <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-md text-xs font-medium border border-slate-200 dark:border-slate-700">Hypertension (Stage 1)</span>
-                  {patient.isHighRiskPregnancy && (
-                    <span className="bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 px-2.5 py-1 rounded-md text-xs font-medium border border-rose-200 dark:border-rose-800">Pregnancy (2nd Trimester)</span>
+                  {maskedPatient.chronicConditions && maskedPatient.chronicConditions.length > 0 ? (
+                    maskedPatient.chronicConditions.map((cond, i) => (
+                      <span key={i} className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-md text-xs font-medium border border-slate-200 dark:border-slate-700">
+                        {cond}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-400 italic">No chronic conditions listed</span>
+                  )}
+                  {patient.isHighRiskPregnancy && (isAuthorized || decision.accessLevel === 'CLINICAL_LIMITED') && (
+                    <span className="bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 px-2.5 py-1 rounded-md text-xs font-medium border border-rose-200 dark:border-rose-800">
+                      Pregnancy (Week {patient.gestationalWeeks})
+                    </span>
                   )}
                 </div>
               </div>
@@ -197,9 +304,20 @@ export default function MemberProfile({ patient, role, onBack, onOpenAction }: M
               <div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold mb-2">Current Medications</div>
                 <div className="flex flex-wrap gap-2">
-                  <span className="bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 px-2.5 py-1 rounded-md text-xs font-medium border border-indigo-100 dark:border-indigo-800/50">Amlodipine 5mg</span>
-                  {patient.isHighRiskPregnancy && (
-                    <span className="bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 px-2.5 py-1 rounded-md text-xs font-medium border border-indigo-100 dark:border-indigo-800/50">IFA Supplements</span>
+                  {isAuthorized || decision.accessLevel === 'MEDICATION_ONLY' ? (
+                    patient.encounters.flatMap(e => e.prescriptions || []).length > 0 ? (
+                      patient.encounters.flatMap(e => e.prescriptions || []).map((rx, idx) => (
+                        <span key={idx} className="bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 px-2.5 py-1 rounded-md text-xs font-medium border border-indigo-100 dark:border-indigo-800/50">
+                          {rx.medicineName} ({rx.dosage})
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-slate-400 italic">No active prescriptions</span>
+                    )
+                  ) : (
+                    <span className="bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 px-2.5 py-1 rounded-md text-xs font-medium border border-amber-200 dark:border-amber-800">
+                      [RESTRICTED - AUTHORIZED ONLY]
+                    </span>
                   )}
                 </div>
               </div>
@@ -211,41 +329,57 @@ export default function MemberProfile({ patient, role, onBack, onOpenAction }: M
               <History className="w-4 h-4" /> Recent Interactions
             </h3>
             
-            <div className="space-y-4 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 dark:before:via-slate-700 before:to-transparent">
-              
-              <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
-                <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-white dark:border-slate-900 bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10">
-                  <ClipboardList className="w-4 h-4" />
-                </div>
-                <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm">
-                  <div className="flex items-center justify-between mb-1">
-                    <h4 className="font-bold text-slate-900 dark:text-white text-sm">Routine Checkup</h4>
-                    <span className="text-[10px] font-bold text-slate-400">12 Sep 2026</span>
+            {isAuthorized ? (
+              <div className="space-y-4 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 dark:before:via-slate-700 before:to-transparent">
+                {patient.encounters.map((enc, i) => (
+                  <div key={enc.id || i} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                    <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-white dark:border-slate-900 bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10">
+                      <ClipboardList className="w-4 h-4" />
+                    </div>
+                    <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                      <div className="flex items-center justify-between mb-1">
+                        <h4 className="font-bold text-slate-900 dark:text-white text-sm">{enc.diagnosis}</h4>
+                        <span className="text-[10px] font-bold text-slate-400">{enc.date}</span>
+                      </div>
+                      <div className="text-[11px] text-blue-600 dark:text-blue-400 font-medium mb-1">
+                        {enc.facilityName} &bull; {enc.providerName}
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">{enc.notes}</p>
+                    </div>
                   </div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Recorded vitals. BP slightly elevated. Dispensed IFA supplements.</p>
-                </div>
+                ))}
               </div>
-
-              <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
-                <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-white dark:border-slate-900 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10">
-                  <Activity className="w-4 h-4" />
+            ) : (
+              <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-center space-y-2">
+                <Lock className="w-6 h-6 text-amber-500 mx-auto" />
+                <div className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                  Clinical Encounters & Consultation Notes Restricted
                 </div>
-                <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm">
-                  <div className="flex items-center justify-between mb-1">
-                    <h4 className="font-bold text-slate-900 dark:text-white text-sm">Initial Registration</h4>
-                    <span className="text-[10px] font-bold text-slate-400">01 Sep 2026</span>
-                  </div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Patient registered in ABDM system. ABHA generated.</p>
-                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                  Under ABDM least-privilege standards, individual clinical notes, laboratory investigations, and treatment records are protected.
+                </p>
               </div>
-
-            </div>
+            )}
 
             <button 
               onClick={() => onOpenAction('TIMELINE')}
-              className="w-full mt-6 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-lg transition-colors border border-slate-200 dark:border-slate-700"
+              className={`w-full mt-6 py-2.5 font-bold text-xs rounded-xl transition-all border flex items-center justify-center gap-2 ${
+                isAuthorized
+                  ? 'bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+                  : 'bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60'
+              }`}
             >
-              View Full Medical Timeline
+              {isAuthorized ? (
+                <>
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <span>View Full Medical Timeline</span>
+                </>
+              ) : (
+                <>
+                  <Lock className="w-4 h-4 text-amber-600" />
+                  <span>View Medical Timeline (Protected &bull; Break-Glass Override)</span>
+                </>
+              )}
             </button>
           </div>
           

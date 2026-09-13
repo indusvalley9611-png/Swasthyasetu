@@ -3,8 +3,10 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useLanguage } from '@/context/LanguageContext';
+import { canRegisterPatient } from '@/lib/patientPrivacyService';
 import { useSync } from '@/context/SyncContext';
 import { Role } from '@/lib/types';
+import Link from 'next/link';
 import {
   ShieldAlert,
   Wifi,
@@ -17,6 +19,9 @@ import {
   PlusCircle,
   Activity,
   HeartPulse,
+  MapPin,
+  LogOut,
+  Flame,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -24,7 +29,7 @@ interface HeaderProps {
   onOpenSearch: () => void;
   onOpenBedMatrix: () => void;
   onOpenStockLedger: () => void;
-  onOpenLogin: () => void;
+  onOpenAuditLogs?: () => void;
 }
 
 export function Header({
@@ -32,7 +37,7 @@ export function Header({
   onOpenSearch,
   onOpenBedMatrix,
   onOpenStockLedger,
-  onOpenLogin,
+  onOpenAuditLogs,
 }: HeaderProps) {
   const { role, user, setRole, logout } = useAuth();
   const { language, toggleLanguage, t } = useLanguage();
@@ -45,7 +50,12 @@ export function Header({
     triggerManualSync,
     toastMessage,
     clearToast,
+    stockTransfers,
   } = useSync();
+
+  const activeEmergencyTransfersCount = (stockTransfers || []).filter(
+    (t) => (t.isEmergency || t.urgency === 'CRITICAL') && t.status !== 'COMPLETED' && t.status !== 'REJECTED'
+  ).length;
 
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
 
@@ -75,6 +85,14 @@ export function Header({
       badgeColor: 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700',
     },
   ];
+
+  const getAdminLevelLabel = (level?: string, r?: string) => {
+    if (level === 'national') return 'National Level';
+    if (level === 'state') return 'State Level';
+    if (level === 'district') return 'District Level';
+    if (level === 'field' || r === 'asha') return 'ASHA / Field Level';
+    return 'PHC Level';
+  };
 
   return (
     <header className="sticky top-0 z-40 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 shadow-sm">
@@ -195,54 +213,125 @@ export function Header({
             <span className="md:hidden">Stock</span>
           </button>
 
-          <button
-            onClick={onOpenNewPatient}
-            className="inline-flex items-center gap-1.5 bg-teal-700 hover:bg-teal-800 text-white text-xs sm:text-sm font-medium px-3 py-2 rounded-lg shadow-sm transition-colors"
+          <Link
+            href="/maha-aushadhi"
+            className="inline-flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 text-xs sm:text-sm font-extrabold px-3 py-2 rounded-lg border border-rose-200 dark:border-rose-800 transition-colors"
+            title="MahaAushadhi — Emergency Drug Response Network"
           >
-            <PlusCircle className="w-4 h-4" />
-            <span className="hidden sm:inline">{t('newPatient')}</span>
-            <span className="sm:hidden">New</span>
-          </button>
+            <Flame className="w-4 h-4 text-rose-600 animate-pulse" />
+            <span className="hidden md:inline">MahaAushadhi</span>
+            <span className="md:hidden">SOS</span>
+            {activeEmergencyTransfersCount > 0 && (
+              <span className="px-1.5 py-0.2 bg-rose-600 text-white rounded-full text-[10px] font-black">
+                {activeEmergencyTransfersCount}
+              </span>
+            )}
+          </Link>
 
-          {/* Active Role Selector Dropdown */}
+          {onOpenAuditLogs && (
+            <button
+              onClick={onOpenAuditLogs}
+              className="inline-flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-xs sm:text-sm font-bold px-3 py-2 rounded-lg border border-indigo-200 dark:border-indigo-800 transition-colors"
+              title="ABDM Data Privacy & Security Audit Trail"
+            >
+              <ShieldAlert className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span className="hidden md:inline">Audit Logs</span>
+              <span className="md:hidden">Audit</span>
+            </button>
+          )}
+
+          {canRegisterPatient(user) && (
+            <button
+              onClick={onOpenNewPatient}
+              className="inline-flex items-center gap-1.5 bg-teal-700 hover:bg-teal-800 text-white text-xs sm:text-sm font-medium px-3 py-2 rounded-lg shadow-sm transition-colors cursor-pointer"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('newPatient')}</span>
+              <span className="sm:hidden">New</span>
+            </button>
+          )}
+
+          {/* Active User Account Badge with Role, Facility, and Administrative Level */}
           <div className="relative">
             <button
               onClick={() => setRoleDropdownOpen(!roleDropdownOpen)}
-              className="inline-flex items-center gap-2 bg-blue-900 hover:bg-blue-950 text-white text-xs sm:text-sm font-medium px-3 py-2 rounded-lg shadow transition-colors"
+              className="inline-flex items-center gap-2 bg-blue-900 hover:bg-blue-950 text-white text-xs sm:text-sm font-medium px-3 py-1.5 rounded-lg shadow transition-colors border border-blue-800"
+              title="Individual Authenticated Staff Profile"
             >
-              <UserCheck className="w-4 h-4 text-teal-300" />
+              <UserCheck className="w-4 h-4 text-teal-300 shrink-0" />
               <div className="text-left leading-tight hidden lg:block">
-                <div className="text-[11px] text-blue-200">
-                  {language === 'mr' ? user?.roleTitleMr : user?.roleTitleEn}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold truncate max-w-[150px]">{user?.name}</span>
+                  <span className="text-[9px] uppercase tracking-wider font-extrabold px-1.5 py-0.2 rounded bg-blue-800/80 text-blue-200 border border-blue-700">
+                    {getAdminLevelLabel(user?.administrativeLevel, user?.role)}
+                  </span>
                 </div>
-                <div className="text-xs font-bold truncate max-w-[140px]">{user?.name}</div>
+                <div className="text-[10px] text-teal-200 font-medium truncate max-w-[230px]">
+                  {language === 'mr' ? user?.roleTitleMr : user?.roleTitleEn} &bull; {user?.facilityName}
+                </div>
               </div>
-              <span className="lg:hidden">{language === 'mr' ? 'भूमिका' : 'Role'}</span>
+              <span className="lg:hidden font-bold">{user?.name?.split(' ')[0] || 'Account'}</span>
             </button>
 
             {roleDropdownOpen && (
               <div
-                className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 py-2 z-50 animate-in fade-in slide-in-from-top-2"
+                className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 py-2 z-50 animate-in fade-in slide-in-from-top-2"
                 onClick={() => setRoleDropdownOpen(false)}
               >
-                <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
-                  <div className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">
+                <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Authenticated Staff Account</span>
+                    <span className="text-[9px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                      {getAdminLevelLabel(user?.administrativeLevel, user?.role)}
+                    </span>
+                  </div>
+                  <div className="text-sm font-black text-slate-900 dark:text-white">
                     {user?.name}
                   </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-                    {user?.facilityName}
+                  <div className="text-xs text-blue-700 dark:text-blue-400 font-bold">
+                    {language === 'mr' ? user?.roleTitleMr : user?.roleTitleEn}
+                  </div>
+                  <div className="text-xs text-slate-700 dark:text-slate-300 flex items-center gap-1.5 pt-1.5 border-t border-slate-200 dark:border-slate-700">
+                    <Building2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                    <span className="truncate font-semibold">{user?.facilityName}</span>
+                  </div>
+                  <div className="text-[11px] text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>
+                      {user?.village ? `${user.village}, ` : ''}
+                      {user?.taluka ? `${user.taluka} Taluka, ` : ''}
+                      {user?.district ? `${user.district} District, ` : ''}
+                      {user?.state || 'Maharashtra'}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono pt-1">
+                    HFR: {user?.hfrCode} &bull; Reg: {user?.registrationNumber}
                   </div>
                 </div>
 
-                <div className="p-2">
+                <div className="p-2 space-y-1">
+                  {onOpenAuditLogs && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRoleDropdownOpen(false);
+                        onOpenAuditLogs();
+                      }}
+                      className="w-full py-2 px-3 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-lg text-xs transition-colors flex items-center gap-2"
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5 text-indigo-500" />
+                      <span>Security & Audit Trail</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       setRoleDropdownOpen(false);
                       logout();
                     }}
-                    className="w-full py-2 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-400 font-bold rounded-lg text-xs transition-colors"
+                    className="w-full py-2 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-400 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5"
                   >
-                    {language === 'mr' ? 'बाहेर पडा (Sign Out)' : 'Sign Out'}
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>{language === 'mr' ? 'बाहेर पडा (Sign Out)' : 'Sign Out'}</span>
                   </button>
                 </div>
               </div>
@@ -250,6 +339,51 @@ export function Header({
           </div>
         </div>
       </div>
+
+      {/* Active User Healthcare Hierarchy Context Banner */}
+      {user && user.id !== 'guest-unauthenticated' && (
+        <div className="bg-slate-100 dark:bg-slate-800/90 border-t border-b border-slate-200 dark:border-slate-700/80 px-4 py-1.5 text-xs text-slate-700 dark:text-slate-300">
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1.5 font-bold text-slate-900 dark:text-white">
+                <UserCheck className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                <span>{user.name}</span>
+              </span>
+              <span className="text-slate-400 dark:text-slate-500">•</span>
+              <span className="font-semibold text-blue-700 dark:text-blue-300">
+                {language === 'mr' ? user.roleTitleMr : user.roleTitleEn}
+              </span>
+              <span className="text-slate-400 dark:text-slate-500">•</span>
+              <span className="inline-flex items-center gap-1 font-medium text-slate-800 dark:text-slate-200">
+                <Building2 className="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0" />
+                <span>{user.facilityName}</span>
+              </span>
+              <span className="text-slate-400 dark:text-slate-500">•</span>
+              <span className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-400">
+                <MapPin className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>
+                  {user.district ? `${user.district} District, ` : ''}
+                  {user.state || 'Maharashtra'}
+                </span>
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-[10px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-full border bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 border-blue-300 dark:border-blue-700">
+                {getAdminLevelLabel(user.administrativeLevel, user.role)}
+              </span>
+              <button
+                onClick={logout}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-300 transition-colors cursor-pointer px-1.5 py-0.5 rounded hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                title="Sign out of current session"
+              >
+                <LogOut className="w-3 h-3" />
+                <span>{language === 'mr' ? 'बाहेर पडा' : 'Sign Out'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Global Toast / Notification Bar */}
       {toastMessage && (

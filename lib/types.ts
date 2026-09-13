@@ -1,4 +1,89 @@
-export type Role = 'asha' | 'phc_doctor' | 'specialist' | 'state_admin';
+export type Role =
+  | 'asha'
+  | 'phc_doctor'
+  | 'specialist'
+  | 'district_officer'
+  | 'state_admin'
+  | 'national_admin'
+  | 'nurse'
+  | 'pharmacist';
+
+export type AdministrativeLevel = 'field' | 'facility' | 'district' | 'state' | 'national';
+
+export type Permission =
+  | 'view_basic_demographics'
+  | 'view_clinical_reports'
+  | 'edit_clinical_records'
+  | 'create_referral'
+  | 'manage_admissions'
+  | 'view_prescriptions_only'
+  | 'view_aggregate_analytics'
+  | 'emergency_break_glass'
+  | 'register_patient';
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  userId: string;
+  userName: string;
+  userRole: Role;
+  userFacility: string;
+  administrativeLevel: AdministrativeLevel;
+  patientId: string;
+  patientName: string;
+  patientAbha: string;
+  action:
+    | 'VIEW_PATIENT_REPORT'
+    | 'CREATE_REFERRAL'
+    | 'UPDATE_PATIENT_RECORD'
+    | 'EMERGENCY_ACCESS'
+    | 'ACCESS_DENIED'
+    | 'DISPENSE_MEDICATION'
+    | 'DISCHARGE_PATIENT'
+    | 'VIEW_DEMOGRAPHICS'
+    | 'TERTIARY_ROUTING_APPROVED'
+    | 'INTER_STATE_ESCALATION_APPROVED'
+    | 'INTER_DISTRICT_DIVERT'
+    | 'STOCK_TRANSFER_AUTHORIZED'
+    | 'RRT_DISPATCHED'
+    | 'EMERGENCY_DRUG_SOS_RAISED'
+    | 'EMERGENCY_DRUG_DISPATCHED'
+    | 'EMERGENCY_DRUG_RECEIVED'
+    | 'VIEW_REFERRAL_SUMMARY'
+    | 'DISTRICT_REFERRAL_COORDINATION'
+    | 'REGISTER_PATIENT'
+    | 'LINK_PATIENT';
+  resource: string;
+  reason?: string;
+  accessGranted: boolean;
+}
+
+export interface AccessDecision {
+  allowed: boolean;
+  reason: string;
+  accessLevel: 'NONE' | 'BASIC_PROFILE' | 'CLINICAL_LIMITED' | 'MEDICATION_ONLY' | 'FULL_CLINICAL' | 'EMERGENCY_OVERRIDE';
+}
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  role: Role;
+  roleTitleEn: string;
+  roleTitleMr: string;
+  phone: string;
+  facilityId: string;
+  facilityName: string;
+  facilityType: string;
+  hfrCode: string; // Health Facility Registry code
+  taluka: string;
+  district: string;
+  state?: string;
+  village?: string;
+  registrationNumber: string; // MMC or ASHA ID
+  administrativeLevel: AdministrativeLevel;
+  assignedPatientIds?: string[];
+  permissions: Permission[];
+}
 
 export type TriagePriority = 'red' | 'yellow' | 'green';
 
@@ -83,6 +168,17 @@ export interface Patient {
   encounters: ClinicalEncounter[];
   activeReferralId?: string;
   activeCareOwner?: string; // e.g. 'DISTRICT', 'STATE', 'PHC'
+  assignedDoctorId?: string;
+  assignedDoctorName?: string;
+  assignedFacilityId?: string;
+  assignedFacilityName?: string;
+  entryType?: 'COMMUNITY_ASHA' | 'PHC_WALK_IN' | 'DISTRICT_HOSPITAL_WALK_IN' | 'STATE_TERTIARY_WALK_IN';
+  registrationFacilityId?: string;
+  registrationFacilityName?: string;
+  registrationLevel?: AdministrativeLevel;
+  registeredByUserId?: string;
+  registeredByUserName?: string;
+  registeredAt?: string;
 }
 
 export interface DischargeSummary {
@@ -107,6 +203,8 @@ export interface Referral {
   patientAge: number;
   patientGender: string;
   referringFacility: string;
+  referringDoctorName: string;
+  referringUserId?: string;
   targetFacility: string;
   specialtyRequired: string;
   referralReason: string;
@@ -114,9 +212,8 @@ export interface Referral {
   triageScore: number;
   triageReasons: string[];
   vitalsAtReferral: Vitals;
-  referringDoctorName: string;
   createdAt: string;
-  status: 'PENDING' | 'ACCEPTED' | 'ADMITTED' | 'COMPLETED' | 'CANCELLED' | 'ESCALATED';
+  status: 'PENDING' | 'ACCEPTED' | 'ADMITTED' | 'COMPLETED' | 'CANCELLED' | 'ESCALATED' | 'ROUTED_TO_TERTIARY' | 'TRANSFER_APPROVED';
   ambulanceDispatched?: boolean;
   qrPayload: string;
   assignedBed?: string;
@@ -133,7 +230,14 @@ export interface Referral {
 export interface Facility {
   id: string;
   name: string;
-  type: 'Sub-Centre' | 'PHC' | 'Rural Hospital' | 'District Hospital' | 'Medical College';
+  type:
+    | 'Sub-Centre'
+    | 'PHC'
+    | 'Rural Hospital'
+    | 'District Hospital'
+    | 'Medical College'
+    | 'Directorate of Health Services'
+    | 'National Health Authority';
   taluka: string;
   district: string;
   phone: string;
@@ -202,6 +306,19 @@ export interface StockTransfer {
   dispatchedAt?: string;
   receivedAt?: string;
   rejectionReason?: string;
+  isEmergency?: boolean;
+  emergencyIndication?: string;
+  requiredByTime?: string;
+  transportMode?: '108_AMBULANCE' | 'STATE_MEDICAL_COURIER' | 'POLICE_GREEN_CORRIDOR' | 'FACILITY_TRANSPORT';
+  consignmentCode?: string;
+  dispatchedByUserName?: string;
+  receivedByUserName?: string;
+  dispatchOtpVerified?: boolean;
+  receiptOtpVerified?: boolean;
+  donorAllocated?: boolean;
+  allocatedByDistrictUserId?: string;
+  allocatedByDistrictUserName?: string;
+  allocatedAt?: string;
 }
 
 export interface ResourceAlert {
@@ -228,6 +345,22 @@ export interface OutbreakData {
   primaryHotspotVillage: string;
   subCentresAffected: number;
   reportedDate: string;
+}
+
+export type RrtInterventionStatus = 'DETECTED' | 'UNDER_REVIEW' | 'RRT_DISPATCHED' | 'EN_ROUTE' | 'ON_SITE' | 'CONTAINMENT' | 'RESOLVED';
+
+export interface RrtIntervention {
+  id: string;
+  outbreakId: string;
+  district: string;
+  taluka: string;
+  diseaseName: string;
+  status: RrtInterventionStatus;
+  teamLead: string;
+  dispatchedAt?: string;
+  onSiteAt?: string;
+  resolvedAt?: string;
+  actionsTaken: string[];
 }
 
 export interface OfflineSyncItem {

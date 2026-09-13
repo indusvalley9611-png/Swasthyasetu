@@ -22,25 +22,65 @@ interface StaffLoginModalProps {
   initialRole?: Role;
 }
 
+export type StaffTier = 'asha' | 'phc' | 'district' | 'state' | 'national';
+
 export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) {
-  const { sendOtp, verifyOtp, user } = useAuth();
+  const { sendOtp, verifyOtp, user, loginAsUser } = useAuth();
   const { language } = useLanguage();
 
   const allStaff = Object.values(PRE_REGISTERED_STAFF);
-  const staffList = initialRole ? allStaff.filter(s => s.role === initialRole) : allStaff;
-  const initialStaff = initialRole ? allStaff.find(s => s.role === initialRole) : allStaff[1];
-  
-  const [phone, setPhone] = useState(initialStaff?.phone || '9422018374');
+
+  const getInitialTier = (r?: Role): StaffTier => {
+    if (!r) return 'phc';
+    if (r === 'asha') return 'asha';
+    if (r === 'phc_doctor' || r === 'nurse' || r === 'pharmacist') return 'phc';
+    if (r === 'specialist' || r === 'district_officer') return 'district';
+    if (r === 'state_admin') return 'state';
+    if (r === 'national_admin') return 'national';
+    return 'phc';
+  };
+
+  const activeTier: StaffTier = getInitialTier(initialRole);
+
+  const filterStaffByTier = (tier: StaffTier) => {
+    switch (tier) {
+      case 'asha':
+        return allStaff.filter((s) => s.role === 'asha');
+      case 'phc':
+        return allStaff.filter((s) => s.role === 'phc_doctor' || s.role === 'nurse' || s.role === 'pharmacist');
+      case 'district':
+        return allStaff.filter((s) => s.role === 'specialist' || s.role === 'district_officer');
+      case 'state':
+        return allStaff.filter((s) => s.role === 'state_admin');
+      case 'national':
+        return allStaff.filter((s) => s.role === 'national_admin');
+      default:
+        return allStaff.filter((s) => s.role === 'phc_doctor');
+    }
+  };
+
+  const staffList = filterStaffByTier(activeTier);
+
+  // Initial staff selection: matches initialRole if supplied, or first in current tier
+  const initialStaff =
+    (initialRole ? allStaff.find((s) => s.role === initialRole) : null) ||
+    staffList[0] ||
+    allStaff[0];
+
+  const [phone, setPhone] = useState(initialStaff?.phone || '9822019284');
   const [otp, setOtp] = useState('');
   const [step, setStep] = useState<'PHONE' | 'OTP' | 'SUCCESS'>('PHONE');
   const [errorMessage, setErrorMessage] = useState('');
   const [simulatedSms, setSimulatedSms] = useState<{ phone: string; otp: string } | null>(null);
 
-
-
   const handleSelectStaff = (selectedPhone: string) => {
     setPhone(selectedPhone);
     setErrorMessage('');
+  };
+
+  const handleDirectLogin = (selectedProfile: (typeof allStaff)[0]) => {
+    loginAsUser(selectedProfile);
+    onClose();
   };
 
   const handleSendOtp = (e: React.FormEvent) => {
@@ -61,10 +101,7 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
     setErrorMessage('');
     const result = verifyOtp(phone, otp);
     if (result.success) {
-      setStep('SUCCESS');
-      setTimeout(() => {
-        onClose();
-      }, 1200);
+      onClose();
     } else {
       setErrorMessage(result.error || 'Invalid OTP code.');
     }
@@ -72,17 +109,35 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-3 sm:p-6 animate-in fade-in">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 dark:border-slate-700">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden border border-slate-200 dark:border-slate-700">
         {/* Top Maharashtra Header */}
         <div className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center border-b border-slate-800">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-teal-400" />
             <div>
               <h3 className="font-bold text-sm">
-                {language === 'mr' ? 'आरोग्य कर्मचारी पडताळणी व प्रवेश' : 'MahaArogya Staff Verification & Login'}
+                {activeTier === 'asha'
+                  ? (language === 'mr' ? 'आशा सेविका पडताळणी व प्रवेश' : 'ASHA / Sub-Centre Portal Login')
+                  : activeTier === 'phc'
+                  ? (language === 'mr' ? 'प्राथमिक आरोग्य केंद्र (PHC) कर्मचारी प्रवेश' : 'PHC Medical Officer & Staff Login')
+                  : activeTier === 'district'
+                  ? (language === 'mr' ? 'जिल्हा रुग्णालय तज्ज्ञ व प्रशासन प्रवेश' : 'District Hospital Team Login')
+                  : activeTier === 'state'
+                  ? (language === 'mr' ? 'राज्य आरोग्य प्राधिकरण (DHS) प्रवेश' : 'State Health Directorate Login (DHS Maharashtra)')
+                  : activeTier === 'national'
+                  ? (language === 'mr' ? 'राष्ट्रीय आरोग्य प्राधिकरण (NHA) प्रवेश' : 'National Health Authority Login (NHA / MoHFW)')
+                  : (language === 'mr' ? 'आरोग्य कर्मचारी पडताळणी व प्रवेश' : 'MahaArogya Staff Verification & Login')}
               </h3>
               <p className="text-[11px] text-slate-400">
-                ABDM Healthcare Professional Registry (HPR) Gateway
+                {activeTier === 'state'
+                  ? 'Directorate of Health Services (DHS), Mumbai • ABDM HPR Gateway'
+                  : activeTier === 'national'
+                  ? 'National Health Authority (NHA) & MoHFW, New Delhi • Apex Mission Control'
+                  : activeTier === 'district'
+                  ? 'District Hospital Aundh (Pune) & Civil Hospital (Nashik)'
+                  : activeTier === 'phc'
+                  ? 'Velhe PHC & Nasrapur PHC Catchment Areas'
+                  : 'Velhe & Nasrapur Field & Sub-Centre Network'}
               </p>
             </div>
           </div>
@@ -103,7 +158,7 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
                   <Send className="w-3.5 h-3.5" />
                   <span>SIMULATED GOVT SMS GATEWAY</span>
                 </span>
-                <span className="font-mono">Govt of Maharashtra</span>
+                <span className="font-mono">Govt of Maharashtra / NHA</span>
               </div>
               <p className="text-xs font-mono">
                 &ldquo;Your MahaArogya Portal OTP is{' '}
@@ -133,33 +188,97 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
                 </div>
               </div>
 
-              {/* Pre-Registered Demo Staff Selector */}
+              {/* Staff Profile Selection Header */}
               <div className="space-y-2">
-                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                  Select Pre-Registered Staff Member to Auto-Fill:
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {staffList.map((stf) => (
-                    <button
-                      type="button"
-                      key={stf.phone}
-                      onClick={() => handleSelectStaff(stf.phone)}
-                      className={`p-2.5 rounded-xl border text-left transition-all ${
-                        phone === stf.phone
-                          ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-600 ring-2 ring-blue-100 shadow-xs'
-                          : 'bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 border-slate-200 dark:border-slate-700'
-                      }`}
-                    >
-                      <div className="font-bold text-slate-900 dark:text-white truncate">{stf.name}</div>
-                      <div className="text-[10px] text-blue-900 dark:text-blue-200 font-semibold">{stf.roleTitleEn}</div>
-                      <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
-                        📞 +91 {stf.phone}
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+                    {activeTier === 'state'
+                      ? (language === 'mr' ? 'राज्य आरोग्य अधिकारी निवडा:' : 'Select State Directorate Officer:')
+                      : activeTier === 'national'
+                      ? (language === 'mr' ? 'राष्ट्रीय आरोग्य अधिकारी निवडा:' : 'Select National Health Official:')
+                      : activeTier === 'district'
+                      ? (language === 'mr' ? 'जिल्हा रुग्णालय कर्मचारी निवडा:' : 'Select District Hospital Staff:')
+                      : activeTier === 'phc'
+                      ? (language === 'mr' ? 'प्राथमिक आरोग्य केंद्र (PHC) कर्मचारी निवडा:' : 'Select PHC Staff Member:')
+                      : (language === 'mr' ? 'आशा सेविका निवडा:' : 'Select ASHA Field Worker:')}
+                  </span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                    {language === 'mr' ? 'थेट प्रवेशासाठी क्लिक करा' : 'Click card for instant login'}
+                  </span>
+                </div>
+
+                {/* Account Cards Grid */}
+                <div className={`grid ${staffList.length === 1 ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'} gap-2 max-h-64 overflow-y-auto pr-1`}>
+                  {staffList.map((stf) => {
+                    const isSelected = phone === stf.phone;
+                    const levelLabel =
+                      stf.administrativeLevel === 'national'
+                        ? 'National Level'
+                        : stf.administrativeLevel === 'state'
+                        ? 'State Level'
+                        : stf.administrativeLevel === 'district'
+                        ? 'District Level'
+                        : stf.administrativeLevel === 'field' || stf.role === 'asha'
+                        ? 'ASHA / Field Level'
+                        : 'PHC Level';
+
+                    const levelBadgeColor =
+                      stf.administrativeLevel === 'national'
+                        ? 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 border-purple-200'
+                        : stf.administrativeLevel === 'state'
+                        ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 border-amber-200'
+                        : stf.administrativeLevel === 'district'
+                        ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border-indigo-200'
+                        : stf.administrativeLevel === 'field' || stf.role === 'asha'
+                        ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border-emerald-200'
+                        : 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 border-blue-200';
+
+                    return (
+                      <div
+                        key={stf.phone}
+                        onClick={() => handleDirectLogin(stf)}
+                        className={`p-2.5 rounded-xl border text-left transition-all relative cursor-pointer hover:scale-[1.01] active:scale-[0.99] ${
+                          isSelected
+                            ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-600 ring-2 ring-blue-500/20 shadow-sm'
+                            : 'bg-slate-50 dark:bg-slate-800/50 hover:bg-blue-50/50 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-blue-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                          <div className="font-bold text-slate-900 dark:text-white text-xs truncate">
+                            {stf.name}
+                          </div>
+                          <span
+                            className={`text-[8px] uppercase tracking-wider font-extrabold px-1.5 py-0.2 rounded border shrink-0 ${levelBadgeColor}`}
+                          >
+                            {levelLabel}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-blue-800 dark:text-blue-300 font-semibold truncate">
+                          {language === 'mr' ? stf.roleTitleMr : stf.roleTitleEn}
+                        </div>
+                        <div className="text-[9px] text-slate-500 dark:text-slate-400 truncate mt-0.5 flex items-center gap-1">
+                          <Building2 className="w-2.5 h-2.5 shrink-0" />
+                          <span className="truncate">{stf.facilityName}</span>
+                        </div>
+                        <div className="text-[9px] text-slate-600 dark:text-slate-400 truncate flex items-center justify-between mt-1 pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+                          <span className="font-medium text-slate-500 truncate max-w-[120px]">
+                            {stf.district ? `${stf.district}, ${stf.state || 'MH'}` : stf.state || 'MH'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDirectLogin(stf);
+                            }}
+                            className="px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-[9px] transition-colors shrink-0 shadow-xs"
+                            title="Instant Login as this staff member"
+                          >
+                            {language === 'mr' ? 'प्रवेश' : 'Login'}
+                          </button>
+                        </div>
                       </div>
-                      <div className="text-[9px] text-slate-400 truncate mt-0.5">
-                        {stf.facilityName}
-                      </div>
-                    </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -172,10 +291,10 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
 
               <button
                 type="submit"
-                className="w-full py-2.5 bg-blue-900 hover:bg-blue-950 text-white font-bold rounded-xl shadow transition-colors flex items-center justify-center gap-2 text-xs"
+                className="w-full py-2.5 bg-blue-900 hover:bg-blue-950 text-white font-bold rounded-xl shadow transition-colors flex items-center justify-center gap-2 text-xs cursor-pointer"
               >
                 <KeyRound className="w-4 h-4 text-teal-300" />
-                <span>Send Government OTP (ओटीपी पाठवा)</span>
+                <span>Send ABDM OTP (ओटीपी पाठवा)</span>
               </button>
             </form>
           )}

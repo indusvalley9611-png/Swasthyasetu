@@ -1,5 +1,5 @@
-import { Patient, Referral, OfflineSyncItem, DrugStockItem, Facility, MedicineRequest, ResourceAlert, StockTransfer } from './types';
-import { INITIAL_PATIENTS, INITIAL_REFERRALS, INITIAL_DRUG_STOCKS, INITIAL_FACILITIES, INITIAL_MEDICINE_REQUESTS, INITIAL_RESOURCE_ALERTS, INITIAL_STOCK_TRANSFERS } from './mockData';
+import { Patient, Referral, OfflineSyncItem, DrugStockItem, Facility, MedicineRequest, ResourceAlert, StockTransfer, AuditLogEntry } from './types';
+import { INITIAL_PATIENTS, INITIAL_REFERRALS, INITIAL_DRUG_STOCKS, INITIAL_FACILITIES, INITIAL_MEDICINE_REQUESTS, INITIAL_RESOURCE_ALERTS, INITIAL_STOCK_TRANSFERS, INITIAL_AUDIT_LOGS } from './mockData';
 
 const DB_NAME = 'swasthyasetu_db';
 const DB_VERSION = 1;
@@ -11,16 +11,55 @@ const FACILITIES_KEY = 'swasthyasetu_facilities';
 const MEDICINE_REQUESTS_KEY = 'swasthyasetu_medicine_requests';
 const STOCK_TRANSFERS_KEY = 'swasthyasetu_stock_transfers';
 const RESOURCE_ALERTS_KEY = 'swasthyasetu_resource_alerts';
+const AUDIT_LOGS_KEY = 'swasthyasetu_audit_logs';
 
 // Initialize local database with initial seed if empty
 export function initializeStorage() {
   if (typeof window === 'undefined') return;
 
-  if (!localStorage.getItem(PATIENTS_KEY)) {
+  const existingPatients = getStoredValue<Patient[]>(PATIENTS_KEY, []);
+  if (existingPatients.length === 0) {
     localStorage.setItem(PATIENTS_KEY, JSON.stringify(INITIAL_PATIENTS));
+  } else {
+    // Merge seed doctor assignments and facilities if missing on existing stored patients
+    const updated = existingPatients.map((p) => {
+      const seed = INITIAL_PATIENTS.find((s) => s.id === p.id);
+      if (seed) {
+        return {
+          ...p,
+          assignedDoctorId: seed.assignedDoctorId,
+          assignedDoctorName: seed.assignedDoctorName,
+          assignedFacilityId: seed.assignedFacilityId,
+          assignedFacilityName: seed.assignedFacilityName,
+        };
+      }
+      return p;
+    });
+    localStorage.setItem(PATIENTS_KEY, JSON.stringify(updated));
   }
-  if (!localStorage.getItem(REFERRALS_KEY)) {
+
+  const existingReferrals = getStoredValue<Referral[]>(REFERRALS_KEY, []);
+  if (existingReferrals.length === 0) {
     localStorage.setItem(REFERRALS_KEY, JSON.stringify(INITIAL_REFERRALS));
+  } else {
+    // Merge referring user IDs if missing
+    const updatedRefs = existingReferrals.map((r) => {
+      const seed = INITIAL_REFERRALS.find((s) => s.id === r.id);
+      if (seed && !r.referringUserId) {
+        return {
+          ...r,
+          referringUserId: seed.referringUserId,
+        };
+      }
+      return r;
+    });
+    const missingSeeds = INITIAL_REFERRALS.filter(seed => !existingReferrals.some(r => r.id === seed.id));
+    const mergedRefs = [...updatedRefs, ...missingSeeds];
+    localStorage.setItem(REFERRALS_KEY, JSON.stringify(mergedRefs));
+  }
+
+  if (!localStorage.getItem(AUDIT_LOGS_KEY)) {
+    localStorage.setItem(AUDIT_LOGS_KEY, JSON.stringify(INITIAL_AUDIT_LOGS));
   }
   const existingStocks = getStoredValue<DrugStockItem[]>(STOCKS_KEY, []).map(stock =>
     stock.id === 'stk-009' && stock.currentStock === 6 ? { ...stock, currentStock: 5, status: 'CRITICAL' as const } : stock
@@ -114,6 +153,8 @@ export const getStoredStockTransfers = () => getStoredValue<StockTransfer[]>(STO
 export const saveStoredStockTransfers = (items: StockTransfer[]) => { if (typeof window !== 'undefined') localStorage.setItem(STOCK_TRANSFERS_KEY, JSON.stringify(items)); };
 export const getStoredResourceAlerts = () => getStoredValue<ResourceAlert[]>(RESOURCE_ALERTS_KEY, INITIAL_RESOURCE_ALERTS);
 export const saveStoredResourceAlerts = (items: ResourceAlert[]) => { if (typeof window !== 'undefined') localStorage.setItem(RESOURCE_ALERTS_KEY, JSON.stringify(items)); };
+export const getStoredAuditLogs = () => getStoredValue<AuditLogEntry[]>(AUDIT_LOGS_KEY, INITIAL_AUDIT_LOGS);
+export const saveStoredAuditLogs = (items: AuditLogEntry[]) => { if (typeof window !== 'undefined') localStorage.setItem(AUDIT_LOGS_KEY, JSON.stringify(items)); };
 
 export function getSyncQueue(): OfflineSyncItem[] {
   if (typeof window === 'undefined') return [];

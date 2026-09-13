@@ -1,7 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Referral, Patient, DischargeSummary } from '@/lib/types';
 import { useLanguage } from '@/context/LanguageContext';
-import { Building2, FileText, CheckCircle2, Activity, ArrowRight, XCircle, BrainCircuit } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { canProcessDistrictReferral, recordAuditLog } from '@/lib/patientPrivacyService';
+import {
+  Building2,
+  FileText,
+  CheckCircle2,
+  Activity,
+  ArrowRight,
+  XCircle,
+  BrainCircuit,
+  ShieldAlert,
+  ShieldCheck,
+  Lock,
+  MapPin,
+  Stethoscope,
+  Clock,
+  AlertTriangle,
+} from 'lucide-react';
 
 interface SpecialistTreatmentModalProps {
   referral: Referral;
@@ -12,8 +29,32 @@ interface SpecialistTreatmentModalProps {
 
 export function SpecialistTreatmentModal({ referral, patient, onClose, updateReferralStatus }: SpecialistTreatmentModalProps) {
   const { language } = useLanguage();
+  const { user } = useAuth();
   const [notes, setNotes] = useState('');
   
+  const authDecision = canProcessDistrictReferral(user, referral);
+  const isAuthorized = authDecision.allowed;
+
+  // Log coordination view when viewing an external referral in read-only mode
+  useEffect(() => {
+    if (user && referral && !isAuthorized) {
+      recordAuditLog({
+        userId: user.id,
+        userName: user.name,
+        userRole: user.role,
+        userFacility: user.facilityName,
+        administrativeLevel: user.administrativeLevel,
+        patientId: patient.id,
+        patientName: patient.fullName,
+        patientAbha: patient.abhaId,
+        action: 'DISTRICT_REFERRAL_COORDINATION',
+        resource: `Referral Token ${referral.tokenCode || referral.id}`,
+        reason: `District Coordination View (Read-Only): ${authDecision.reason}`,
+        accessGranted: true,
+      });
+    }
+  }, [user?.id, referral.id, isAuthorized]);
+
   const [activeAction, setActiveAction] = useState<'NONE' | 'ADMIT' | 'ESCALATE' | 'DISCHARGE'>('NONE');
 
   // Admit form state
@@ -30,13 +71,32 @@ export function SpecialistTreatmentModal({ referral, patient, onClose, updateRef
     medicines: '',
     patientCondition: 'Stable',
     followUpDate: '',
-    followUpFacility: patient.encounters[0]?.facilityName || 'Nearest PHC',
+    followUpFacility: patient.encounters?.[0]?.facilityName || 'Nearest PHC',
     instructions: '',
     warningSigns: '',
     communityFollowUpRequirement: 'Yes',
   });
 
   const handleStatusChange = (newStatus: Referral['status'], updates?: Partial<Referral>) => {
+    if (!isAuthorized) return; // Deny-by-default for cross-facility modification
+
+    if (user) {
+      recordAuditLog({
+        userId: user.id,
+        userName: user.name,
+        userRole: user.role,
+        userFacility: user.facilityName,
+        administrativeLevel: user.administrativeLevel,
+        patientId: patient.id,
+        patientName: patient.fullName,
+        patientAbha: patient.abhaId,
+        action: newStatus === 'ADMITTED' ? 'UPDATE_PATIENT_RECORD' : newStatus === 'COMPLETED' ? 'DISCHARGE_PATIENT' : 'VIEW_PATIENT_REPORT',
+        resource: `Referral Token ${referral.tokenCode || referral.id}`,
+        reason: `Specialist at ${user.facilityName} updated referral status to ${newStatus}`,
+        accessGranted: true,
+      });
+    }
+
     updateReferralStatus(referral.id, newStatus, updates);
     onClose();
   };
@@ -63,8 +123,13 @@ export function SpecialistTreatmentModal({ referral, patient, onClose, updateRef
           <div className="flex items-center gap-2">
             <Activity className="w-5 h-5 text-blue-400" />
             <h3 className="font-bold">
-              Process Referral: {referral.id}
+              {isAuthorized ? `Process Referral: ${referral.tokenCode || referral.id}` : `Referral Summary: ${referral.tokenCode || referral.id}`}
             </h3>
+            {!isAuthorized && (
+              <span className="bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                Coordination Only
+              </span>
+            )}
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white"><XCircle className="w-5 h-5" /></button>
         </div>
@@ -100,6 +165,87 @@ export function SpecialistTreatmentModal({ referral, patient, onClose, updateRef
               <p className="text-rose-600 dark:text-rose-300 text-xs font-medium mb-4">
                 This referral was cancelled by {referral.referringFacility}.
               </p>
+            </div>
+          ) : !isAuthorized ? (
+            <div className="space-y-4">
+              {/* Security Alert Banner */}
+              <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl p-4">
+                <div className="flex items-start gap-2.5">
+                  <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="text-xs font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wide">
+                      Read-Only District Referral Coordination
+                    </div>
+                    <p className="text-xs text-amber-800 dark:text-amber-300 mt-1 leading-relaxed">
+                      {authDecision.reason}
+                    </p>
+                    <div className="text-[11px] text-amber-700/90 dark:text-amber-400/90 mt-1.5 font-medium">
+                      Under ABDM Least-Privilege Policy, clinical admission, ICU bed allocation, and treatment orders are restricted to the designated destination care team.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Operational Coordination Card */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
+                <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  Referral Coordination Parameters
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase font-bold">Referral ID / Token</span>
+                    <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{referral.tokenCode || referral.id}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase font-bold">Origin Facility</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                      <MapPin className="w-3 h-3 text-slate-400" /> {referral.referringFacility}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase font-bold">Designated Destination</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                      <Building2 className="w-3 h-3 text-blue-500" /> {referral.targetFacility}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase font-bold">Specialty Required</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                      <Stethoscope className="w-3 h-3 text-indigo-500" /> {referral.specialtyRequired}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase font-bold">Triage Priority</span>
+                    <span className={`inline-block font-bold text-[11px] px-2 py-0.5 rounded ${referral.triagePriority === 'red' ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'}`}>
+                      {referral.triagePriority.toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase font-bold">Current Status</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200">{referral.status}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Redacted EHR Protection Notice */}
+              <div className="p-3.5 bg-rose-50/60 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 rounded-xl flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 text-rose-900 dark:text-rose-200">
+                  <Lock className="w-4 h-4 text-rose-500" />
+                  <span className="font-medium">Complete Longitudinal EHR, Consultation Notes & Prescriptions</span>
+                </div>
+                <span className="font-bold text-rose-700 dark:text-rose-400 text-[10px] uppercase tracking-wider">
+                  Restricted to Care Team
+                </span>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  onClick={onClose}
+                  className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-xl transition text-sm"
+                >
+                  Close Coordination Summary
+                </button>
+              </div>
             </div>
           ) : activeAction === 'NONE' ? (
             <>

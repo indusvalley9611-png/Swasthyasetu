@@ -47,7 +47,13 @@ interface SyncContextType {
   updateDrugStock: (stockId: string, newStock: number) => void;
   createMedicineRequest: (request: Omit<MedicineRequest, 'id' | 'createdAt' | 'status'>) => void;
   createStockTransfer: (transfer: Omit<StockTransfer, 'id' | 'createdAt' | 'status'>) => StockTransfer | null;
-  processStockTransfer: (transferId: string, action: 'APPROVE' | 'REJECT' | 'DISPATCH' | 'RECEIVE', rejectionReason?: string) => boolean;
+  allocateStockTransferDonor: (
+    transferId: string,
+    sourceStock: DrugStockItem,
+    donorFacility: Facility,
+    districtUser?: { id: string; name: string } | null
+  ) => boolean;
+  processStockTransfer: (transferId: string, action: 'APPROVE' | 'REJECT' | 'DISPATCH' | 'RECEIVE', rejectionReason?: string, consignmentMeta?: Partial<StockTransfer>) => boolean;
   updateResourceAlertStatus: (alertId: string, status: ResourceAlert['status']) => void;
   toastMessage: string | null;
   clearToast: () => void;
@@ -346,17 +352,28 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   };
 
   const createStockTransfer = (transfer: Omit<StockTransfer, 'id' | 'createdAt' | 'status'>): StockTransfer | null => {
-    const source = stocks.find(item => item.id === transfer.sourceStockId);
-    const transferable = source ? getSafeTransferableQuantity(source, stockTransfers) : 0;
-    if (!source || transfer.requestedQuantity <= 0 || transfer.requestedQuantity > transferable) {
-      showToast(`Transfer request rejected. The connected facility can offer up to ${transferable} surplus units while retaining its buffer.`);
+    if (transfer.requestedQuantity <= 0) {
+      showToast('Transfer quantity must be greater than zero.');
       return null;
     }
+
+    const isExplicitlyUnallocated = transfer.donorAllocated === false;
+
+    if (!isExplicitlyUnallocated) {
+      const source = stocks.find(item => item.id === transfer.sourceStockId);
+      const transferable = source ? getSafeTransferableQuantity(source, stockTransfers) : 0;
+      if (!source || transfer.requestedQuantity > transferable) {
+        showToast(`Transfer request rejected. The connected facility can offer up to ${transferable} surplus units while retaining its buffer.`);
+        return null;
+      }
+    }
+
     const newTransfer: StockTransfer = {
       ...transfer,
       id: `TRF-2026-${String(Date.now()).slice(-4)}`,
       createdAt: new Date().toISOString(),
       status: 'PENDING_SOURCE_APPROVAL',
+      donorAllocated: transfer.donorAllocated ?? true,
     };
     const updated = [newTransfer, ...stockTransfers];
     setStockTransfers(updated);
@@ -365,11 +382,56 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       const queued = addToSyncQueue({ type: 'STOCK_TRANSFER_CREATED', payload: newTransfer });
       setSyncQueue(prev => [...prev, queued]);
     }
-    showToast(`Transfer request ${newTransfer.id} sent to ${newTransfer.sourceFacilityName} for source approval.`);
+    const targetMsg = newTransfer.donorAllocated
+      ? `sent to ${newTransfer.sourceFacilityName} for source approval.`
+      : `routed to District Coordination for donor allocation.`;
+    showToast(`Transfer request ${newTransfer.id} ${targetMsg}`);
     return newTransfer;
   };
 
-  const processStockTransfer = (transferId: string, action: 'APPROVE' | 'REJECT' | 'DISPATCH' | 'RECEIVE', rejectionReason?: string) => {
+  const allocateStockTransferDonor = (
+    transferId: string,
+    sourceStock: DrugStockItem,
+    donorFacility: Facility,
+    districtUser?: { id: string; name: string } | null
+  ): boolean => {
+    const transfer = stockTransfers.find(item => item.id === transferId);
+    if (!transfer) {
+      showToast('Transfer request not found.');
+      return false;
+    }
+
+    const otherTransfers = stockTransfers.filter(item => item.id !== transferId);
+    const transferable = getSafeTransferableQuantity(sourceStock, otherTransfers);
+    if (transfer.requestedQuantity > transferable) {
+      showToast(`Cannot allocate ${donorFacility.name}. Available safe surplus is only ${transferable} ${sourceStock.unit} (statutory buffer of ${sourceStock.bufferStock} preserved).`);
+      return false;
+    }
+
+    const now = new Date().toISOString();
+    const updated = stockTransfers.map(item => {
+      if (item.id === transferId) {
+        return {
+          ...item,
+          sourceStockId: sourceStock.id,
+          sourceFacilityId: donorFacility.id,
+          sourceFacilityName: donorFacility.name,
+          donorAllocated: true,
+          allocatedByDistrictUserId: districtUser?.id,
+          allocatedByDistrictUserName: districtUser?.name,
+          allocatedAt: now,
+        };
+      }
+      return item;
+    });
+
+    setStockTransfers(updated);
+    saveStoredStockTransfers(updated);
+    showToast(`Donor ${donorFacility.name} endorsed & allocated for ${transfer.id}.`);
+    return true;
+  };
+
+  const processStockTransfer = (transferId: string, action: 'APPROVE' | 'REJECT' | 'DISPATCH' | 'RECEIVE', rejectionReason?: string, consignmentMeta?: Partial<StockTransfer>) => {
     const transfer = stockTransfers.find(item => item.id === transferId);
     if (!transfer) return false;
     const now = new Date().toISOString();
@@ -382,18 +444,18 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         showToast('Transfer cannot be approved because the source safety reserve is no longer available.');
         return false;
       }
-      const updated = stockTransfers.map(item => item.id === transferId ? { ...item, status: 'APPROVED' as const, approvedAt: now } : item);
+      const updated = stockTransfers.map(item => item.id === transferId ? { ...item, ...consignmentMeta, status: 'APPROVED' as const, approvedAt: now } : item);
       setStockTransfers(updated); saveStoredStockTransfers(updated); showToast(`${transferId} approved. Awaiting dispatch.`); return true;
     }
     if (action === 'REJECT') {
       if (transfer.status !== 'PENDING_SOURCE_APPROVAL' || !rejectionReason?.trim()) { showToast('A reason is required to reject a pending transfer.'); return false; }
-      const updated = stockTransfers.map(item => item.id === transferId ? { ...item, status: 'REJECTED' as const, rejectionReason, } : item);
-      setStockTransfers(updated); saveStoredStockTransfers(updated); showToast(`${transferId} rejected by source PHC.`); return true;
+      const updated = stockTransfers.map(item => item.id === transferId ? { ...item, ...consignmentMeta, status: 'REJECTED' as const, rejectionReason, } : item);
+      setStockTransfers(updated); saveStoredStockTransfers(updated); showToast(`${transferId} rejected by source facility.`); return true;
     }
     if (action === 'DISPATCH') {
       if (transfer.status !== 'APPROVED') { showToast('Only an approved transfer can be dispatched.'); return false; }
-      const updated = stockTransfers.map(item => item.id === transferId ? { ...item, status: 'DISPATCHED' as const, dispatchedAt: now } : item);
-      setStockTransfers(updated); saveStoredStockTransfers(updated); showToast(`${transferId} dispatched. Destination PHC must confirm receipt.`); return true;
+      const updated = stockTransfers.map(item => item.id === transferId ? { ...item, ...consignmentMeta, status: 'DISPATCHED' as const, dispatchedAt: now } : item);
+      setStockTransfers(updated); saveStoredStockTransfers(updated); showToast(`${transferId} dispatched. Destination facility must confirm receipt.`); return true;
     }
     if (transfer.status !== 'DISPATCHED' || !source || !destination || source.currentStock - transfer.requestedQuantity < source.bufferStock) {
       showToast('Transfer receipt could not be completed because its safety validation failed.');
@@ -404,10 +466,10 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       if (item.id === destination.id) return { ...item, currentStock: item.currentStock + transfer.requestedQuantity, status: item.currentStock + transfer.requestedQuantity < item.bufferStock ? 'LOW' as const : 'OPTIMAL' as const };
       return item;
     });
-    const updatedTransfers = stockTransfers.map(item => item.id === transferId ? { ...item, status: 'COMPLETED' as const, receivedAt: now } : item);
+    const updatedTransfers = stockTransfers.map(item => item.id === transferId ? { ...item, ...consignmentMeta, status: 'COMPLETED' as const, receivedAt: now } : item);
     setStocks(updatedStocks); saveStoredStocks(updatedStocks);
     setStockTransfers(updatedTransfers); saveStoredStockTransfers(updatedTransfers);
-    showToast(`${transferId} received. Both PHC inventories and stock status have been updated.`);
+    showToast(`${transferId} received. Inventories and stock statuses have been updated.`);
     return true;
   };
 
@@ -443,6 +505,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         updateDrugStock,
         createMedicineRequest,
         createStockTransfer,
+        allocateStockTransferDonor,
         processStockTransfer,
         updateResourceAlertStatus,
         toastMessage,
