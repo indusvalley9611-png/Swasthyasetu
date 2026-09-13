@@ -1,15 +1,13 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { INITIAL_PATIENTS } from '@/lib/mockData';
 
-export async function GET(
+export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const params = await context.params;
-    const id = params.id;
-    const patient = INITIAL_PATIENTS.find(p => p.id === id || p.abhaId === id) || INITIAL_PATIENTS[0];
+    const patient = await request.json();
 
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([595.28, 841.89]);
@@ -40,10 +38,12 @@ export async function GET(
     drawText('Name: ' + patient.fullName);
     drawText('ABHA Number: ' + patient.abhaId);
     drawText('Age/Gender: ' + patient.age + ' / ' + patient.gender);
-    drawText('Blood Group: ' + patient.bloodGroup);
+    drawText('Blood Group: ' + (patient.bloodGroup || 'N/A'));
     drawText('Phone: ' + patient.phone);
-    drawText('Address: ' + patient.village + ', ' + patient.taluka + ', ' + patient.district);
-    drawText('Emergency Contact: ' + patient.emergencyContact.name + ' (' + patient.emergencyContact.phone + ')');
+    drawText('Address: ' + (patient.village || 'N/A') + ', ' + (patient.taluka || 'N/A') + ', ' + (patient.district || 'N/A'));
+    if (patient.emergencyContact) {
+      drawText('Emergency Contact: ' + patient.emergencyContact.name + ' (' + patient.emergencyContact.phone + ')');
+    }
     
     y -= 20;
 
@@ -67,10 +67,10 @@ export async function GET(
     y -= 5;
     
     if (patient.encounters && patient.encounters.length > 0) {
-      patient.encounters.slice(0, 3).forEach(enc => {
-        drawText('Date: ' + enc.date + ' | Facility: ' + enc.facilityName + ' (' + enc.facilityType + ')', helveticaBold, 11);
-        drawText('Provider: ' + enc.providerName + ' (' + enc.providerRole + ')', helvetica, 11);
-        drawText('Complaints: ' + enc.chiefComplaints, helvetica, 11);
+      patient.encounters.slice(0, 3).forEach((enc: any) => {
+        drawText('Date: ' + enc.date + ' | Facility: ' + enc.facilityName, helveticaBold, 11);
+        drawText('Provider: ' + enc.providerName, helvetica, 11);
+        if (enc.chiefComplaints) drawText('Complaints: ' + enc.chiefComplaints, helvetica, 11);
         if (enc.diagnosis) drawText('Diagnosis: ' + enc.diagnosis, helvetica, 11);
         
         if (enc.vitals) {
@@ -99,5 +99,23 @@ export async function GET(
   } catch (error) {
     console.error('Error generating PDF:', error);
     return new NextResponse('Error generating PDF', { status: 500 });
+  }
+}
+
+// Keep GET for fallback / backward compatibility
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const params = await context.params;
+    const id = params.id;
+    const patient = INITIAL_PATIENTS.find(p => p.id === id || p.abhaId === id) || INITIAL_PATIENTS[0];
+    
+    // just re-route to the internal logic (using POST logic but hardcoding patient)
+    const req = new Request('http://localhost', { method: 'POST', body: JSON.stringify(patient) });
+    return await POST(req, context);
+  } catch (error) {
+    return new NextResponse('Error', { status: 500 });
   }
 }

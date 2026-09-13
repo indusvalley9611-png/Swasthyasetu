@@ -1,5 +1,5 @@
-import { Patient, Referral, OfflineSyncItem, DrugStockItem, Facility } from './types';
-import { INITIAL_PATIENTS, INITIAL_REFERRALS, INITIAL_DRUG_STOCKS, INITIAL_FACILITIES } from './mockData';
+import { Patient, Referral, OfflineSyncItem, DrugStockItem, Facility, MedicineRequest, ResourceAlert, StockTransfer } from './types';
+import { INITIAL_PATIENTS, INITIAL_REFERRALS, INITIAL_DRUG_STOCKS, INITIAL_FACILITIES, INITIAL_MEDICINE_REQUESTS, INITIAL_RESOURCE_ALERTS, INITIAL_STOCK_TRANSFERS } from './mockData';
 
 const DB_NAME = 'swasthyasetu_db';
 const DB_VERSION = 1;
@@ -8,6 +8,9 @@ const PATIENTS_KEY = 'swasthyasetu_patients';
 const REFERRALS_KEY = 'swasthyasetu_referrals';
 const STOCKS_KEY = 'swasthyasetu_stocks';
 const FACILITIES_KEY = 'swasthyasetu_facilities';
+const MEDICINE_REQUESTS_KEY = 'swasthyasetu_medicine_requests';
+const STOCK_TRANSFERS_KEY = 'swasthyasetu_stock_transfers';
+const RESOURCE_ALERTS_KEY = 'swasthyasetu_resource_alerts';
 
 // Initialize local database with initial seed if empty
 export function initializeStorage() {
@@ -19,15 +22,20 @@ export function initializeStorage() {
   if (!localStorage.getItem(REFERRALS_KEY)) {
     localStorage.setItem(REFERRALS_KEY, JSON.stringify(INITIAL_REFERRALS));
   }
-  if (!localStorage.getItem(STOCKS_KEY)) {
-    localStorage.setItem(STOCKS_KEY, JSON.stringify(INITIAL_DRUG_STOCKS));
-  }
-  if (!localStorage.getItem(FACILITIES_KEY)) {
-    localStorage.setItem(FACILITIES_KEY, JSON.stringify(INITIAL_FACILITIES));
-  }
+  const existingStocks = getStoredValue<DrugStockItem[]>(STOCKS_KEY, []).map(stock =>
+    stock.id === 'stk-009' && stock.currentStock === 6 ? { ...stock, currentStock: 5, status: 'CRITICAL' as const } : stock
+  );
+  const mergedStocks = [...existingStocks, ...INITIAL_DRUG_STOCKS.filter(seed => !existingStocks.some(item => item.id === seed.id))];
+  localStorage.setItem(STOCKS_KEY, JSON.stringify(mergedStocks));
+  const existingFacilities = getStoredValue<Facility[]>(FACILITIES_KEY, []);
+  const mergedFacilities = [...existingFacilities, ...INITIAL_FACILITIES.filter(seed => !existingFacilities.some(item => item.id === seed.id))];
+  localStorage.setItem(FACILITIES_KEY, JSON.stringify(mergedFacilities));
   if (!localStorage.getItem(QUEUE_KEY)) {
     localStorage.setItem(QUEUE_KEY, JSON.stringify([]));
   }
+  if (!localStorage.getItem(MEDICINE_REQUESTS_KEY)) localStorage.setItem(MEDICINE_REQUESTS_KEY, JSON.stringify(INITIAL_MEDICINE_REQUESTS));
+  if (!localStorage.getItem(STOCK_TRANSFERS_KEY)) localStorage.setItem(STOCK_TRANSFERS_KEY, JSON.stringify(INITIAL_STOCK_TRANSFERS));
+  if (!localStorage.getItem(RESOURCE_ALERTS_KEY)) localStorage.setItem(RESOURCE_ALERTS_KEY, JSON.stringify(INITIAL_RESOURCE_ALERTS));
 }
 
 export function getStoredPatients(): Patient[] {
@@ -89,6 +97,23 @@ export function saveStoredFacilities(facilities: Facility[]) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(FACILITIES_KEY, JSON.stringify(facilities));
 }
+
+function getStoredValue<T>(key: string, fallback: T): T {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) as T : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export const getStoredMedicineRequests = () => getStoredValue<MedicineRequest[]>(MEDICINE_REQUESTS_KEY, INITIAL_MEDICINE_REQUESTS);
+export const saveStoredMedicineRequests = (items: MedicineRequest[]) => { if (typeof window !== 'undefined') localStorage.setItem(MEDICINE_REQUESTS_KEY, JSON.stringify(items)); };
+export const getStoredStockTransfers = () => getStoredValue<StockTransfer[]>(STOCK_TRANSFERS_KEY, INITIAL_STOCK_TRANSFERS);
+export const saveStoredStockTransfers = (items: StockTransfer[]) => { if (typeof window !== 'undefined') localStorage.setItem(STOCK_TRANSFERS_KEY, JSON.stringify(items)); };
+export const getStoredResourceAlerts = () => getStoredValue<ResourceAlert[]>(RESOURCE_ALERTS_KEY, INITIAL_RESOURCE_ALERTS);
+export const saveStoredResourceAlerts = (items: ResourceAlert[]) => { if (typeof window !== 'undefined') localStorage.setItem(RESOURCE_ALERTS_KEY, JSON.stringify(items)); };
 
 export function getSyncQueue(): OfflineSyncItem[] {
   if (typeof window === 'undefined') return [];

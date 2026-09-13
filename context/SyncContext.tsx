@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { Patient, Referral, Facility, DrugStockItem, OfflineSyncItem } from '@/lib/types';
+import { Patient, Referral, Facility, DrugStockItem, OfflineSyncItem, MedicineRequest, ResourceAlert, StockTransfer } from '@/lib/types';
 import {
   initializeStorage,
   getStoredPatients,
@@ -12,10 +12,17 @@ import {
   saveStoredFacilities,
   getStoredStocks,
   saveStoredStocks,
+  getStoredMedicineRequests,
+  saveStoredMedicineRequests,
+  getStoredStockTransfers,
+  saveStoredStockTransfers,
+  getStoredResourceAlerts,
+  saveStoredResourceAlerts,
   getSyncQueue,
   addToSyncQueue,
   clearSyncQueue,
 } from '@/lib/idbStorage';
+import { getSafeTransferableQuantity } from '@/lib/resourceManagement';
 
 interface SyncContextType {
   isOnline: boolean;
@@ -27,15 +34,21 @@ interface SyncContextType {
   referrals: Referral[];
   facilities: Facility[];
   stocks: DrugStockItem[];
+  medicineRequests: MedicineRequest[];
+  stockTransfers: StockTransfer[];
+  resourceAlerts: ResourceAlert[];
   toggleSimulatedOffline: () => void;
   triggerManualSync: () => Promise<void>;
   addPatient: (patient: Patient) => void;
   addClinicalEncounter: (patientId: string, encounter: any) => void;
   createReferral: (referral: Referral) => void;
-  updateReferralStatus: (referralId: string, status: Referral['status'], assignedBed?: string) => void;
+  updateReferralStatus: (referralId: string, status: Referral['status'], updates?: Partial<Referral>) => void;
   updateBedOccupancy: (facilityId: string, field: 'occupiedBeds' | 'icuBedsOccupied' | 'ventilatorsOccupied' | 'oxygenBedsOccupied', delta: number) => void;
   updateDrugStock: (stockId: string, newStock: number) => void;
-  requestStockTransfer: (drugName: string, requestedAmount: number, targetFacilityName: string) => void;
+  createMedicineRequest: (request: Omit<MedicineRequest, 'id' | 'createdAt' | 'status'>) => void;
+  createStockTransfer: (transfer: Omit<StockTransfer, 'id' | 'createdAt' | 'status'>) => StockTransfer | null;
+  processStockTransfer: (transferId: string, action: 'APPROVE' | 'REJECT' | 'DISPATCH' | 'RECEIVE', rejectionReason?: string) => boolean;
+  updateResourceAlertStatus: (alertId: string, status: ResourceAlert['status']) => void;
   toastMessage: string | null;
   clearToast: () => void;
 }
@@ -51,6 +64,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const [referrals, setReferrals] = useState<Referral[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [stocks, setStocks] = useState<DrugStockItem[]>([]);
+  const [medicineRequests, setMedicineRequests] = useState<MedicineRequest[]>([]);
+  const [stockTransfers, setStockTransfers] = useState<StockTransfer[]>([]);
+  const [resourceAlerts, setResourceAlerts] = useState<ResourceAlert[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Initialize storage on client mount
@@ -60,6 +76,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     setReferrals(getStoredReferrals());
     setFacilities(getStoredFacilities());
     setStocks(getStoredStocks());
+    setMedicineRequests(getStoredMedicineRequests());
+    setStockTransfers(getStoredStockTransfers());
+    setResourceAlerts(getStoredResourceAlerts());
     setSyncQueue(getSyncQueue());
 
     if (typeof window !== 'undefined') {
@@ -166,6 +185,12 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   };
 
   const createReferral = (newRef: Referral) => {
+    const patient = patients.find(p => p.id === newRef.patientId);
+    if (patient?.activeReferralId) {
+      showToast('Patient already has an active referral.');
+      return;
+    }
+
     const updatedRefs = [newRef, ...referrals];
     setReferrals(updatedRefs);
     saveStoredReferrals(updatedRefs);
@@ -192,41 +217,100 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateReferralStatus = (referralId: string, status: Referral['status'], assignedBed?: string) => {
+  const updateBedOccupancy = (
+    facilityId: string,
+    field: 'occupiedBeds' | 'icuBedsOccupied' | 'ventilatorsOccupied' | 'oxygenBedsOccupied',
+    delta: number
+  ) => {
+    setFacilities(prevFacilities => {
+      const updated = prevFacilities.map(f => {
+        if (f.name === facilityId || f.id === facilityId) {
+          const current = f[field];
+          const max = field === 'occupiedBeds' ? f.totalBeds :
+                      field === 'icuBedsOccupied' ? f.icuBedsTotal :
+                      field === 'ventilatorsOccupied' ? f.ventilatorsTotal : f.oxygenBedsTotal;
+          const nextVal = Math.max(0, Math.min(max, current + delta));
+          return { ...f, [field]: nextVal };
+        }
+        return f;
+      });
+      saveStoredFacilities(updated);
+      return updated;
+    });
+  };
+
+  const updateReferralStatus = (referralId: string, status: Referral['status'], updates?: Partial<Referral>) => {
+    const targetRef = referrals.find(r => r.id === referralId);
+    if (!targetRef) return;
+    
+    if (targetRef.status === 'CANCELLED' && status !== 'CANCELLED') {
+      showToast('Admission unavailable: This referral has been cancelled by the referring facility.');
+      return;
+    }
+    if (targetRef.status === 'ADMITTED' && status === 'CANCELLED') {
+      showToast('Cannot cancel an admitted referral.');
+      return;
+    }
+
+    let targetPatientId = targetRef.patientId;
+
+    // Bed Management Logic
+    if (status === 'ADMITTED' && targetRef.status !== 'ADMITTED') {
+      const facilityToUpdate = updates?.targetFacility || targetRef.targetFacility;
+      const bedType = updates?.assignedBedType || 'occupiedBeds';
+      updateBedOccupancy(facilityToUpdate, bedType, 1);
+    } else if ((status === 'COMPLETED' || status === 'ESCALATED') && targetRef.status === 'ADMITTED') {
+      const facilityToUpdate = targetRef.targetFacility;
+      const bedType = targetRef.assignedBedType || 'occupiedBeds';
+      updateBedOccupancy(facilityToUpdate, bedType, -1);
+    }
+
     const updated = referrals.map(r => {
       if (r.id === referralId) {
+        const isCancelling = status === 'CANCELLED' && r.status !== 'CANCELLED';
         return {
           ...r,
+          ...updates,
           status,
-          assignedBed: assignedBed || r.assignedBed,
+          ...(isCancelling ? {
+              cancelledAt: new Date().toISOString(),
+              cancelledBy: updates?.cancelledBy || 'Unknown User',
+              cancelledByRole: updates?.cancelledByRole || 'Unknown Role',
+              cancellationReason: updates?.cancellationReason || 'No reason provided',
+              previousStatus: r.status,
+          } : {})
         };
       }
       return r;
     });
     setReferrals(updated);
     saveStoredReferrals(updated);
+
+    // If referral is completed or cancelled, remove it as active referral from patient
+    const updatedPatients = patients.map(p => {
+      if (p.id === targetPatientId) {
+        let pUpdates: Partial<Patient> = {};
+        if (status === 'ADMITTED') {
+          pUpdates.activeCareOwner = (updates?.targetFacility || targetRef.targetFacility).includes('State') || (updates?.targetFacility || targetRef.targetFacility).includes('College') ? 'STATE' : 'DISTRICT';
+        }
+        if (status === 'COMPLETED' || status === 'CANCELLED') {
+          if (p.activeReferralId === referralId) pUpdates.activeReferralId = undefined;
+          if (status === 'COMPLETED') pUpdates.activeCareOwner = undefined;
+        }
+        if (status === 'ESCALATED') {
+          pUpdates.activeCareOwner = 'STATE';
+        }
+        return { ...p, ...pUpdates };
+      }
+      return p;
+    });
+    setPatients(updatedPatients);
+    saveStoredPatients(updatedPatients);
+
     showToast(`Referral status updated to ${status}.`);
   };
 
-  const updateBedOccupancy = (
-    facilityId: string,
-    field: 'occupiedBeds' | 'icuBedsOccupied' | 'ventilatorsOccupied' | 'oxygenBedsOccupied',
-    delta: number
-  ) => {
-    const updated = facilities.map(f => {
-      if (f.id === facilityId) {
-        const current = f[field];
-        const max = field === 'occupiedBeds' ? f.totalBeds :
-                    field === 'icuBedsOccupied' ? f.icuBedsTotal :
-                    field === 'ventilatorsOccupied' ? f.ventilatorsTotal : f.oxygenBedsTotal;
-        const nextVal = Math.max(0, Math.min(max, current + delta));
-        return { ...f, [field]: nextVal };
-      }
-      return f;
-    });
-    setFacilities(updated);
-    saveStoredFacilities(updated);
-  };
+
 
   const updateDrugStock = (stockId: string, newStock: number) => {
     const updated = stocks.map(s => {
@@ -244,8 +328,94 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     showToast('Stock level updated successfully.');
   };
 
-  const requestStockTransfer = (drugName: string, requestedAmount: number, targetFacilityName: string) => {
-    showToast(`Requisition sent: Requested ${requestedAmount} units of ${drugName} from ${targetFacilityName}.`);
+  const createMedicineRequest = (request: Omit<MedicineRequest, 'id' | 'createdAt' | 'status'>) => {
+    const newRequest: MedicineRequest = {
+      ...request,
+      id: `med-req-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      status: 'PENDING',
+    };
+    const updated = [newRequest, ...medicineRequests];
+    setMedicineRequests(updated);
+    saveStoredMedicineRequests(updated);
+    if (!effectiveOnline) {
+      const queued = addToSyncQueue({ type: 'MEDICINE_REQUEST_CREATED', payload: newRequest });
+      setSyncQueue(prev => [...prev, queued]);
+    }
+    showToast(`Demo request ${newRequest.id} created and routed to district supply coordination.`);
+  };
+
+  const createStockTransfer = (transfer: Omit<StockTransfer, 'id' | 'createdAt' | 'status'>): StockTransfer | null => {
+    const source = stocks.find(item => item.id === transfer.sourceStockId);
+    const transferable = source ? getSafeTransferableQuantity(source, stockTransfers) : 0;
+    if (!source || transfer.requestedQuantity <= 0 || transfer.requestedQuantity > transferable) {
+      showToast(`Transfer request rejected. The connected facility can offer up to ${transferable} surplus units while retaining its buffer.`);
+      return null;
+    }
+    const newTransfer: StockTransfer = {
+      ...transfer,
+      id: `TRF-2026-${String(Date.now()).slice(-4)}`,
+      createdAt: new Date().toISOString(),
+      status: 'PENDING_SOURCE_APPROVAL',
+    };
+    const updated = [newTransfer, ...stockTransfers];
+    setStockTransfers(updated);
+    saveStoredStockTransfers(updated);
+    if (!effectiveOnline) {
+      const queued = addToSyncQueue({ type: 'STOCK_TRANSFER_CREATED', payload: newTransfer });
+      setSyncQueue(prev => [...prev, queued]);
+    }
+    showToast(`Transfer request ${newTransfer.id} sent to ${newTransfer.sourceFacilityName} for source approval.`);
+    return newTransfer;
+  };
+
+  const processStockTransfer = (transferId: string, action: 'APPROVE' | 'REJECT' | 'DISPATCH' | 'RECEIVE', rejectionReason?: string) => {
+    const transfer = stockTransfers.find(item => item.id === transferId);
+    if (!transfer) return false;
+    const now = new Date().toISOString();
+    const source = stocks.find(item => item.id === transfer.sourceStockId);
+    const destination = stocks.find(item => item.id === transfer.destinationStockId);
+
+    if (action === 'APPROVE') {
+      const availableAfterOtherReservations = source ? getSafeTransferableQuantity(source, stockTransfers.filter(item => item.id !== transferId)) : 0;
+      if (transfer.status !== 'PENDING_SOURCE_APPROVAL' || !source || transfer.requestedQuantity > availableAfterOtherReservations) {
+        showToast('Transfer cannot be approved because the source safety reserve is no longer available.');
+        return false;
+      }
+      const updated = stockTransfers.map(item => item.id === transferId ? { ...item, status: 'APPROVED' as const, approvedAt: now } : item);
+      setStockTransfers(updated); saveStoredStockTransfers(updated); showToast(`${transferId} approved. Awaiting dispatch.`); return true;
+    }
+    if (action === 'REJECT') {
+      if (transfer.status !== 'PENDING_SOURCE_APPROVAL' || !rejectionReason?.trim()) { showToast('A reason is required to reject a pending transfer.'); return false; }
+      const updated = stockTransfers.map(item => item.id === transferId ? { ...item, status: 'REJECTED' as const, rejectionReason, } : item);
+      setStockTransfers(updated); saveStoredStockTransfers(updated); showToast(`${transferId} rejected by source PHC.`); return true;
+    }
+    if (action === 'DISPATCH') {
+      if (transfer.status !== 'APPROVED') { showToast('Only an approved transfer can be dispatched.'); return false; }
+      const updated = stockTransfers.map(item => item.id === transferId ? { ...item, status: 'DISPATCHED' as const, dispatchedAt: now } : item);
+      setStockTransfers(updated); saveStoredStockTransfers(updated); showToast(`${transferId} dispatched. Destination PHC must confirm receipt.`); return true;
+    }
+    if (transfer.status !== 'DISPATCHED' || !source || !destination || source.currentStock - transfer.requestedQuantity < source.bufferStock) {
+      showToast('Transfer receipt could not be completed because its safety validation failed.');
+      return false;
+    }
+    const updatedStocks = stocks.map(item => {
+      if (item.id === source.id) return { ...item, currentStock: item.currentStock - transfer.requestedQuantity, status: item.currentStock - transfer.requestedQuantity < item.bufferStock ? 'LOW' as const : 'OPTIMAL' as const };
+      if (item.id === destination.id) return { ...item, currentStock: item.currentStock + transfer.requestedQuantity, status: item.currentStock + transfer.requestedQuantity < item.bufferStock ? 'LOW' as const : 'OPTIMAL' as const };
+      return item;
+    });
+    const updatedTransfers = stockTransfers.map(item => item.id === transferId ? { ...item, status: 'COMPLETED' as const, receivedAt: now } : item);
+    setStocks(updatedStocks); saveStoredStocks(updatedStocks);
+    setStockTransfers(updatedTransfers); saveStoredStockTransfers(updatedTransfers);
+    showToast(`${transferId} received. Both PHC inventories and stock status have been updated.`);
+    return true;
+  };
+
+  const updateResourceAlertStatus = (alertId: string, status: ResourceAlert['status']) => {
+    const updated = resourceAlerts.map(alert => alert.id === alertId ? { ...alert, status } : alert);
+    setResourceAlerts(updated);
+    saveStoredResourceAlerts(updated);
+    showToast(`Resource alert marked ${status.toLowerCase()}.`);
   };
 
   return (
@@ -260,6 +430,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         referrals,
         facilities,
         stocks,
+        medicineRequests,
+        stockTransfers,
+        resourceAlerts,
         toggleSimulatedOffline,
         triggerManualSync,
         addPatient,
@@ -268,7 +441,10 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         updateReferralStatus,
         updateBedOccupancy,
         updateDrugStock,
-        requestStockTransfer,
+        createMedicineRequest,
+        createStockTransfer,
+        processStockTransfer,
+        updateResourceAlertStatus,
         toastMessage,
         clearToast,
       }}

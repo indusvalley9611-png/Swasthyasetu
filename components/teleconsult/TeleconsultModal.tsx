@@ -62,7 +62,7 @@ export function TeleconsultModal({ patient, onClose }: TeleconsultModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-3 sm:p-6 animate-in fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700">
         {/* Header */}
         <div className="bg-slate-900 text-white px-6 py-3.5 flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -96,7 +96,7 @@ export function TeleconsultModal({ patient, onClose }: TeleconsultModalProps) {
                   <span className="font-bold text-[11px]">Dr. Ananya Kulkarni, MD</span>
                   <span className="text-[10px] text-teal-300">(Chief Specialist)</span>
                 </div>
-                <div className="bg-rose-600 text-white px-2 py-0.5 rounded text-[10px] font-bold">
+                <div className="bg-rose-600 dark:bg-rose-500/20 text-white dark:text-rose-300 px-2 py-0.5 rounded text-[10px] font-bold">
                   HIGH-RISK CONSULT
                 </div>
               </div>
@@ -117,7 +117,7 @@ export function TeleconsultModal({ patient, onClose }: TeleconsultModalProps) {
                   type="button"
                   onClick={() => setIsMicOn(!isMicOn)}
                   className={`p-2.5 rounded-full ${
-                    isMicOn ? 'bg-slate-800 text-white' : 'bg-rose-600 text-white'
+                    isMicOn ? 'bg-slate-800 text-white' : 'bg-rose-600 dark:bg-rose-500/20 text-white dark:text-rose-300'
                   }`}
                 >
                   {isMicOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
@@ -126,7 +126,7 @@ export function TeleconsultModal({ patient, onClose }: TeleconsultModalProps) {
                   type="button"
                   onClick={() => setIsVideoOn(!isVideoOn)}
                   className={`p-2.5 rounded-full ${
-                    isVideoOn ? 'bg-slate-800 text-white' : 'bg-rose-600 text-white'
+                    isVideoOn ? 'bg-slate-800 text-white' : 'bg-rose-600 dark:bg-rose-500/20 text-white dark:text-rose-300'
                   }`}
                 >
                   {isVideoOn ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
@@ -143,61 +143,61 @@ export function TeleconsultModal({ patient, onClose }: TeleconsultModalProps) {
             </div>
 
             {/* Live Synchronized Vitals Feed */}
-            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
-              <span className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+            <div className="bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+              <span className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5 text-xs">
                 <HeartPulse className="w-4 h-4 text-rose-600" />
                 <span>Patient Telemetry: {patient.fullName} (ABHA: {patient.abhaId})</span>
               </span>
               <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                <div className="bg-white p-2 rounded border border-slate-200">
-                  <span className="text-[10px] text-slate-500 block">Blood Pressure</span>
-                  <span className="font-bold text-rose-700 font-mono">178/114 mmHg</span>
+                <div className="bg-white dark:bg-slate-900 p-2 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Blood Pressure</span>
+                  <span className="font-bold text-rose-700 dark:text-rose-400 font-mono">178/114 mmHg</span>
                 </div>
-                <div className="bg-white p-2 rounded border border-slate-200">
-                  <span className="text-[10px] text-slate-500 block">SpO2 Oxygen</span>
-                  <span className="font-bold text-slate-800 font-mono">94%</span>
+                <div className="bg-white dark:bg-slate-900 p-2 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">SpO2 Oxygen</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-100 font-mono">94%</span>
                 </div>
-                <div className="bg-white p-2 rounded border border-slate-200">
-                  <span className="text-[10px] text-slate-500 block">Pulse Rate</span>
-                  <span className="font-bold text-slate-800 font-mono">106 bpm</span>
+                <div className="bg-white dark:bg-slate-900 p-2 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Pulse Rate</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-100 font-mono">106 bpm</span>
                 </div>
-                <div className="bg-white p-2 rounded border border-slate-200">
-                  <span className="text-[10px] text-slate-500 block">Gestation</span>
-                  <span className="font-bold text-blue-900">34 Weeks</span>
+                <div className="bg-white dark:bg-slate-900 p-2 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Gestation</span>
+                  <span className="font-bold text-blue-900 dark:text-blue-200">34 Weeks</span>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Right 5 Cols: Live Clinical Chat & Specialist Directives */}
-          <div className="md:col-span-5 flex flex-col justify-between space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <div className="md:col-span-5 flex flex-col justify-between space-y-3 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
             <div>
-              <div className="font-bold text-slate-900 mb-2 flex items-center gap-1.5">
-                <Stethoscope className="w-4 h-4 text-blue-700" />
+              <div className="font-bold text-slate-900 dark:text-white mb-2 flex items-center gap-1.5">
+                <Stethoscope className="w-4 h-4 text-blue-700 dark:text-blue-400" />
                 <span>Clinical Directives & Inter-Facility Chat</span>
               </div>
 
               {/* Chat Thread */}
               <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
                 {chatMessages.map((msg, i) => (
-                  <div key={i} className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1">
-                    <div className="flex justify-between text-[10px] font-bold text-slate-700">
+                  <div key={i} className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1">
+                    <div className="flex justify-between text-[10px] font-bold text-slate-700 dark:text-slate-200">
                       <span>{msg.sender}</span>
                       <span className="text-slate-400 font-mono">{msg.time}</span>
                     </div>
-                    <p className="text-slate-800 text-[11px] leading-relaxed">{msg.text}</p>
+                    <p className="text-slate-800 dark:text-slate-100 text-[11px] leading-relaxed">{msg.text}</p>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Specialist Advisory Note */}
-            <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 space-y-1 text-amber-950">
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg p-3 space-y-1 text-amber-950 dark:text-amber-100 dark:text-amber-100">
               <span className="font-bold text-[11px] flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
                 <span>Specialist Tele-Prescription Recorded:</span>
               </span>
-              <p className="text-[11px] text-amber-900 leading-relaxed italic">
+              <p className="text-[11px] text-amber-900 dark:text-amber-200 leading-relaxed italic">
                 &ldquo;{specialistNotes}&rdquo;
               </p>
             </div>
@@ -209,7 +209,7 @@ export function TeleconsultModal({ patient, onClose }: TeleconsultModalProps) {
                 placeholder="Type clinical question to specialist..."
                 value={newMsg}
                 onChange={(e) => setNewMsg(e.target.value)}
-                className="flex-1 px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white"
+                className="flex-1 px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg text-xs bg-white dark:bg-slate-900 dark:bg-slate-800 dark:text-white"
               />
               <button
                 type="submit"
@@ -222,7 +222,7 @@ export function TeleconsultModal({ patient, onClose }: TeleconsultModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="bg-slate-100 px-6 py-2.5 border-t border-slate-200 flex justify-between items-center text-xs text-slate-500">
+        <div className="bg-slate-100 dark:bg-slate-950 px-6 py-2.5 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center text-xs text-slate-500 dark:text-slate-400">
           <span>Teleconsultation encrypted & recorded under ABDM National Tele-Medicine Guidelines</span>
           <button
             onClick={onClose}

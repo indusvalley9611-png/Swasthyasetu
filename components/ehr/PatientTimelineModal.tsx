@@ -1,24 +1,15 @@
-'use client';
-
+﻿'use client';
 import React, { useState } from 'react';
 import { Patient, ClinicalEncounter } from '@/lib/types';
 import { useLanguage } from '@/context/LanguageContext';
-import {
-  X,
-  CreditCard,
-  Send,
-  Calendar,
-  Building2,
-  User,
-  Heart,
-  Activity,
-  FileText,
-  Pill,
-  TestTube,
-  AlertTriangle,
-  Clock,
-  ShieldCheck,
-} from 'lucide-react';
+import { X, CreditCard, Send, Calendar, Building2, User, Heart, Activity, FileText, Pill, TestTube, AlertTriangle, Clock, ShieldCheck, Link2, Download, Database } from 'lucide-react';
+
+interface PatientTimelineModalProps {
+  patient: Patient | null;
+  onClose: () => void;
+  onOpenAbhaCard: (patient: Patient) => void;
+  onOpenReferral: (patient: Patient) => void;
+}
 
 interface PatientTimelineModalProps {
   patient: Patient | null;
@@ -33,306 +24,190 @@ export function PatientTimelineModal({
   onOpenAbhaCard,
   onOpenReferral,
 }: PatientTimelineModalProps) {
-  const { language, t } = useLanguage();
-  const [filterFacility, setFilterFacility] = useState<string>('all');
+  const { language } = useLanguage();
+  const [activeTab, setActiveTab] = useState<'timeline' | 'vitals' | 'meds' | 'labs'>('timeline');
 
   if (!patient) return null;
 
-  const filteredEncounters = patient.encounters.filter((enc) => {
-    if (filterFacility === 'all') return true;
-    return enc.facilityType === filterFacility;
-  });
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-xs p-3 sm:p-6 animate-in fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200">
-        {/* Header */}
-        <div className="bg-slate-900 text-white px-6 py-4 flex flex-wrap justify-between items-center gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-teal-400 font-bold text-xs uppercase tracking-wider">
-                {language === 'mr' ? 'एकात्मिक इलेक्ट्रॉनिक आरोग्य नोंद (EHR)' : 'Unified Electronic Health Record'}
-              </span>
-              <span className="bg-blue-800 text-blue-200 text-[10px] font-mono px-2 py-0.5 rounded">
-                ABHA: {patient.abhaId}
-              </span>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 sm:p-6 animate-in fade-in duration-300">
+      <div className="bg-slate-50 dark:bg-slate-800/50 rounded-3xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700/60">
+        
+        {/* PREMIUM HEADER */}
+        <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-6 py-5 flex flex-wrap justify-between items-start gap-6">
+          <div className="flex gap-5 items-start">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-100 to-blue-200 flex items-center justify-center text-blue-700 dark:text-blue-400 font-black text-2xl shadow-inner border border-blue-300 dark:border-blue-700/30">
+              {patient.fullName.charAt(0)}
             </div>
-            <h2 className="text-xl font-bold text-white mt-0.5 flex items-center gap-2">
-              <span>{patient.fullName}</span>
-              <span className="text-xs font-normal text-slate-300">
-                ({patient.gender}, {patient.age} Yrs • Blood: {patient.bloodGroup})
-              </span>
-            </h2>
-            <div className="text-xs text-slate-400 mt-0.5">
-              {patient.village}, {patient.taluka}, {patient.district} • Contact: {patient.phone}
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight leading-none">{patient.fullName}</h2>
+                <span className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 text-[10px] font-bold px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800 tracking-wide uppercase">ABHA Linked</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-semibold text-slate-500 dark:text-slate-400 mt-2">
+                <span className="flex items-center gap-1.5"><CreditCard className="w-4 h-4 text-slate-400" /> {patient.abhaId}</span>
+                <span className="text-slate-300">|</span>
+                <span>{patient.age}y &middot; {patient.gender === 'Female' ? 'Female' : 'Male'} &middot; Blood: {patient.bloodGroup}</span>
+                <span className="text-slate-300">|</span>
+                <span>{patient.village}, {patient.district}</span>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onOpenAbhaCard(patient)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-800 hover:bg-blue-700 text-white rounded-lg transition-colors border border-blue-600"
-            >
-              <CreditCard className="w-3.5 h-3.5 text-teal-300" />
-              <span>{language === 'mr' ? 'आभा कार्ड' : 'ABHA Card'}</span>
+          <div className="flex items-center gap-3">
+            <button onClick={() => onOpenAbhaCard(patient)} className="px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 hover:border-slate-400 rounded-xl shadow-sm transition-all flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-indigo-500" /> ABHA Profile
             </button>
-
-            <button
-              onClick={() => onOpenReferral(patient)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-rose-700 hover:bg-rose-800 text-white rounded-lg transition-colors shadow"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>{language === 'mr' ? 'रेफर करा' : 'Refer Patient'}</span>
+            <button onClick={() => { onClose(); onOpenReferral(patient); }} className="px-4 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-md transition-all flex items-center gap-2">
+              <Send className="w-4 h-4" /> Create Smart Referral
             </button>
-
-            <button
-              onClick={onClose}
-              className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors ml-2"
-            >
+            <div className="w-px h-8 bg-slate-200 dark:bg-slate-700 mx-1"></div>
+            <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 rounded-xl transition-all">
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* Clinical Flags Bar */}
+        {/* CLINICAL ALERTS */}
         {(patient.isHighRiskPregnancy || (patient.chronicConditions && patient.chronicConditions.length > 0)) && (
-          <div className="bg-rose-50 border-b border-rose-200 px-6 py-2.5 flex flex-wrap items-center gap-2 text-xs">
-            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-            <span className="font-bold text-rose-900">
-              {language === 'mr' ? 'वैद्यकीय धोके / दक्षतेचा इशारा:' : 'Clinical Risk Flags:'}
-            </span>
-            {patient.isHighRiskPregnancy && (
-              <span className="bg-rose-100 text-rose-800 font-semibold px-2 py-0.5 rounded-md border border-rose-300">
-                {language === 'mr' ? 'अतिधोकादायक गरोदरपण (HRP) - आठवडे ' : 'High Risk Pregnancy (HRP) - Week '}
-                {patient.gestationalWeeks}
-              </span>
-            )}
-            {patient.chronicConditions?.map((cond, i) => (
-              <span key={i} className="bg-amber-100 text-amber-900 font-medium px-2 py-0.5 rounded-md border border-amber-300">
-                {cond}
-              </span>
-            ))}
+          <div className="bg-rose-50 dark:bg-rose-900/80 border-b border-rose-100 px-6 py-3 flex items-center gap-4">
+            <div className="w-8 h-8 rounded-full bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center text-rose-600 shrink-0">
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="text-xs font-black text-rose-900 dark:text-rose-200 uppercase tracking-widest mr-2">Clinical Flags:</span>
+              {patient.isHighRiskPregnancy && (
+                <span className="bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-400 text-xs font-bold px-3 py-1 rounded-lg border border-rose-200 dark:border-rose-800 shadow-sm">High Risk Pregnancy (Week {patient.gestationalWeeks})</span>
+              )}
+              {patient.chronicConditions?.map((cond, i) => (
+                <span key={i} className="bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-400 text-xs font-bold px-3 py-1 rounded-lg border border-amber-200 dark:border-amber-800 shadow-sm">{cond}</span>
+              ))}
+            </div>
           </div>
         )}
 
-        {/* Filter Navigation */}
-        <div className="bg-slate-50 border-b border-slate-200 px-6 py-2 flex items-center justify-between text-xs">
-          <span className="text-slate-600 font-medium">
-            {language === 'mr' ? 'आरोग्य संस्था स्तरानुसार फिल्टर करा:' : 'Filter Encounters by Facility Tier:'}
-          </span>
-          <div className="flex gap-1.5">
-            {['all', 'Sub-Centre', 'PHC', 'Rural Hospital', 'District Hospital'].map((tier) => (
-              <button
-                key={tier}
-                onClick={() => setFilterFacility(tier)}
-                className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
-                  filterFacility === tier
-                    ? 'bg-blue-900 text-white'
-                    : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-300'
-                }`}
-              >
-                {tier === 'all' ? (language === 'mr' ? 'सर्व नोंदी' : 'All Tiers') : tier}
-              </button>
-            ))}
-          </div>
+        {/* EHR NAVIGATION */}
+        <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-6 flex gap-6 text-sm font-bold text-slate-500 dark:text-slate-400">
+          {[
+            { id: 'timeline', label: 'Longitudinal Timeline', icon: Clock },
+            { id: 'vitals', label: 'Flowsheet & Vitals', icon: Activity },
+            { id: 'meds', label: 'Medications', icon: Pill },
+            { id: 'labs', label: 'Diagnostics', icon: TestTube }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={"py-4 border-b-2 flex items-center gap-2 transition-colors " + (activeTab === tab.id ? 'border-blue-600 text-blue-700 dark:text-blue-400' : 'border-transparent hover:text-slate-800 dark:hover:text-slate-100 hover:border-slate-300 dark:hover:border-slate-600')}
+            >
+              <tab.icon className="w-4 h-4" /> {tab.label}
+            </button>
+          ))}
         </div>
 
-        {/* Longitudinal Timeline Scroll Area */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {filteredEncounters.length === 0 ? (
-            <div className="text-center py-12 text-slate-400">
-              {language === 'mr' ? 'या स्तरावर कोणत्याही नोंदी आढळल्या नाहीत.' : 'No encounters recorded for this filter.'}
-            </div>
-          ) : (
-            filteredEncounters.map((enc, idx) => (
-              <div key={enc.id} className="relative pl-6 border-l-2 border-teal-500/40 pb-2">
-                {/* Timeline node */}
-                <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-teal-600 border-2 border-white shadow-xs" />
-
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3 hover:border-teal-300 transition-colors">
-                  {/* Encounter Header */}
-                  <div className="flex flex-wrap justify-between items-start gap-2 border-b border-slate-100 pb-2.5">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                            enc.facilityType === 'Sub-Centre'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : enc.facilityType === 'PHC'
-                              ? 'bg-blue-100 text-blue-800'
-                              : enc.facilityType === 'Rural Hospital'
-                              ? 'bg-purple-100 text-purple-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
-                        >
-                          {enc.facilityType}
-                        </span>
-                        <h4 className="font-bold text-slate-900 text-sm">{enc.facilityName}</h4>
+        {/* MAIN SCROLL AREA */}
+        <div className="flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-800/50">
+          
+          {activeTab === 'timeline' && (
+            <div className="max-w-3xl mx-auto space-y-8 py-4">
+              {patient.encounters.length === 0 ? (
+                <div className="text-center py-12 text-slate-400 font-medium">No encounters recorded yet.</div>
+              ) : (
+                patient.encounters.map((enc, idx) => (
+                  <div key={enc.id} className="relative pl-10 before:absolute before:inset-y-0 before:-bottom-8 before:left-[19px] before:w-px before:bg-slate-200 dark:bg-slate-700 last:before:hidden">
+                    {/* Timeline Node */}
+                    <div className="absolute left-[9px] top-1 w-5 h-5 rounded-full bg-white dark:bg-slate-900 border-[3px] border-blue-500 shadow-sm ring-4 ring-slate-50 z-10" />
+                    
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm hover:shadow-md transition-shadow">
+                      <div className="flex flex-wrap justify-between gap-4 mb-4">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-slate-900 dark:text-white text-base">{enc.diagnosis}</h3>
+                          </div>
+                          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-1">
+                            <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {enc.date}</span>
+                            <span className="text-slate-300">|</span>
+                            <span className="flex items-center gap-1"><Building2 className="w-3 h-3" /> {enc.facilityName} ({enc.facilityType})</span>
+                          </div>
+                        </div>
+                        <div className="text-right text-xs">
+                          <div className="font-bold text-slate-700 dark:text-slate-200">{enc.providerName}</div>
+                          <div className="text-slate-500 dark:text-slate-400">{enc.providerRole}</div>
+                        </div>
                       </div>
-                      <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
-                        <User className="w-3.5 h-3.5" />
-                        <span>
-                          {enc.providerName} ({enc.providerRole})
-                        </span>
-                      </div>
-                    </div>
 
-                    <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{enc.date}</span>
-                    </div>
-                  </div>
+                      <div className="space-y-4">
+                        {/* Chief Complaints */}
+                        {enc.chiefComplaints && enc.chiefComplaints.length > 0 && (
+                          <div>
+                            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Chief Complaints</div>
+                            <div className="text-sm font-medium text-slate-700 dark:text-slate-200">{enc.chiefComplaints.join(', ')}</div>
+                          </div>
+                        )}
 
-                  {/* Vitals Ribbon */}
-                  <div className="bg-slate-50 rounded-lg p-2.5 border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                    <div>
-                      <span className="text-slate-500 block text-[10px]">Blood Pressure</span>
-                      <span
-                        className={`font-bold ${
-                          enc.vitals.systolicBp >= 140 || enc.vitals.systolicBp <= 90
-                            ? 'text-rose-700'
-                            : 'text-slate-800'
-                        }`}
-                      >
-                        {enc.vitals.systolicBp}/{enc.vitals.diastolicBp} mmHg
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[10px]">Pulse Rate</span>
-                      <span
-                        className={`font-bold ${
-                          enc.vitals.heartRate > 100 || enc.vitals.heartRate < 50
-                            ? 'text-amber-700'
-                            : 'text-slate-800'
-                        }`}
-                      >
-                        {enc.vitals.heartRate} bpm
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[10px]">SpO2 Saturation</span>
-                      <span
-                        className={`font-bold ${
-                          enc.vitals.spO2 < 94 ? 'text-rose-700 font-extrabold' : 'text-emerald-700'
-                        }`}
-                      >
-                        {enc.vitals.spO2}%
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[10px]">Consciousness (AVPU)</span>
-                      <span className="font-bold text-slate-800 uppercase">
-                        {enc.vitals.consciousLevel}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Diagnosis & Complaints */}
-                  <div className="space-y-1">
-                    <div className="text-xs">
-                      <strong className="text-slate-700">{language === 'mr' ? 'तक्रारी:' : 'Chief Complaints:'}</strong>{' '}
-                      <span className="text-slate-600">{enc.chiefComplaints.join(', ')}</span>
-                    </div>
-                    <div className="text-xs">
-                      <strong className="text-slate-700">{language === 'mr' ? 'निदान:' : 'Diagnosis:'}</strong>{' '}
-                      <span className="font-semibold text-blue-950">{enc.diagnosis}</span>
-                      {enc.icd10Code && (
-                        <span className="ml-2 text-[10px] font-mono bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
-                          ICD: {enc.icd10Code}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Prescriptions */}
-                  {enc.prescriptions && enc.prescriptions.length > 0 && (
-                    <div className="space-y-1">
-                      <div className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-                        <Pill className="w-3.5 h-3.5 text-teal-600" />
-                        <span>{language === 'mr' ? 'दिलेली औषधे (Prescriptions):' : 'Prescribed Medications:'}</span>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs text-left text-slate-600 border border-slate-200 rounded-lg">
-                          <thead className="bg-slate-100 text-slate-700 text-[10px] uppercase">
-                            <tr>
-                              <th className="px-3 py-1.5">Medicine</th>
-                              <th className="px-2 py-1.5">Dosage</th>
-                              <th className="px-2 py-1.5">Freq</th>
-                              <th className="px-2 py-1.5">Days</th>
-                              <th className="px-3 py-1.5">Instructions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {enc.prescriptions.map((p, pIdx) => (
-                              <tr key={pIdx} className="border-t border-slate-100">
-                                <td className="px-3 py-1 font-semibold text-slate-800">{p.medicineName}</td>
-                                <td className="px-2 py-1">{p.dosage}</td>
-                                <td className="px-2 py-1 font-mono">{p.frequency}</td>
-                                <td className="px-2 py-1">{p.durationDays}</td>
-                                <td className="px-3 py-1 text-slate-500 italic">{p.instructions}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Lab Reports */}
-                  {enc.labReports && enc.labReports.length > 0 && (
-                    <div className="space-y-1">
-                      <div className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-                        <TestTube className="w-3.5 h-3.5 text-purple-600" />
-                        <span>{language === 'mr' ? 'प्रयोगशाळा तपासण्या (Lab Tests):' : 'Laboratory Reports:'}</span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                        {enc.labReports.map((lab) => (
-                          <div
-                            key={lab.id}
-                            className={`p-2 rounded border ${
-                              lab.isAbnormal
-                                ? 'bg-rose-50 border-rose-300 text-rose-900'
-                                : 'bg-slate-50 border-slate-200 text-slate-800'
-                            }`}
-                          >
-                            <div className="flex justify-between font-semibold">
-                              <span>{lab.testName}</span>
-                              <span className={lab.isAbnormal ? 'text-rose-700 font-bold' : 'text-slate-700'}>
-                                {lab.result}
-                              </span>
-                            </div>
-                            <div className="text-[10px] text-slate-500 mt-0.5">
-                              Normal: {lab.normalRange} • {lab.labFacility}
+                        {/* Vitals Summary */}
+                        {enc.vitals && (
+                          <div>
+                            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Vitals Captured</div>
+                            <div className="flex flex-wrap gap-2 text-xs font-bold text-slate-700 dark:text-slate-200">
+                              <span className="bg-slate-100 dark:bg-slate-950 px-2 py-1 rounded">BP: {enc.vitals.systolicBp}/{enc.vitals.diastolicBp}</span>
+                              <span className="bg-slate-100 dark:bg-slate-950 px-2 py-1 rounded">HR: {enc.vitals.heartRate}</span>
+                              <span className="bg-slate-100 dark:bg-slate-950 px-2 py-1 rounded">Temp: {enc.vitals.temperature}°C</span>
+                              <span className="bg-slate-100 dark:bg-slate-950 px-2 py-1 rounded">SpO2: {enc.vitals.spO2}%</span>
                             </div>
                           </div>
-                        ))}
+                        )}
+
+                        {/* Medications */}
+                        {enc.prescriptions && enc.prescriptions.length > 0 && (
+                          <div>
+                            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1"><Pill className="w-3 h-3 text-emerald-500" /> Prescriptions Issued</div>
+                            <div className="space-y-2">
+                              {enc.prescriptions.map((rx, i) => (
+                                <div key={i} className="flex flex-wrap items-center justify-between text-xs bg-emerald-50/50 dark:bg-emerald-900/20 border border-emerald-100 p-2.5 rounded-lg">
+                                  <div className="font-bold text-emerald-900 dark:text-emerald-200">{rx.medicineName} <span className="font-normal text-emerald-700 dark:text-emerald-400 ml-1">{rx.dosage}</span></div>
+                                  <div className="font-semibold text-emerald-800 dark:text-emerald-300">{rx.frequency} for {rx.durationDays} days</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Notes */}
+                        {enc.notes && (
+                          <div className="bg-amber-50/50 dark:bg-amber-900/20 border border-amber-100 p-3 rounded-xl">
+                            <div className="text-[10px] font-black text-amber-800 dark:text-amber-300 uppercase tracking-widest mb-1">Clinical Notes</div>
+                            <div className="text-sm font-medium text-amber-900 dark:text-amber-200 leading-relaxed">{enc.notes}</div>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
 
-                  {/* Notes */}
-                  {enc.notes && (
-                    <div className="text-xs bg-amber-50/60 border-l-2 border-amber-500 p-2 text-amber-900">
-                      <strong>Note:</strong> {enc.notes}
-                    </div>
-                  )}
-                </div>
+          {activeTab !== 'timeline' && (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-16 h-16 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center shadow-sm mb-4">
+                <Database className="w-6 h-6 text-slate-300" />
               </div>
-            ))
+              <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">Detailed View Available in ABDM Network</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm mt-1 max-w-md">The full flowsheet data can be retrieved from the central HIE (Health Information Exchange) when needed.</p>
+            </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="bg-slate-100 px-6 py-3 border-t border-slate-200 flex justify-between items-center text-xs text-slate-500">
-          <span>{language === 'mr' ? 'आयुष्मान भारत डिजिटल मिशन (ABDM) द्वारे प्रमाणीकृत' : 'Verified via ABDM Health Information Exchange (HIE)'}</span>
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-medium transition-colors"
-          >
-            {language === 'mr' ? 'बंद करा' : 'Close'}
-          </button>
-        </div>
       </div>
     </div>
   );
 }
+
+
+
+
+
+
+
+
+

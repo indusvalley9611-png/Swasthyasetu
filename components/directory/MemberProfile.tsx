@@ -1,0 +1,353 @@
+'use client';
+
+import React from 'react';
+import { Patient, Role } from '@/lib/types';
+import { useLanguage } from '@/context/LanguageContext';
+import { useSync } from '@/context/SyncContext';
+import { 
+  ArrowLeft, HeartPulse, Activity, BrainCircuit, ActivitySquare, AlertTriangle, 
+  MapPin, Phone, History, FileText, ClipboardList, User
+} from 'lucide-react';
+
+interface MemberProfileProps {
+  patient: Patient;
+  role: Role;
+  onBack: () => void;
+  onOpenAction: (action: 'VITALS' | 'REFERRAL' | 'ABHA' | 'TIMELINE' | 'REFERRAL_STATUS') => void;
+}
+
+export default function MemberProfile({ patient, role, onBack, onOpenAction }: MemberProfileProps) {
+  const { language } = useLanguage();
+  const { referrals, updateReferralStatus } = useSync();
+  const [isCancelModalOpen, setIsCancelModalOpen] = React.useState(false);
+  const [cancelReason, setCancelReason] = React.useState('');
+  
+  const activeReferral = patient.activeReferralId ? referrals.find(r => r.id === patient.activeReferralId) : null;
+  const isAdmitted = activeReferral?.status === 'ADMITTED';
+  const isLocked = !!activeReferral && (role === 'asha' || role === 'phc_doctor'); // Strict RBAC lock: referring workers cannot edit if referral is actively in flight
+
+  return (
+    <div className="flex flex-col h-full animate-in fade-in duration-500 pb-20">
+      
+      {/* Header & Core Identity */}
+      <div className="flex items-center gap-4 mb-6">
+        <button 
+          onClick={onBack}
+          className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-slate-600 dark:text-slate-300"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div>
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-3">
+            {patient.fullName}
+            {patient.isHighRiskPregnancy && (
+              <span className="bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-300 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-800/50">
+                High Risk
+              </span>
+            )}
+          </h2>
+          <div className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2">
+            {patient.gender} &bull; {patient.age} years &bull; <span className="font-mono text-slate-700 dark:text-slate-300">{patient.abhaId}</span>
+          </div>
+        </div>
+      </div>
+
+      
+      {activeReferral && (
+        <div className="mb-6 bg-white dark:bg-slate-900 border-2 border-amber-500 rounded-2xl p-5 shadow-md flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+          <div className="flex gap-4 items-start">
+            <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-200 dark:border-amber-800/50">
+              <Activity className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <h4 className="font-black text-slate-900 dark:text-white text-lg">REFERRAL ACTIVE</h4>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider `}>
+                  {activeReferral.status}
+                </span>
+              </div>
+              <div className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                Current destination: <strong className="text-slate-900 dark:text-white">{activeReferral.targetFacility}</strong>
+              </div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Ref ID: <span className="font-mono font-bold">{activeReferral.id}</span> &bull; {new Date(activeReferral.createdAt).toLocaleString()}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <button 
+              onClick={() => onOpenAction('REFERRAL_STATUS')}
+              className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm font-bold rounded-xl transition-colors border border-slate-200 dark:border-slate-700 whitespace-nowrap"
+            >
+              View Referral Timeline
+            </button>
+            {['PENDING', 'ACCEPTED', 'ESCALATED'].includes(activeReferral.status) && (
+              <button 
+                onClick={() => setIsCancelModalOpen(true)}
+                className="px-4 py-2 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-400 text-sm font-bold rounded-xl transition-colors border border-rose-200 dark:border-rose-800/30 whitespace-nowrap"
+              >
+                Cancel Request
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* AI Health Assistant Banner */}
+      <div className="mb-6 bg-gradient-to-r from-blue-50 dark:from-blue-900/20 to-indigo-50 dark:to-indigo-900/20 border border-blue-100 dark:border-blue-800/50 rounded-2xl p-4 flex gap-4">
+        <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shrink-0 shadow-inner">
+          <BrainCircuit className="w-5 h-5 text-white" />
+        </div>
+        <div>
+          <h4 className="text-xs font-bold text-blue-900 dark:text-blue-300 uppercase tracking-widest mb-1 flex items-center gap-2">
+            AI Care Insight
+          </h4>
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-200 leading-relaxed">
+            Patient exhibits consistently elevated blood pressure across the last 3 visits. Recommend scheduling an immediate follow-up evaluation and recording current vitals.
+          </p>
+          <p className="text-[10px] text-blue-600/70 dark:text-blue-400/70 mt-2 font-medium">
+            AI insights are generated based on historical data. Verify clinically before action.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        {/* Left Column: Personal & Vitals */}
+        <div className="lg:col-span-4 flex flex-col gap-6">
+          
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+            <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <User className="w-4 h-4" /> Personal Information
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <div className="text-[10px] text-slate-500 uppercase font-semibold">Contact</div>
+                <div className="text-sm font-medium text-slate-900 dark:text-white flex items-center gap-2 mt-0.5">
+                  <Phone className="w-3 h-3 text-slate-400" /> {patient.phone}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-500 uppercase font-semibold">Address</div>
+                <div className="text-sm font-medium text-slate-900 dark:text-white flex items-center gap-2 mt-0.5">
+                  <MapPin className="w-3 h-3 text-slate-400" /> {patient.village}, Pune District
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+            <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <HeartPulse className="w-4 h-4" /> Latest Vitals
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold">Blood Pressure</div>
+                <div className="text-lg font-black text-slate-900 dark:text-white mt-1">138/88 <span className="text-xs font-medium text-slate-400">mmHg</span></div>
+              </div>
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold">Heart Rate</div>
+                <div className="text-lg font-black text-slate-900 dark:text-white mt-1">76 <span className="text-xs font-medium text-slate-400">bpm</span></div>
+              </div>
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold">SpO2</div>
+                <div className="text-lg font-black text-slate-900 dark:text-white mt-1">98 <span className="text-xs font-medium text-slate-400">%</span></div>
+              </div>
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold">Weight</div>
+                <div className="text-lg font-black text-slate-900 dark:text-white mt-1">62 <span className="text-xs font-medium text-slate-400">kg</span></div>
+              </div>
+            </div>
+            {isLocked ? (
+              <div className="w-full mt-4 p-3 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span className="text-[10px] font-bold leading-tight">Record Locked<br/>Managed by {activeReferral?.targetFacility}</span>
+              </div>
+            ) : (
+              <button 
+                onClick={() => onOpenAction('VITALS')}
+                className="w-full mt-4 py-2 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-400 font-bold text-xs rounded-lg transition-colors border border-blue-100 dark:border-blue-800/30"
+              >
+                + Update Vitals
+              </button>
+            )}
+          </div>
+
+        </div>
+
+        {/* Right Column: Health Overview & History */}
+        <div className="lg:col-span-8 flex flex-col gap-6">
+          
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+            <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <ActivitySquare className="w-4 h-4" /> Health Overview
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold mb-2">Known Conditions</div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-md text-xs font-medium border border-slate-200 dark:border-slate-700">Hypertension (Stage 1)</span>
+                  {patient.isHighRiskPregnancy && (
+                    <span className="bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 px-2.5 py-1 rounded-md text-xs font-medium border border-rose-200 dark:border-rose-800">Pregnancy (2nd Trimester)</span>
+                  )}
+                </div>
+              </div>
+              
+              <div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold mb-2">Current Medications</div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 px-2.5 py-1 rounded-md text-xs font-medium border border-indigo-100 dark:border-indigo-800/50">Amlodipine 5mg</span>
+                  {patient.isHighRiskPregnancy && (
+                    <span className="bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 px-2.5 py-1 rounded-md text-xs font-medium border border-indigo-100 dark:border-indigo-800/50">IFA Supplements</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+            <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <History className="w-4 h-4" /> Recent Interactions
+            </h3>
+            
+            <div className="space-y-4 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 dark:before:via-slate-700 before:to-transparent">
+              
+              <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-white dark:border-slate-900 bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10">
+                  <ClipboardList className="w-4 h-4" />
+                </div>
+                <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                  <div className="flex items-center justify-between mb-1">
+                    <h4 className="font-bold text-slate-900 dark:text-white text-sm">Routine Checkup</h4>
+                    <span className="text-[10px] font-bold text-slate-400">12 Sep 2026</span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Recorded vitals. BP slightly elevated. Dispensed IFA supplements.</p>
+                </div>
+              </div>
+
+              <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-white dark:border-slate-900 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10">
+                  <Activity className="w-4 h-4" />
+                </div>
+                <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                  <div className="flex items-center justify-between mb-1">
+                    <h4 className="font-bold text-slate-900 dark:text-white text-sm">Initial Registration</h4>
+                    <span className="text-[10px] font-bold text-slate-400">01 Sep 2026</span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Patient registered in ABDM system. ABHA generated.</p>
+                </div>
+              </div>
+
+            </div>
+
+            <button 
+              onClick={() => onOpenAction('TIMELINE')}
+              className="w-full mt-6 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-lg transition-colors border border-slate-200 dark:border-slate-700"
+            >
+              View Full Medical Timeline
+            </button>
+          </div>
+          
+        </div>
+      </div>
+
+      {/* Action Bar (Fixed at bottom for easy access) */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] dark:shadow-[0_-10px_40px_rgba(0,0,0,0.2)] p-4 z-40">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-center sm:justify-end gap-3 px-2 sm:px-6 lg:px-8">
+          <button 
+            onClick={() => onOpenAction('ABHA')}
+            className="px-6 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm font-bold rounded-xl transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-2"
+          >
+            <FileText className="w-4 h-4" /> View ABHA Card
+          </button>
+          
+          {activeReferral ? (
+            <button 
+              onClick={() => onOpenAction('REFERRAL_STATUS')}
+              className="px-6 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm font-bold rounded-xl transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-2"
+            >
+              <Activity className="w-4 h-4" /> View Referral Status
+            </button>
+          ) : (
+            <button 
+              onClick={() => onOpenAction('REFERRAL')}
+              className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl transition-all shadow-md shadow-amber-500/20 flex items-center gap-2"
+            >
+              <Activity className="w-4 h-4" /> Create Referral
+            </button>
+          )}
+          
+          {isLocked ? (
+            <div className="px-8 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-sm font-bold rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-2 cursor-not-allowed">
+              <AlertTriangle className="w-4 h-4" /> 🔒 Medical Record Locked
+            </div>
+          ) : (
+            <button 
+              onClick={() => onOpenAction('VITALS')}
+              className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl transition-all shadow-md shadow-blue-600/20 flex items-center gap-2"
+            >
+              <HeartPulse className="w-4 h-4" /> Record Vitals
+            </button>
+          )}
+        </div>
+      </div>
+
+      {isCancelModalOpen && activeReferral && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col p-6">
+            <h3 className="text-lg font-black text-slate-900 dark:text-white mb-2">Cancel this referral?</h3>
+            
+            <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3 mb-4">
+              <div className="text-xs text-slate-500 uppercase font-bold">Patient</div>
+              <div className="text-sm font-bold text-slate-900 dark:text-white">{patient.fullName}</div>
+              
+              <div className="text-xs text-slate-500 uppercase font-bold mt-2">Referral</div>
+              <div className="text-sm font-bold text-slate-900 dark:text-white font-mono">{activeReferral.id}</div>
+            </div>
+
+            <div className="mb-4 bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-800/50 rounded-xl p-3 text-rose-700 dark:text-rose-400 text-sm font-medium">
+              Warning: This will withdraw the referral from the receiving facility. The receiving facility will no longer be able to admit the patient under this referral.
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-2">
+                Cancellation Reason
+              </label>
+              <textarea
+                rows={3}
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Why is this referral being cancelled?"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-rose-500 focus:outline-none"
+              ></textarea>
+            </div>
+
+            <div className="flex gap-3 mt-auto">
+              <button 
+                onClick={() => setIsCancelModalOpen(false)}
+                className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl transition"
+              >
+                Keep Referral
+              </button>
+              <button 
+                onClick={() => {
+                  updateReferralStatus(activeReferral.id, 'CANCELLED', { 
+                    cancellationReason: cancelReason || 'Cancelled by PHC', 
+                    cancelledBy: 'PHC User', 
+                    cancelledByRole: role 
+                  });
+                  setIsCancelModalOpen(false);
+                }}
+                className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow transition"
+              >
+                Cancel Referral
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

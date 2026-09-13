@@ -47,7 +47,7 @@ export function ReferralTokenModal({ referral, onClose }: ReferralTokenModalProp
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-xs p-3 sm:p-6 animate-in fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 dark:border-slate-700">
         {/* Header */}
         <div className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -65,8 +65,8 @@ export function ReferralTokenModal({ referral, onClose }: ReferralTokenModalProp
         </div>
 
         {/* Printable Slip Content */}
-        <div className="p-6 bg-slate-50 space-y-4">
-          <div className="bg-white p-5 rounded-xl border-2 border-slate-300 shadow-md space-y-4">
+        <div className="p-6 bg-slate-50 dark:bg-slate-800/50 space-y-4">
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border-2 border-slate-300 dark:border-slate-600 shadow-md space-y-4">
             {/* Top Bar with Triage Color */}
             <div
               className={`px-4 py-2 rounded-lg text-white flex justify-between items-center shadow-xs ${
@@ -87,20 +87,20 @@ export function ReferralTokenModal({ referral, onClose }: ReferralTokenModalProp
                     : t('triageGreen')}
                 </span>
               </div>
-              <span className="text-xs font-mono font-bold bg-white/20 px-2 py-0.5 rounded">
+              <span className="text-xs font-mono font-bold bg-white dark:bg-slate-900/20 px-2 py-0.5 rounded">
                 Score: {referral.triageScore}
               </span>
             </div>
 
             {/* Token Code & Hospital Bypass Notice */}
             <div className="text-center space-y-1">
-              <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">
                 {language === 'mr' ? 'रेफरल टोकन क्रमांक' : 'OFFICIAL REFERRAL TOKEN'}
               </div>
-              <div className="text-2xl font-mono font-black text-slate-900 tracking-wider">
+              <div className="text-2xl font-mono font-black text-slate-900 dark:text-white tracking-wider">
                 {referral.tokenCode}
               </div>
-              <div className="text-xs font-semibold text-teal-800 bg-teal-50 px-3 py-1 rounded-md border border-teal-200 inline-block">
+              <div className="text-xs font-semibold text-teal-800 dark:text-teal-300 bg-teal-50 dark:bg-teal-900/20 px-3 py-1 rounded-md border border-teal-200 dark:border-teal-800 inline-block">
                 ⚡ {t('bypassDeskMsg')}
               </div>
             </div>
@@ -108,40 +108,40 @@ export function ReferralTokenModal({ referral, onClose }: ReferralTokenModalProp
             {/* Scannable QR Code */}
             <div className="flex justify-center py-2">
               {qrUrl ? (
-                <div className="p-2 bg-white rounded-xl border-2 border-slate-800 shadow-inner">
+                <div className="p-2 bg-white dark:bg-slate-900 rounded-xl border-2 border-slate-800 shadow-inner">
                   <img src={qrUrl} alt="Referral Token QR" className="w-48 h-48" />
                 </div>
               ) : (
-                <div className="w-48 h-48 bg-slate-100 flex items-center justify-center text-slate-400">
+                <div className="w-48 h-48 bg-slate-100 dark:bg-slate-950 flex items-center justify-center text-slate-400">
                   Generating QR...
                 </div>
               )}
             </div>
 
             {/* Patient & Facility Summary */}
-            <div className="bg-slate-50 rounded-lg p-3 text-xs space-y-1.5 border border-slate-200">
+            <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 text-xs space-y-1.5 border border-slate-200 dark:border-slate-700">
               <div className="flex justify-between">
-                <span className="text-slate-500">{language === 'mr' ? 'रुग्णाचे नाव' : 'Patient'}:</span>
-                <span className="font-bold text-slate-900">{referral.patientName}</span>
+                <span className="text-slate-500 dark:text-slate-400">{language === 'mr' ? 'रुग्णाचे नाव' : 'Patient'}:</span>
+                <span className="font-bold text-slate-900 dark:text-white">{referral.patientName}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">ABHA ID:</span>
-                <span className="font-mono font-semibold text-slate-800">{referral.patientAbha}</span>
+                <span className="text-slate-500 dark:text-slate-400">ABHA ID:</span>
+                <span className="font-mono font-semibold text-slate-800 dark:text-slate-100">{referral.patientAbha}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">{language === 'mr' ? 'रेफर करणारी संस्था' : 'From'}:</span>
-                <span className="font-medium text-slate-800">{referral.referringFacility}</span>
+                <span className="text-slate-500 dark:text-slate-400">{language === 'mr' ? 'रेफर करणारी संस्था' : 'From'}:</span>
+                <span className="font-medium text-slate-800 dark:text-slate-100">{referral.referringFacility}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">{language === 'mr' ? 'गंतव्य रुग्णालय' : 'Target Hospital'}:</span>
-                <span className="font-bold text-blue-900">{referral.targetFacility}</span>
+                <span className="text-slate-500 dark:text-slate-400">{language === 'mr' ? 'गंतव्य रुग्णालय' : 'Target Hospital'}:</span>
+                <span className="font-bold text-blue-900 dark:text-blue-200">{referral.targetFacility}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">{language === 'mr' ? 'तज्ज्ञ विभाग' : 'Specialty'}:</span>
-                <span className="font-bold text-teal-800">{referral.specialtyRequired}</span>
+                <span className="text-slate-500 dark:text-slate-400">{language === 'mr' ? 'तज्ज्ञ विभाग' : 'Specialty'}:</span>
+                <span className="font-bold text-teal-800 dark:text-teal-300">{referral.specialtyRequired}</span>
               </div>
               {referral.assignedBed && (
-                <div className="flex justify-between bg-blue-100/70 p-1 rounded text-blue-900 font-bold">
+                <div className="flex justify-between bg-blue-100/70 dark:bg-blue-900/40 p-1 rounded text-blue-900 dark:text-blue-200 font-bold">
                   <span>Reserved Bed:</span>
                   <span>{referral.assignedBed}</span>
                 </div>
@@ -149,24 +149,24 @@ export function ReferralTokenModal({ referral, onClose }: ReferralTokenModalProp
             </div>
 
             {/* Doctor Signature & Timestamp */}
-            <div className="text-[11px] text-slate-600 flex justify-between items-center pt-2 border-t border-slate-200">
+            <div className="text-[11px] text-slate-600 dark:text-slate-300 flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-700">
               <div>
                 <span className="block text-slate-400 text-[9px] uppercase">Referring Medical Officer</span>
-                <span className="font-semibold text-slate-800">{referral.referringDoctorName}</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-100">{referral.referringDoctorName}</span>
               </div>
               <div className="text-right">
                 <span className="block text-slate-400 text-[9px] uppercase">Timestamp</span>
-                <span className="font-mono text-slate-700">{new Date(referral.createdAt).toLocaleTimeString()}</span>
+                <span className="font-mono text-slate-700 dark:text-slate-200">{new Date(referral.createdAt).toLocaleTimeString()}</span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-3 bg-white border-t border-slate-200 flex justify-end gap-3">
+        <div className="px-6 py-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+            className="px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 rounded-lg transition-colors"
           >
             {language === 'mr' ? 'पूर्ण झाले' : 'Done'}
           </button>

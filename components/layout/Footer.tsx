@@ -14,12 +14,12 @@ export function Footer() {
         <div className="space-y-3">
           <div className="flex items-center gap-2 text-white font-bold text-sm">
             <HeartPulse className="w-5 h-5 text-teal-400" />
-            <span>{language === 'mr' ? 'स्वास्थ्यसेतू महाराष्ट्र' : 'SwasthyaSetu Maharashtra'}</span>
+            <span>{language === 'mr' ? 'स्वास्थ्यसेतू' : 'SwasthyaSetu'}</span>
           </div>
           <p className="text-slate-400 text-xs leading-relaxed">
             {language === 'mr'
-              ? 'उपकेंद्र, प्राथमिक आरोग्य केंद्र, ग्रामीण आणि जिल्हा रुग्णालयांचे एकात्मिक आरोग्य व संदर्भ सेवा व्यासपीठ. सार्वजनिक आरोग्य विभाग, महाराष्ट्र शासन.'
-              : 'Integrated Public Healthcare & Intelligent Referral System bridging rural sub-centres, PHCs, and district civil hospitals. Government of Maharashtra.'}
+              ? 'उपकेंद्र, प्राथमिक आरोग्य केंद्र, ग्रामीण आणि जिल्हा रुग्णालयांचे एकात्मिक आरोग्य व संदर्भ सेवा व्यासपीठ. सार्वजनिक आरोग्य विभाग.'
+              : 'Integrated Public Healthcare & Intelligent Referral System bridging rural sub-centres, PHCs, and district civil hospitals. Department of Public Health.'}
           </p>
           <div className="flex items-center gap-2 text-[11px] text-teal-400">
             <ShieldCheck className="w-4 h-4" />
@@ -83,13 +83,13 @@ export function Footer() {
               ? 'स्थानिक IndexedDB कॅशिंग आणि पार्श्वभूमी सिंकद्वारे दुर्गम ग्रामीण भागात इंटरनेट नसतानाही काम अविरत सुरू राहते.'
               : 'Local IndexedDB storage and automatic reconciliation queue ensures clinical workflows function seamlessly in remote tribal/rural belts without cellular signal.'}
           </p>
-          <div className="text-[11px] text-slate-500 pt-2 border-t border-slate-800">
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-800">
             Version 2.4-MH-PROD • Build 2026.09
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto border-t border-slate-800 mt-8 pt-4 text-center text-slate-500 text-[11px]">
+      <div className="max-w-7xl mx-auto border-t border-slate-800 mt-8 pt-4 text-center text-slate-500 dark:text-slate-400 text-[11px]">
         © 2026 Public Health Department, Government of Maharashtra (सार्वजनिक आरोग्य विभाग, महाराष्ट्र शासन). Designed for Smart India Hackathon & ABDM Rural Deployment.
       </div>
     </footer>

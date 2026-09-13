@@ -1,21 +1,13 @@
-'use client';
-
+﻿'use client';
 import React, { useState } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
 import { useSync } from '@/context/SyncContext';
-import { INITIAL_OUTBREAKS } from '@/lib/mockData';
+import { getMedicineStatus } from '@/lib/resourceManagement';
 import {
-  MapPin,
-  TrendingUp,
-  AlertTriangle,
-  Building2,
-  Activity,
-  CheckCircle2,
-  ArrowRight,
-  ShieldCheck,
-  Send,
-  Zap,
+  Activity, BarChart3, TrendingUp, Users, Map,
+  AlertTriangle, ShieldCheck, Database, Server,
+  Building2, Package, Search, ChevronRight, MapPin
 } from 'lucide-react';
 
 interface StateAdminDashboardProps {
@@ -27,282 +19,160 @@ export function StateAdminDashboard({
   onOpenBedMatrix,
   onOpenStockLedger,
 }: StateAdminDashboardProps) {
-  const { language, t } = useLanguage();
+  const { language } = useLanguage();
   const { user } = useAuth();
-  const { facilities, referrals, stocks } = useSync();
-
-  const [selectedDisease, setSelectedDisease] = useState<string>('All');
-  const [outbreakList, setOutbreakList] = useState(INITIAL_OUTBREAKS);
-
-  const filteredOutbreaks = outbreakList.filter((o) => {
-    if (selectedDisease === 'All') return true;
-    return o.diseaseName === selectedDisease;
-  });
-
-  // Calculate macro KPIs
-  const totalBeds = facilities.reduce((sum, f) => sum + f.totalBeds, 0);
-  const occupiedBeds = facilities.reduce((sum, f) => sum + f.occupiedBeds, 0);
-  const bedOccupancyRate = Math.round((occupiedBeds / totalBeds) * 100);
-
-  const totalIcu = facilities.reduce((sum, f) => sum + f.icuBedsTotal, 0);
-  const occupiedIcu = facilities.reduce((sum, f) => sum + f.icuBedsOccupied, 0);
-  const icuOccupancyRate = Math.round((occupiedIcu / totalIcu) * 100);
-
-  const redReferralsCount = referrals.filter((r) => r.triagePriority === 'red').length;
-  const yellowReferralsCount = referrals.filter((r) => r.triagePriority === 'yellow').length;
-  const greenReferralsCount = referrals.filter((r) => r.triagePriority === 'green').length;
-
-  const criticalStockItems = stocks.filter((s) => s.status === 'CRITICAL');
+  const { facilities, stocks, medicineRequests, stockTransfers } = useSync();
+  
+  const [activeView, setActiveView] = useState<'overview' | 'facilities' | 'outbreaks'>('overview');
+  const totalBeds = facilities.reduce((total, facility) => total + facility.totalBeds, 0);
+  const occupiedBeds = facilities.reduce((total, facility) => total + facility.occupiedBeds, 0);
+  const bedUtilization = totalBeds ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
+  const criticalShortages = stocks.filter(stock => getMedicineStatus(stock) === 'CRITICAL').length;
+  const openSupplyRequests = medicineRequests.filter(request => request.status === 'PENDING').length + stockTransfers.filter(transfer => !['COMPLETED', 'REJECTED'].includes(transfer.status)).length;
 
   return (
-    <div className="space-y-6">
-      {/* Admin Header Banner */}
-      <div className="bg-gradient-to-r from-amber-950 via-slate-900 to-blue-950 rounded-2xl p-5 sm:p-6 text-white shadow-lg flex flex-wrap justify-between items-center gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-amber-400 text-xs font-semibold uppercase tracking-wider">
-            <ShieldCheck className="w-4 h-4" />
-            <span>{language === 'mr' ? 'आरोग्य सेवा संचालनालय • महाराष्ट्र राज्य नियंत्रण कक्ष' : 'Directorate of Health Services • State Command & Analytics Center'}</span>
+    <div className="space-y-6 animate-in fade-in duration-500 pb-20">
+      
+      {/* 1. TOP HEALTH INTELLIGENCE KPI */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-slate-900 rounded-3xl p-6 shadow-lg text-white relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 rounded-bl-[100px] -z-10 group-hover:bg-blue-500/30 transition-colors"></div>
+          <div className="w-12 h-12 bg-white dark:bg-slate-900/10 rounded-2xl flex items-center justify-center mb-4 backdrop-blur-md border border-white/10">
+            <Users className="w-6 h-6 text-blue-300" />
           </div>
-          <h2 className="text-xl sm:text-2xl font-bold mt-1">{user.name}</h2>
-          <p className="text-xs sm:text-sm text-slate-300 mt-1">
-            {user.facilityName} • Government of Maharashtra • {user.registrationNumber}
-          </p>
+          <div className="text-4xl font-black tracking-tight">1.2M</div>
+          <div className="text-sm font-bold text-blue-200 mt-1 uppercase tracking-wide">Population Coverage</div>
+          <div className="flex items-center gap-2 mt-4 text-xs font-semibold text-emerald-400 bg-emerald-400/10 w-fit px-2 py-1 rounded-md border border-emerald-400/20">
+            <TrendingUp className="w-3 h-3" /> +12% this month
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={onOpenBedMatrix}
-            className="px-3.5 py-2 text-xs font-bold bg-blue-800 hover:bg-blue-700 text-white rounded-xl shadow transition-colors"
-          >
-            {t('bedMatrix')}
-          </button>
-          <button
-            onClick={onOpenStockLedger}
-            className="px-3.5 py-2 text-xs font-bold bg-rose-700 hover:bg-rose-800 text-white rounded-xl shadow transition-colors"
-          >
-            {t('emergencyStock')}
-          </button>
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-700 relative overflow-hidden group cursor-pointer" onClick={onOpenBedMatrix}>
+          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 dark:bg-emerald-900/20 rounded-bl-[100px] -z-10 group-hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"></div>
+          <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/40 rounded-2xl flex items-center justify-center mb-4 border border-emerald-200 dark:border-emerald-800">
+            <Building2 className="w-6 h-6 text-emerald-600" />
+          </div>
+          <div className="text-4xl font-black tracking-tight text-slate-800 dark:text-slate-100">{bedUtilization}%</div>
+          <div className="text-sm font-bold text-emerald-600 mt-1 uppercase tracking-wide">Bed Utilization</div>
+          <div className="mt-4 w-full bg-slate-100 dark:bg-slate-950 rounded-full h-2 overflow-hidden">
+            <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${bedUtilization}%` }}></div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-700 relative overflow-hidden group cursor-pointer" onClick={onOpenStockLedger}>
+          <div className="absolute top-0 right-0 w-32 h-32 bg-amber-50 dark:bg-amber-900/20 rounded-bl-[100px] -z-10 group-hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"></div>
+          <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/40 rounded-2xl flex items-center justify-center mb-4 border border-amber-200 dark:border-amber-800">
+            <Package className="w-6 h-6 text-amber-600" />
+          </div>
+          <div className="text-4xl font-black tracking-tight text-slate-800 dark:text-slate-100">{criticalShortages}</div>
+          <div className="text-sm font-bold text-amber-600 mt-1 uppercase tracking-wide">Critical Shortages</div>
+          <div className="mt-4 text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-500" /> {openSupplyRequests} pending supply request(s)
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-indigo-900 to-purple-900 rounded-3xl p-6 shadow-lg text-white relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white dark:bg-slate-900/10 rounded-bl-[100px] -z-10"></div>
+          <div className="w-12 h-12 bg-white dark:bg-slate-900/10 rounded-2xl flex items-center justify-center mb-4 backdrop-blur-md border border-white/10">
+            <Server className="w-6 h-6 text-purple-300" />
+          </div>
+          <div className="text-4xl font-black tracking-tight flex items-center gap-3">
+            99.9% <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span></span>
+          </div>
+          <div className="text-sm font-bold text-purple-200 mt-1 uppercase tracking-wide">ABDM Network Status</div>
+          <div className="mt-4 text-xs font-semibold text-emerald-300 flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4" /> Fully Interoperable
+          </div>
         </div>
       </div>
 
-      {/* Macro Healthcare Indicators */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-[11px] text-slate-500 block font-medium">Statewide Bed Occupancy</span>
-          <div className="text-2xl font-bold text-slate-900 mt-1">
-            {bedOccupancyRate}%
-          </div>
-          <span className="text-[10px] text-slate-600 block mt-0.5">
-            {occupiedBeds} of {totalBeds} beds utilized
-          </span>
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-[11px] text-slate-500 block font-medium">Statewide ICU Occupancy</span>
-          <div className="text-2xl font-bold text-purple-900 mt-1">
-            {icuOccupancyRate}%
-          </div>
-          <span className="text-[10px] text-purple-700 font-semibold block mt-0.5">
-            {occupiedIcu} / {totalIcu} ICU beds filled
-          </span>
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-[11px] text-slate-500 block font-medium">Referral Completion Rate</span>
-          <div className="text-2xl font-bold text-emerald-700 mt-1">94.8%</div>
-          <span className="text-[10px] text-emerald-700 font-semibold block mt-0.5">
-            Zero dropped maternal referrals
-          </span>
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-[11px] text-slate-500 block font-medium">Critical Drug Alerts</span>
-          <div className="text-2xl font-bold text-rose-700 mt-1">
-            {criticalStockItems.length}
-          </div>
-          <span className="text-[10px] text-rose-700 font-semibold block mt-0.5">
-            Facilities below 25% buffer
-          </span>
-        </div>
-      </div>
-
-      {/* Main Grid: Outbreak Surveillance & Referral Bottlenecks */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left 7 Cols: Disease Outbreak Surveillance Map & Hotspot Clusters */}
-        <div className="lg:col-span-7 space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
-            <div className="flex flex-wrap justify-between items-center gap-3">
-              <div>
-                <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                  <MapPin className="w-5 h-5 text-rose-600" />
-                  <span>
-                    {language === 'mr' ? 'राज्यस्तरीय संसर्गजन्य रोग प्रादुर्भाव सनियंत्रण' : 'Epidemiological Disease Outbreak Surveillance'}
-                  </span>
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Integrated Integrated Disease Surveillance Programme (IDSP) syndromic reporting
-                </p>
-              </div>
-
-              {/* Disease Filter */}
-              <select
-                value={selectedDisease}
-                onChange={(e) => setSelectedDisease(e.target.value)}
-                className="text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg bg-slate-50"
-              >
-                <option value="All">All Diseases (सर्व आजार)</option>
-                <option value="Dengue">Dengue</option>
-                <option value="Malaria">Malaria</option>
-                <option value="Acute Diarrheal Disease">Acute Diarrheal Disease</option>
-                <option value="Leptospirosis">Leptospirosis</option>
-                <option value="Chikungunya">Chikungunya</option>
-              </select>
-            </div>
-
-            {/* Interactive Visual Map Representation */}
-            <div className="bg-slate-900 rounded-xl p-4 text-white space-y-3 relative overflow-hidden">
-              <div className="flex justify-between items-center text-xs">
-                <span className="font-bold text-teal-400">MAHARASHTRA DISTRICT HOTSPOT CLUSTERS</span>
-                <span className="text-[10px] text-slate-400">Live Telemetry Map</span>
-              </div>
-
-              {/* Graphical Hotspot Matrix */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                {filteredOutbreaks.map((out) => (
-                  <div
-                    key={out.id}
-                    className={`p-3 rounded-lg border text-xs space-y-1 ${
-                      out.riskLevel === 'HIGH'
-                        ? 'bg-rose-950/70 border-rose-600'
-                        : 'bg-slate-800 border-slate-700'
-                    }`}
-                  >
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-white text-sm">{out.district}</span>
-                      <span
-                        className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                          out.riskLevel === 'HIGH'
-                            ? 'bg-rose-600 text-white'
-                            : 'bg-amber-500 text-slate-950'
-                        }`}
-                      >
-                        {out.diseaseName} • {out.riskLevel}
-                      </span>
-                    </div>
-
-                    <div className="text-[11px] text-slate-300">
-                      Taluka: <strong>{out.taluka}</strong> (Hotspot: {out.primaryHotspotVillage})
-                    </div>
-
-                    <div className="flex justify-between items-center text-[10px] text-slate-400 pt-1 border-t border-slate-700">
-                      <span>{out.activeCases} Active Cases</span>
-                      <span
-                        className={out.weeklyChangePercent > 0 ? 'text-rose-400 font-bold' : 'text-emerald-400'}
-                      >
-                        {out.weeklyChangePercent > 0 ? `▲ +${out.weeklyChangePercent}%` : `▼ ${out.weeklyChangePercent}%`} / wk
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Sub-Centres Affected Table */}
-            <div className="space-y-2">
-              <h4 className="font-bold text-slate-900 text-xs">High Vulnerability Talukas Requiring Medical Mobile Units:</h4>
-              <div className="space-y-1.5 text-xs">
-                <div className="flex justify-between p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                  <span className="font-semibold text-slate-800">Velhe & Bhor (Pune District)</span>
-                  <span className="text-rose-700 font-bold">Dengue Cluster — 142 cases (9 Sub-Centres alerted)</span>
-                </div>
-                <div className="flex justify-between p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                  <span className="font-semibold text-slate-800">Bhamragad & Dhanora (Gadchiroli District)</span>
-                  <span className="text-rose-700 font-bold">Falciparum Malaria — 98 cases (14 Sub-Centres alerted)</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right 5 Cols: Referral Corridor Bottlenecks & Critical Stock Matrix */}
-        <div className="lg:col-span-5 space-y-4">
-          {/* Referral Triage Stratification */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
-            <h3 className="font-bold text-slate-900 text-xs flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-blue-700" />
-              <span>{language === 'mr' ? 'रेफरल ट्रायज वर्गीकरण (State Triage Stratification)' : 'Statewide Referral Severity Breakdown'}</span>
+      {/* 2. COMMAND CENTER MAP & REFERRAL FLOW */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[500px]">
+        {/* Left: Intelligence Map */}
+        <div className="lg:col-span-2 bg-slate-950 rounded-3xl shadow-lg border border-slate-800 overflow-hidden relative flex flex-col">
+          <div className="p-5 flex justify-between items-center z-10 border-b border-white/10 bg-black/20 backdrop-blur-md">
+            <h3 className="font-bold text-white flex items-center gap-2">
+              <Map className="w-5 h-5 text-blue-400" /> State Health Intelligence Map
             </h3>
-
-            <div className="space-y-2 text-xs">
-              <div>
-                <div className="flex justify-between text-[11px] mb-1">
-                  <span className="font-bold text-rose-700">RED (Critical Emergency)</span>
-                  <span className="font-mono font-bold">{redReferralsCount} Referrals</span>
-                </div>
-                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-rose-600 w-[50%]" />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-[11px] mb-1">
-                  <span className="font-bold text-amber-700">YELLOW (Urgent 2-Hour)</span>
-                  <span className="font-mono font-bold">{yellowReferralsCount} Referrals</span>
-                </div>
-                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-amber-500 w-[25%]" />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-[11px] mb-1">
-                  <span className="font-bold text-emerald-700">GREEN (Routine Elective)</span>
-                  <span className="font-mono font-bold">{greenReferralsCount} Referrals</span>
-                </div>
-                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-emerald-500 w-[25%]" />
-                </div>
-              </div>
+            <div className="flex bg-white dark:bg-slate-900/10 rounded-lg p-1 border border-white/5">
+              <button className="px-3 py-1.5 text-xs font-bold text-white bg-white dark:bg-slate-900/20 rounded shadow-sm">Real-time</button>
+              <button className="px-3 py-1.5 text-xs font-bold text-slate-400 hover:text-white">Predictive</button>
             </div>
           </div>
-
-          {/* Critical Stock Deficit Alerts */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
-            <div className="flex justify-between items-center">
-              <h3 className="font-bold text-slate-900 text-xs flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-rose-600" />
-                <span>Critical Drug Depletion Alerts</span>
-              </h3>
-              <span className="text-[10px] font-bold bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full">
-                Action Required
-              </span>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              {criticalStockItems.map((stk) => (
-                <div key={stk.id} className="p-2.5 rounded-lg bg-rose-50/70 border border-rose-200 space-y-1">
-                  <div className="flex justify-between font-bold text-slate-900">
-                    <span>{stk.drugName}</span>
-                    <span className="text-rose-700 font-mono">{stk.currentStock} {stk.unit}</span>
-                  </div>
-                  <div className="text-[11px] text-slate-600 flex justify-between">
-                    <span>{stk.facilityName}</span>
-                    <span className="text-slate-500">Buffer Min: {stk.bufferStock}</span>
-                  </div>
-                </div>
+          
+          <div className="flex-1 relative overflow-hidden bg-slate-900 flex items-center justify-center">
+            {/* Abstract map representation using Ashoka Chakra and data points */}
+            <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at center, #1e293b 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
+            
+            <svg width="600" height="400" viewBox="0 0 100 100" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-10 pointer-events-none animate-[spin_120s_linear_infinite]">
+              <circle cx="50" cy="50" r="48" fill="none" stroke="#fff" strokeWidth="1" />
+              {[...Array(24)].map((_, i) => (
+                <line key={i} x1="50" y1="50" x2="50" y2="2" stroke="#fff" strokeWidth="0.5" transform={"rotate(" + (i * 15) + " 50 50)"} />
               ))}
+            </svg>
+
+            {/* Glowing nodes representing facilities */}
+            <div className="absolute top-[30%] left-[40%] group">
+              <div className="absolute inset-0 bg-blue-500 blur-xl opacity-50 rounded-full animate-pulse"></div>
+              <div className="w-4 h-4 bg-blue-400 rounded-full border-2 border-white relative z-10"></div>
+              <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-20">Pune District Hospital</div>
             </div>
 
-            <button
-              onClick={onOpenStockLedger}
-              className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5"
-            >
-              <Zap className="w-3.5 h-3.5 text-amber-400" />
-              <span>Trigger Inter-District Stock Reallocation</span>
-            </button>
+            <div className="absolute top-[60%] left-[30%] group">
+              <div className="absolute inset-0 bg-rose-500 blur-xl opacity-50 rounded-full animate-pulse"></div>
+              <div className="w-3 h-3 bg-rose-400 rounded-full border-2 border-white relative z-10"></div>
+              <div className="absolute top-5 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-20">Velhe PHC (High Risk Alert)</div>
+            </div>
+
+            <div className="absolute top-[45%] left-[65%] group">
+              <div className="absolute inset-0 bg-emerald-500 blur-xl opacity-50 rounded-full"></div>
+              <div className="w-3 h-3 bg-emerald-400 rounded-full border-2 border-white relative z-10"></div>
+              <div className="absolute top-5 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-20">Shirur Sub-Centre</div>
+            </div>
+
+            {/* Animated SVG lines for Referrals */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
+              <path d="M 30% 60% Q 35% 45% 40% 30%" fill="none" stroke="rgba(244, 63, 94, 0.5)" strokeWidth="2" strokeDasharray="4 4" className="animate-[dash_2s_linear_infinite]" />
+              <path d="M 65% 45% Q 52% 37% 40% 30%" fill="none" stroke="rgba(56, 189, 248, 0.5)" strokeWidth="2" strokeDasharray="4 4" className="animate-[dash_3s_linear_infinite]" />
+            </svg>
+            
+          </div>
+        </div>
+
+        {/* Right: Outbreak & Alerts panel */}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col">
+          <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+            <h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <Activity className="w-4 h-4 text-rose-500" /> AI Outbreak Signals
+            </h3>
+          </div>
+          <div className="flex-1 p-5 overflow-y-auto space-y-4">
+            
+            <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-100 rounded-xl p-4">
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-[10px] font-bold text-rose-600 bg-rose-100 dark:bg-rose-900/40 px-2 py-1 rounded uppercase tracking-wide">High Confidence</span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Just now</span>
+              </div>
+              <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm">Dengue Cluster Detected</h4>
+              <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 mb-3">AI identified 14 correlating fever/platelet cases across 3 adjacent PHCs in Velhe block.</p>
+              <button className="w-full py-2 bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400 text-xs font-bold rounded-lg hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors flex justify-center items-center gap-1">
+                Deploy Mobile Team <ChevronRight className="w-3 h-3" />
+              </button>
+            </div>
+
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 rounded-xl p-4">
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-[10px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/40 px-2 py-1 rounded uppercase tracking-wide">Monitor</span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">2 hrs ago</span>
+              </div>
+              <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm">Maternal Anemia Trend</h4>
+              <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">22% increase in severe anemia flags reported by ASHA offline syncs in rural clusters.</p>
+            </div>
           </div>
         </div>
       </div>
+
     </div>
   );
 }
+

@@ -146,7 +146,7 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-6 animate-in fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700">
         {/* Header */}
         <div className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -165,8 +165,8 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-xs">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-900 flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-blue-700 shrink-0" />
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-blue-900 dark:text-blue-200 flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-blue-700 dark:text-blue-400 shrink-0" />
             <span>
               {language === 'mr'
                 ? 'नोंदणी केल्यावर आपोआप १४-अंकी आयुष्मान भारत डिजिटल आरोग्य ओळखपत्र (ABHA) तयार होईल.'
@@ -176,35 +176,35 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">{t('fullName')} *</label>
+              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">{t('fullName')} *</label>
               <input
                 type="text"
                 required
                 placeholder="e.g., Sangeeta Ramesh Shinde"
                 value={formData.fullName}
                 onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">{t('age')} *</label>
+                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">{t('age')} *</label>
                 <input
                   type="number"
                   required
                   placeholder="e.g., 28"
                   value={formData.age}
                   onChange={(e) => setFormData({ ...formData, age: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white"
                 />
               </div>
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">{t('gender')}</label>
+                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">{t('gender')}</label>
                 <select
                   value={formData.gender}
                   onChange={(e) => setFormData({ ...formData, gender: e.target.value as any })}
-                  className="w-full px-2 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                  className="w-full px-2 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white"
                 >
                   <option value="Female">Female</option>
                   <option value="Male">Male</option>
@@ -215,13 +215,13 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
           </div>
 
           {/* Patient Phone & OTP Verification Card */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
+          <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 space-y-3">
             <div className="flex flex-wrap justify-between items-center gap-2">
-              <label className="block font-bold text-slate-800 text-xs">
+              <label className="block font-bold text-slate-800 dark:text-slate-100 text-xs">
                 Patient Mobile Number & ABDM OTP Verification *
               </label>
               {isOtpVerified && (
-                <span className="text-[11px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-300">
+                <span className="text-[11px] font-bold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-700">
                   ✓ Patient Mobile Verified via ABDM Gateway
                 </span>
               )}
@@ -239,7 +239,7 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
                     setIsOtpVerified(false);
                     setIsOtpSent(false);
                   }}
-                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono font-bold"
+                  className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs font-mono font-bold dark:bg-slate-800 dark:text-white"
                 />
                 {!isOtpVerified && (
                   <button
@@ -254,11 +254,11 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">{t('bloodGroup')}</label>
+                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">{t('bloodGroup')}</label>
                 <select
                   value={formData.bloodGroup}
                   onChange={(e) => setFormData({ ...formData, bloodGroup: e.target.value })}
-                  className="w-full px-2 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                  className="w-full px-2 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white"
                 >
                   <option value="A Positive">A Positive (A+)</option>
                   <option value="A Negative">A Negative (A-)</option>
@@ -274,15 +274,15 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
 
             {/* Real SMS Dispatched Banner */}
             {isOtpSent && !isOtpVerified && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-950 space-y-2 animate-in slide-in-from-top-2">
-                <div className="flex justify-between items-center text-[11px] font-bold text-blue-900">
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-xs text-blue-950 dark:text-blue-100 dark:text-blue-100 space-y-2 animate-in slide-in-from-top-2">
+                <div className="flex justify-between items-center text-[11px] font-bold text-blue-900 dark:text-blue-200">
                   <span className="flex items-center gap-1.5">
-                    <Send className="w-3.5 h-3.5 text-blue-700" />
+                    <Send className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400" />
                     <span>6-DIGIT OTP DISPATCHED VIA SMS</span>
                   </span>
-                  <span className="font-mono text-slate-600">+91 {formData.phone}</span>
+                  <span className="font-mono text-slate-600 dark:text-slate-300">+91 {formData.phone}</span>
                 </div>
-                <p className="text-[11px] text-slate-700 leading-relaxed">
+                <p className="text-[11px] text-slate-700 dark:text-slate-200 leading-relaxed">
                   {smsGatewayInfo || `A 6-digit OTP code has been sent via SMS to +91 ${formData.phone}. Please ask the patient for the code received on their mobile.`}
                 </p>
                 <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -292,7 +292,7 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
                     placeholder="Enter 6-digit OTP"
                     value={patientOtp}
                     onChange={(e) => setPatientOtp(e.target.value)}
-                    className="w-44 px-3 py-1.5 border border-blue-300 rounded-lg text-xs font-mono font-black text-center tracking-widest bg-white shadow-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                    className="w-44 px-3 py-1.5 border border-blue-300 dark:border-blue-700 rounded-lg text-xs font-mono font-black text-center tracking-widest bg-white dark:bg-slate-900 shadow-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white"
                   />
                   <button
                     type="button"
@@ -308,37 +308,37 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">{t('village')}</label>
+              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">{t('village')}</label>
               <input
                 type="text"
                 value={formData.village}
                 onChange={(e) => setFormData({ ...formData, village: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white"
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">{t('taluka')}</label>
+              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">{t('taluka')}</label>
               <input
                 type="text"
                 value={formData.taluka}
                 onChange={(e) => setFormData({ ...formData, taluka: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white"
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">{t('district')}</label>
+              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">{t('district')}</label>
               <input
                 type="text"
                 value={formData.district}
                 onChange={(e) => setFormData({ ...formData, district: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white"
               />
             </div>
           </div>
 
           {/* Maternal / Pregnancy Screening Flag */}
           {formData.gender === 'Female' && (
-            <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-3 space-y-3">
+            <div className="bg-amber-50 dark:bg-amber-900/60 border border-amber-200 dark:border-amber-800 rounded-xl p-3 space-y-3">
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -347,15 +347,15 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
                   onChange={(e) => setFormData({ ...formData, isPregnant: e.target.checked })}
                   className="w-4 h-4 text-amber-600 rounded"
                 />
-                <label htmlFor="isPregnant" className="font-bold text-amber-900 text-xs cursor-pointer">
+                <label htmlFor="isPregnant" className="font-bold text-amber-900 dark:text-amber-200 text-xs cursor-pointer">
                   {t('isPregnant')}
                 </label>
               </div>
 
               {formData.isPregnant && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-amber-200/60">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-amber-200 dark:border-amber-800/60">
                   <div>
-                    <label className="block font-semibold text-amber-900 mb-1">
+                    <label className="block font-semibold text-amber-900 dark:text-amber-200 mb-1">
                       {t('gestationalWeeks')}
                     </label>
                     <input
@@ -366,7 +366,7 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
                       onChange={(e) =>
                         setFormData({ ...formData, gestationalWeeks: parseInt(e.target.value) || 20 })
                       }
-                      className="w-full px-3 py-1.5 border border-amber-300 rounded-lg text-xs"
+                      className="w-full px-3 py-1.5 border border-amber-300 dark:border-amber-700 rounded-lg text-xs dark:bg-slate-800 dark:text-white"
                     />
                   </div>
                   <div className="flex items-center gap-2 pt-4">
@@ -377,7 +377,7 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
                       onChange={(e) => setFormData({ ...formData, isHighRiskPregnancy: e.target.checked })}
                       className="w-4 h-4 text-rose-600 rounded"
                     />
-                    <label htmlFor="isHighRisk" className="font-bold text-rose-800 text-xs cursor-pointer">
+                    <label htmlFor="isHighRisk" className="font-bold text-rose-800 dark:text-rose-300 text-xs cursor-pointer">
                       {t('highRiskFlag')}
                     </label>
                   </div>
@@ -387,7 +387,7 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
           )}
 
           <div>
-            <label className="block font-semibold text-slate-700 mb-1">
+            <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">
               {language === 'mr' ? 'दीर्घकालीन आजार (स्वल्पविरामाने वेगळे करा)' : 'Known Chronic Conditions (comma separated)'}
             </label>
             <input
@@ -395,48 +395,48 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
               placeholder="e.g. Hypertension, Diabetes, Asthma"
               value={formData.chronicConditions}
               onChange={(e) => setFormData({ ...formData, chronicConditions: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs dark:bg-slate-800 dark:text-white"
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Emergency Contact Name</label>
+              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Emergency Contact Name</label>
               <input
                 type="text"
                 placeholder="Name"
                 value={formData.emergencyName}
                 onChange={(e) => setFormData({ ...formData, emergencyName: e.target.value })}
-                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs"
+                className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg text-xs dark:bg-slate-800 dark:text-white"
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Relation</label>
+              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Relation</label>
               <input
                 type="text"
                 placeholder="Relation"
                 value={formData.emergencyRelation}
                 onChange={(e) => setFormData({ ...formData, emergencyRelation: e.target.value })}
-                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs"
+                className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg text-xs dark:bg-slate-800 dark:text-white"
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Emergency Phone</label>
+              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Emergency Phone</label>
               <input
                 type="tel"
                 placeholder="Phone"
                 value={formData.emergencyPhone}
                 onChange={(e) => setFormData({ ...formData, emergencyPhone: e.target.value })}
-                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs"
+                className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg text-xs dark:bg-slate-800 dark:text-white"
               />
             </div>
           </div>
 
-          <div className="pt-4 flex justify-end gap-3 border-t border-slate-200">
+          <div className="pt-4 flex justify-end gap-3 border-t border-slate-200 dark:border-slate-700">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
+              className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 rounded-lg font-medium"
             >
               {language === 'mr' ? 'रद्द करा' : 'Cancel'}
             </button>

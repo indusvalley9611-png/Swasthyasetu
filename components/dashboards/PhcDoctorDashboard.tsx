@@ -1,25 +1,14 @@
-'use client';
-
+﻿'use client';
 import React, { useState } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
 import { useSync } from '@/context/SyncContext';
 import { Patient, PrescriptionItem } from '@/lib/types';
 import {
-  Stethoscope,
-  Pill,
-  Send,
-  CreditCard,
-  FileText,
-  Search,
-  CheckCircle2,
-  AlertTriangle,
-  Clock,
-  Plus,
-  TestTube,
-  Activity,
-  History,
-  Building2,
+  Stethoscope, Pill, Send, CreditCard, FileText, Search,
+  CheckCircle2, AlertTriangle, Clock, Plus, TestTube,
+  Activity, History, Building2, ChevronRight,
+  ArrowRight, ShieldCheck, Thermometer, UserSquare, ArrowRightCircle
 } from 'lucide-react';
 
 interface PhcDoctorDashboardProps {
@@ -40,469 +29,270 @@ export function PhcDoctorDashboard({
   const { patients, referrals, addClinicalEncounter } = useSync();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(patients[0] || null);
-
-  // Prescription Writer State
-  const [diagnosis, setDiagnosis] = useState('');
-  const [icd10, setIcd10] = useState('');
-  const [prescriptions, setPrescriptions] = useState<PrescriptionItem[]>([
-    {
-      medicineName: 'Amlodipine',
-      dosage: '5mg',
-      frequency: '1-0-0',
-      durationDays: 30,
-      instructions: 'Take in the morning after breakfast',
-    },
-  ]);
-  const [newMedName, setNewMedName] = useState('Paracetamol 650mg');
-  const [newMedDosage, setNewMedDosage] = useState('650mg');
-  const [newMedFreq, setNewMedFreq] = useState('1-0-1');
-  const [newMedDays, setNewMedDays] = useState(5);
-  const [newMedInstructions, setNewMedInstructions] = useState('After food');
-
-  // Lab orders
-  const [orderedLabs, setOrderedLabs] = useState<string[]>([]);
-  const [labSearch, setLabSearch] = useState('');
-  const edlPresets = [
-    { name: 'Paracetamol', dosage: '650mg', freq: '1-0-1', days: 5, inst: 'After meals for fever/pain' },
-    { name: 'Amlodipine', dosage: '5mg', freq: '1-0-0', days: 30, inst: 'Morning after food (Hypertension)' },
-    { name: 'Metformin', dosage: '500mg', freq: '1-0-1', days: 30, inst: 'With meals (Diabetes)' },
-    { name: 'Iron & Folic Acid (IFA)', dosage: '100mg', freq: '0-1-0', days: 30, inst: 'After lunch with lime water' },
-    { name: 'ORS Sachet', dosage: '1 Packet', freq: 'Ad lib', days: 3, inst: 'Dissolve in 1 litre drinking water' },
-    { name: 'Amoxicillin', dosage: '500mg', freq: '1-1-1', days: 5, inst: 'Antibiotic course after food' },
-    { name: 'Labetalol', dosage: '100mg', freq: '1-0-1', days: 7, inst: 'Take strictly with water (Pre-eclampsia)' },
-  ];
+  const [selectedPatient, setselectedPatient] = useState<Patient | null>(patients[0] || null);
+  const [activeTab, setActiveTab] = useState<'clinical' | 'prescriptions' | 'referral'>('clinical');
 
   const filteredPatients = patients.filter((p) => {
     const q = searchQuery.toLowerCase();
     return (
       p.fullName.toLowerCase().includes(q) ||
       p.abhaId.includes(q) ||
-      p.phone.includes(q) ||
-      p.village.toLowerCase().includes(q)
+      p.phone.includes(q)
     );
   });
 
-  const addPrescriptionRow = () => {
-    if (!newMedName) return;
-    setPrescriptions([
-      ...prescriptions,
-      {
-        medicineName: newMedName,
-        dosage: newMedDosage,
-        frequency: newMedFreq,
-        durationDays: newMedDays,
-        instructions: newMedInstructions,
-      },
-    ]);
-  };
-
-  const removePrescriptionRow = (index: number) => {
-    setPrescriptions(prescriptions.filter((_, i) => i !== index));
-  };
-
-  const handleApplyPreset = (preset: typeof edlPresets[0]) => {
-    setPrescriptions([
-      ...prescriptions,
-      {
-        medicineName: preset.name,
-        dosage: preset.dosage,
-        frequency: preset.freq,
-        durationDays: preset.days,
-        instructions: preset.inst,
-      },
-    ]);
-  };
-
-  const toggleLabOrder = (test: string) => {
-    setOrderedLabs((prev) =>
-      prev.includes(test) ? prev.filter((t) => t !== test) : [...prev, test]
-    );
-  };
-
-  const handleSaveOpdEncounter = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedPatient) return;
-
-    const encounter = {
-      id: 'enc-' + Date.now(),
-      patientId: selectedPatient.id,
-      date: new Date().toISOString().split('T')[0],
-      facilityName: user.facilityName,
-      facilityType: 'PHC',
-      providerName: user.name,
-      providerRole: 'Medical Officer (MBBS)',
-      chiefComplaints: ['Clinical OPD Consultation'],
-      diagnosis: diagnosis || 'Clinical Evaluation & Treatment',
-      icd10Code: icd10 || undefined,
-      vitals: selectedPatient.encounters[0]?.vitals || {
-        systolicBp: 120,
-        diastolicBp: 80,
-        heartRate: 74,
-        spO2: 98,
-        respiratoryRate: 16,
-        temperature: 37.0,
-        consciousLevel: 'alert',
-        recordedAt: new Date().toISOString(),
-      },
-      prescriptions,
-      labReports: orderedLabs.map((lab) => ({
-        id: 'lab-' + Date.now() + Math.random(),
-        testName: lab,
-        result: 'Sample collected, processing at PHC laboratory',
-        normalRange: 'Pending',
-        isAbnormal: false,
-        date: new Date().toISOString().split('T')[0],
-        labFacility: `${user.facilityName} Lab`,
-      })),
-      notes: `OPD clinical encounter documented by Medical Officer. Prescriptions issued from Maharashtra Essential Drugs List.`,
-    };
-
-    addClinicalEncounter(selectedPatient.id, encounter);
-    setDiagnosis('');
-    setIcd10('');
-    setOrderedLabs([]);
-  };
+  const highRiskPatients = patients.filter(p => p.isHighRiskPregnancy || p.age <= 5);
 
   return (
-    <div className="space-y-6">
-      {/* Doctor Header Banner */}
-      <div className="bg-gradient-to-r from-blue-950 via-blue-900 to-teal-900 rounded-2xl p-5 sm:p-6 text-white shadow-lg flex flex-wrap justify-between items-center gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-teal-300 text-xs font-semibold uppercase tracking-wider">
-            <Stethoscope className="w-4 h-4" />
-            <span>{language === 'mr' ? 'प्राथमिक आरोग्य केंद्र (PHC) बाह्यरुग्ण कक्ष (OPD)' : 'Primary Health Centre Clinical OPD'}</span>
+    <div className="space-y-6 animate-in fade-in duration-500 pb-20">
+      
+      {/* 1. TOP KPI DASHBOARD */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4">
+        {[
+          { label: language === 'mr' ? '???? ?????' : 'Patients Today', val: '42', icon: UserSquare, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20', border: 'border-blue-100' },
+          { label: language === 'mr' ? '???????? ???????' : 'Incoming Referrals', val: '8', icon: ArrowRightCircle, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20', border: 'border-amber-100' },
+          { label: language === 'mr' ? '???????????' : 'High-Risk Cases', val: highRiskPatients.length.toString(), icon: AlertTriangle, color: 'text-rose-600', bg: 'bg-rose-50 dark:bg-rose-900/20', border: 'border-rose-100' },
+          { label: language === 'mr' ? '???? ????-??' : 'Follow-ups', val: '14', icon: Clock, color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-900/20', border: 'border-indigo-100' },
+          { label: language === 'mr' ? '?????? ????' : 'District Beds', val: '32 / 50', icon: Building2, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-100' },
+        ].map((kpi, idx) => (
+          <div key={idx} className={"bg-white dark:bg-slate-900 rounded-2xl border p-4 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow " + kpi.border}>
+            <div className="flex justify-between items-start mb-2">
+              <div className={"w-8 h-8 rounded-full flex items-center justify-center " + kpi.bg}>
+                <kpi.icon className={"w-4 h-4 " + kpi.color} />
+              </div>
+            </div>
+            <div>
+              <div className="text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight">{kpi.val}</div>
+              <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-0.5">{kpi.label}</div>
+            </div>
           </div>
-          <h2 className="text-xl sm:text-2xl font-bold mt-1">{user.name}</h2>
-          <p className="text-xs sm:text-sm text-blue-200 mt-1">
-            {user.facilityName} • Reg: {user.registrationNumber} • {user.district}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onOpenNewPatient}
-            className="px-3.5 py-2 text-xs font-semibold bg-teal-600 hover:bg-teal-700 text-white rounded-xl shadow transition-colors"
-          >
-            + {t('newPatient')}
-          </button>
-        </div>
+        ))}
       </div>
 
-      {/* Main Layout: Left Roster & Right Clinical Consultation Desk */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left 4 Cols: Patient OPD Roster */}
-        <div className="lg:col-span-4 space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
-            <div className="flex justify-between items-center">
-              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                <History className="w-4 h-4 text-blue-700" />
-                <span>{language === 'mr' ? 'दैनिक बाह्यरुग्ण यादी' : 'Daily OPD Patient Queue'}</span>
+      {/* 2. MAIN WORKSPACE */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[800px]">
+        
+        {/* LEFT: INCOMING QUEUE (ASHA Referrals + OPD) */}
+        <div className="lg:col-span-3 flex flex-col gap-4 overflow-hidden h-full">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm flex-1 flex flex-col overflow-hidden">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+              <h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 text-sm">
+                <History className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                {language === 'mr' ? '????? ????' : 'Clinical Queue'}
               </h3>
-              <span className="text-xs font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
-                {patients.length} Registered
-              </span>
+              <div className="relative mt-3">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder={language === 'mr' ? '????? ????...' : 'Search queue...'}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden transition-all shadow-sm dark:bg-slate-800 dark:text-white"
+                />
+              </div>
             </div>
-
-            {/* Search Input */}
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search ABHA ID, Phone or Name..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-              />
-            </div>
-
-            {/* List */}
-            <div className="space-y-2 max-h-[580px] overflow-y-auto">
-              {filteredPatients.map((p) => {
-                const isSelected = selectedPatient?.id === p.id;
-                const isHrp = p.isHighRiskPregnancy;
-
+            
+            <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+              {filteredPatients.map(patient => {
+                const isSelected = selectedPatient?.id === patient.id;
+                const isHighRisk = patient.isHighRiskPregnancy || patient.age <= 5;
                 return (
-                  <div
-                    key={p.id}
-                    onClick={() => setSelectedPatient(p)}
-                    className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                      isSelected
-                        ? 'bg-blue-50 border-blue-600 shadow-xs'
-                        : isHrp
-                        ? 'bg-rose-50/40 border-rose-300 hover:border-rose-400'
-                        : 'bg-white border-slate-200 hover:border-slate-300'
-                    }`}
+                  <button
+                    key={patient.id}
+                    onClick={() => setselectedPatient(patient)}
+                    className={"w-full text-left p-3 rounded-xl transition-all border flex gap-3 " + (isSelected ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 shadow-sm' : 'bg-white dark:bg-slate-900 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:border-slate-200 dark:hover:border-slate-700')}
                   >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
-                          <span>{p.fullName}</span>
-                          {isHrp && (
-                            <span className="text-[9px] font-extrabold bg-rose-600 text-white px-1.5 py-0.2 rounded-full">
-                              HRP
-                            </span>
-                          )}
+                    <div className={"w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 " + (isHighRisk ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400' : 'bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-300')}>
+                      {patient.fullName.charAt(0)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-bold text-sm text-slate-900 dark:text-white truncate">{patient.fullName}</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">{patient.age}y &middot; {patient.gender === 'Female' ? 'Female' : 'Male'}</div>
+                      {isHighRisk && (
+                        <div className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-900/20 px-1.5 py-0.5 rounded mt-1">
+                          <AlertTriangle className="w-3 h-3" /> ASHA Flagged
                         </div>
-                        <div className="text-[11px] text-slate-500">
-                          {p.gender} • {p.age} Yrs • {p.village}
-                        </div>
-                        <div className="text-[10px] font-mono text-blue-900 mt-0.5">
-                          ABHA: {p.abhaId}
-                        </div>
-                      </div>
-
-                      {p.activeReferralId && (
-                        <span className="text-[9px] font-bold bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded">
-                          Referral
-                        </span>
                       )}
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
           </div>
         </div>
 
-        {/* Right 8 Cols: Clinical Examination, Longitudinal EHR & Prescription Desk */}
-        <div className="lg:col-span-8 space-y-4">
+        {/* CENTER & RIGHT: CLINICAL COMMAND CENTER */}
+        <div className="lg:col-span-9 flex flex-col h-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
           {selectedPatient ? (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-5">
-              {/* Selected Patient Header */}
-              <div className="flex flex-wrap justify-between items-start gap-3 border-b border-slate-200 pb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-bold text-slate-900">{selectedPatient.fullName}</h3>
-                    <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full font-medium">
-                      {selectedPatient.gender}, {selectedPatient.age} Yrs
-                    </span>
-                    <span className="text-xs bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full font-bold">
-                      {selectedPatient.bloodGroup}
-                    </span>
+            <>
+              {/* Context Header */}
+              <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex flex-wrap justify-between items-start gap-4 bg-slate-50 dark:bg-slate-800/30">
+                <div className="flex items-start gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center text-blue-700 dark:text-blue-400 font-black text-xl shadow-inner border border-blue-300 dark:border-blue-700/30">
+                    {selectedPatient.fullName.charAt(0)}
                   </div>
-                  <div className="text-xs text-slate-500 mt-1 font-mono">
-                    ABHA: <strong className="text-blue-900">{selectedPatient.abhaId}</strong> • Phone: {selectedPatient.phone} • Village: {selectedPatient.village}
+                  <div>
+                    <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{selectedPatient.fullName}</h2>
+                    <div className="flex items-center gap-3 text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1.5">
+                      <span className="flex items-center gap-1"><CreditCard className="w-3.5 h-3.5" /> ABHA: {selectedPatient.abhaId}</span>
+                      <span className="text-slate-300">|</span>
+                      <span>{selectedPatient.age} years</span>
+                      <span className="text-slate-300">|</span>
+                      <span>{selectedPatient.gender === 'Female' ? 'Female' : 'Male'}</span>
+                    </div>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => onOpenAbhaCard(selectedPatient)}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg border border-slate-300 transition-colors"
-                  >
-                    <CreditCard className="w-3.5 h-3.5 text-blue-700" />
-                    <span>ABHA Card</span>
+                <div className="flex gap-2">
+                  <button onClick={() => onOpenPatientTimeline(selectedPatient)} className="px-4 py-2 bg-slate-100 dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-700 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-lg transition-colors flex items-center gap-2">
+                    <Activity className="w-4 h-4" /> EHR Timeline
                   </button>
-
-                  <button
-                    onClick={() => onOpenPatientTimeline(selectedPatient)}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-900 rounded-lg border border-blue-200 transition-colors"
-                  >
-                    <History className="w-3.5 h-3.5" />
-                    <span>View Full EHR Timeline</span>
-                  </button>
-
-                  <button
-                    onClick={() => onOpenReferral(selectedPatient)}
-                    className="inline-flex items-center gap-1 px-3.5 py-1.5 text-xs font-bold bg-rose-700 hover:bg-rose-800 text-white rounded-lg shadow transition-colors"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>{language === 'mr' ? 'स्मार्ट रेफरल बनवा' : 'Generate Referral'}</span>
+                  <button onClick={() => onOpenReferral(selectedPatient)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-md hover:shadow-lg transition-all flex items-center gap-2">
+                    <Send className="w-4 h-4" /> Create Referral
                   </button>
                 </div>
               </div>
 
-              {/* Latest Vitals Strip from Sub-Centre or Prior OPD */}
-              {selectedPatient.encounters[0] && (
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                  <div className="flex justify-between items-center text-xs mb-2">
-                    <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                      <Activity className="w-4 h-4 text-teal-600" />
-                      <span>{language === 'mr' ? 'उपकेंद्र / मागील तपासणीत नोंदवलेले Vitals:' : 'Latest Recorded Vitals (Sub-Centre / OPD):'}</span>
-                    </span>
-                    <span className="text-[10px] text-slate-500">
-                      Recorded: {selectedPatient.encounters[0].date} ({selectedPatient.encounters[0].facilityName})
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
-                    <div className="bg-white p-2 rounded border border-slate-200">
-                      <span className="text-[10px] text-slate-500 block">BP (mmHg)</span>
-                      <span className="font-mono font-bold text-slate-900">
-                        {selectedPatient.encounters[0].vitals.systolicBp}/{selectedPatient.encounters[0].vitals.diastolicBp}
-                      </span>
-                    </div>
-
-                    <div className="bg-white p-2 rounded border border-slate-200">
-                      <span className="text-[10px] text-slate-500 block">SpO2 Oxygen</span>
-                      <span className="font-mono font-bold text-emerald-700">
-                        {selectedPatient.encounters[0].vitals.spO2}%
-                      </span>
-                    </div>
-
-                    <div className="bg-white p-2 rounded border border-slate-200">
-                      <span className="text-[10px] text-slate-500 block">Pulse Rate</span>
-                      <span className="font-mono font-bold text-slate-900">
-                        {selectedPatient.encounters[0].vitals.heartRate} bpm
-                      </span>
-                    </div>
-
-                    <div className="bg-white p-2 rounded border border-slate-200">
-                      <span className="text-[10px] text-slate-500 block">Hemoglobin</span>
-                      <span className="font-mono font-bold text-slate-900">
-                        {selectedPatient.encounters[0].vitals.hemoglobin || '11.8'} g/dL
-                      </span>
-                    </div>
-
-                    <div className="bg-white p-2 rounded border border-slate-200">
-                      <span className="text-[10px] text-slate-500 block">Consciousness</span>
-                      <span className="font-bold text-slate-900 uppercase">
-                        {selectedPatient.encounters[0].vitals.consciousLevel}
-                      </span>
-                    </div>
-                  </div>
+              {/* Clinical Advisory Ribbon */}
+              <div className="bg-gradient-to-r from-indigo-50 dark:from-indigo-900/20 via-purple-50 dark:via-purple-900/20 to-blue-50 dark:to-blue-900/20 px-6 py-4 border-b border-indigo-100/50 flex gap-4">
+                <div className="bg-white dark:bg-slate-900 p-2 rounded-xl shadow-sm border border-indigo-100 h-fit">
+                  <Stethoscope className="w-5 h-5 text-indigo-600" />
                 </div>
-              )}
-
-              {/* Consultation Form: Diagnosis & Digital Prescription Writer */}
-              <form onSubmit={handleSaveOpdEncounter} className="space-y-4 text-xs">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="sm:col-span-2">
-                    <label className="block font-semibold text-slate-700 mb-1">
-                      {language === 'mr' ? 'वैद्यकीय निदान (Clinical Diagnosis) *' : 'Clinical Diagnosis *'}
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Essential Hypertension Grade II / Acute Bronchitis"
-                      value={diagnosis}
-                      onChange={(e) => setDiagnosis(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">ICD-10 Code</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. I10 / J20"
-                      value={icd10}
-                      onChange={(e) => setIcd10(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono"
-                    />
-                  </div>
+                <div>
+                  <h4 className="text-xs font-black text-indigo-900 dark:text-indigo-200 uppercase tracking-widest mb-1 flex items-center gap-2">
+                    Clinical Advisory <span className="bg-indigo-600 text-white text-[9px] px-1.5 py-0.5 rounded-sm">ACTIVE</span>
+                  </h4>
+                  {selectedPatient.isHighRiskPregnancy ? (
+                    <div className="text-sm font-medium text-slate-700 dark:text-slate-200 leading-relaxed">
+                      Patient screening indicates elevated risk (Severe Anemia). Clinical protocol suggests <strong className="text-rose-600">Immediate Secondary Care</strong>.
+                      <div className="mt-2 flex items-center gap-2">
+                        <button onClick={() => onOpenReferral(selectedPatient)} className="text-xs font-bold text-indigo-700 dark:text-indigo-400 bg-indigo-100/50 dark:bg-indigo-900/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 px-3 py-1.5 rounded-md border border-indigo-200 dark:border-indigo-800 transition-colors">
+                          Refer to District Hospital
+                        </button>
+                        <span className="text-[10px] text-slate-400 font-medium">Final decision remains with the authorized MO.</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                      Vitals within normal parameters. Routine primary care pathway recommended. No immediate systemic risks detected.
+                    </div>
+                  )}
                 </div>
+              </div>
 
-                {/* Maharashtra Essential Drug List (EDL) Quick Presets */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                      <Pill className="w-4 h-4 text-teal-600" />
-                      <span>{language === 'mr' ? 'महाराष्ट्र आवश्यक औषध सूची (EDL) जलद निवड:' : 'Maharashtra Essential Drug List (EDL) Quick Presets:'}</span>
-                    </span>
+              {/* Workspace Body */}
+              <div className="flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-800/30">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  
+                  {/* Left: Vitals & History */}
+                  <div className="space-y-6">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
+                      <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm mb-4 flex items-center gap-2"><Thermometer className="w-4 h-4 text-blue-500" /> Latest Vitals (ASHA Sync)</h3>
+                      {selectedPatient.encounters[0]?.vitals ? (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                            <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Blood Pressure</div>
+                            <div className="text-lg font-black text-slate-800 dark:text-slate-100 mt-1">{selectedPatient.encounters[0].vitals.systolicBp}/{selectedPatient.encounters[0].vitals.diastolicBp} <span className="text-xs text-slate-400 font-medium">mmHg</span></div>
+                          </div>
+                          <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                            <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Heart Rate</div>
+                            <div className="text-lg font-black text-slate-800 dark:text-slate-100 mt-1">{selectedPatient.encounters[0].vitals.heartRate} <span className="text-xs text-slate-400 font-medium">bpm</span></div>
+                          </div>
+                          <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                            <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">SpO2</div>
+                            <div className="text-lg font-black text-slate-800 dark:text-slate-100 mt-1">{selectedPatient.encounters[0].vitals.spO2}%</div>
+                          </div>
+                          <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                            <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Temperature</div>
+                            <div className="text-lg font-black text-slate-800 dark:text-slate-100 mt-1">{selectedPatient.encounters[0].vitals.temperature}°C</div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-slate-500 dark:text-slate-400 italic py-4">No recent vitals synchronized.</div>
+                      )}
+                    </div>
+                    
+                    {/* Visual Referral Pipeline (Empty/Active state depending on patient) */}
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
+                      <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm mb-4 flex items-center gap-2"><Send className="w-4 h-4 text-indigo-500" /> Active Referral Pipeline</h3>
+                      
+                      <div className="relative pl-6 space-y-4 before:absolute before:inset-y-2 before:left-[11px] before:w-0.5 before:bg-slate-100 dark:bg-slate-950">
+                        <div className="relative">
+                          <div className="absolute -left-6 top-1 w-3 h-3 rounded-full bg-emerald-500 ring-4 ring-emerald-50"></div>
+                          <div className="text-xs font-bold text-slate-800 dark:text-slate-100">Referred by ASHA</div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">2 hours ago &middot; Pending MO Review</div>
+                        </div>
+                        <div className="relative">
+                          <div className="absolute -left-6 top-1 w-3 h-3 rounded-full bg-blue-500 ring-4 ring-blue-50 animate-pulse"></div>
+                          <div className="text-xs font-bold text-blue-700 dark:text-blue-400">Triaged at PHC</div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Currently Active Stage</div>
+                        </div>
+                        <div className="relative">
+                          <div className="absolute -left-6 top-1 w-3 h-3 rounded-full bg-slate-200 dark:bg-slate-700 border-2 border-white"></div>
+                          <div className="text-xs font-bold text-slate-400">Specialist Appointment</div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">Awaiting escalation decision</div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {edlPresets.map((preset) => (
-                      <button
-                        type="button"
-                        key={preset.name}
-                        onClick={() => handleApplyPreset(preset)}
-                        className="px-2.5 py-1 bg-slate-100 hover:bg-teal-50 hover:text-teal-900 text-slate-700 rounded-md border border-slate-200 text-[11px] font-medium transition-colors"
-                      >
-                        + {preset.name} {preset.dosage}
+
+                  {/* Right: Clinical Rx Writer */}
+                  <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 p-0 shadow-sm flex flex-col">
+                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+                      <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-2"><Pill className="w-4 h-4 text-emerald-500" /> Clinical Rx Writer</h3>
+                    </div>
+                    <div className="p-5 flex-1 space-y-5">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Clinical Diagnosis (ICD-10)</label>
+                        <input type="text" placeholder="e.g. Acute Pharyngitis (J02.9)" className="w-full border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white" />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Prescription Items</label>
+                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-3 mb-3">
+                          <div className="grid grid-cols-12 gap-3 text-xs font-semibold text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 pb-2 mb-2">
+                            <div className="col-span-5">Medicine</div>
+                            <div className="col-span-3">Dosage</div>
+                            <div className="col-span-4">Freq/Days</div>
+                          </div>
+                          {/* Demo Rx Row */}
+                          <div className="grid grid-cols-12 gap-3 text-sm items-center py-1">
+                            <div className="col-span-5 font-bold text-slate-800 dark:text-slate-100">Paracetamol</div>
+                            <div className="col-span-3 text-slate-600 dark:text-slate-300">650mg</div>
+                            <div className="col-span-4 text-slate-600 dark:text-slate-300 flex justify-between">
+                              <span>1-0-1 <span className="text-slate-400 mx-1">|</span> 5 days</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <button className="text-xs font-bold text-blue-600 hover:text-blue-800 dark:hover:text-blue-300 flex items-center gap-1">
+                          <Plus className="w-4 h-4" /> Add Medication (State EDL)
+                        </button>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Lab Orders</label>
+                        <button className="text-xs font-bold text-blue-600 hover:text-blue-800 dark:hover:text-blue-300 flex items-center gap-1">
+                          <Plus className="w-4 h-4" /> Add Diagnostic Test
+                        </button>
+                      </div>
+                    </div>
+                    <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-end">
+                      <button className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl shadow-md transition-colors flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4" /> Save Clinical Encounter
                       </button>
-                    ))}
+                    </div>
                   </div>
-                </div>
 
-                {/* Active Prescriptions Table */}
-                <div className="space-y-2">
-                  <label className="block font-bold text-slate-800">
-                    {language === 'mr' ? 'सध्याची औषध योजना (Rx Plan):' : 'Current Prescription Plan:'}
-                  </label>
-                  <div className="border border-slate-200 rounded-xl overflow-hidden">
-                    <table className="w-full text-xs text-left">
-                      <thead className="bg-slate-100 text-slate-700 text-[10px] uppercase">
-                        <tr>
-                          <th className="px-3 py-2">Medicine</th>
-                          <th className="px-2 py-2">Dosage</th>
-                          <th className="px-2 py-2">Frequency</th>
-                          <th className="px-2 py-2">Days</th>
-                          <th className="px-3 py-2">Instructions</th>
-                          <th className="px-2 py-2 text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {prescriptions.map((med, idx) => (
-                          <tr key={idx}>
-                            <td className="px-3 py-2 font-bold text-slate-900">{med.medicineName}</td>
-                            <td className="px-2 py-2">{med.dosage}</td>
-                            <td className="px-2 py-2 font-mono">{med.frequency}</td>
-                            <td className="px-2 py-2">{med.durationDays}</td>
-                            <td className="px-3 py-2 text-slate-500 italic">{med.instructions}</td>
-                            <td className="px-2 py-2 text-right">
-                              <button
-                                type="button"
-                                onClick={() => removePrescriptionRow(idx)}
-                                className="text-rose-600 hover:text-rose-800 font-bold px-1"
-                              >
-                                ✕
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
                 </div>
-
-                {/* Diagnostic Lab Orders */}
-                <div className="space-y-2">
-                  <label className="block font-bold text-slate-800 flex items-center gap-1.5">
-                    <TestTube className="w-4 h-4 text-purple-600" />
-                    <span>{language === 'mr' ? 'प्रयोगशाळा तपासणी मागणी (Lab Test Orders):' : 'Order Diagnostic Lab Tests:'}</span>
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      'Complete Blood Count (CBC)',
-                      'Urine Albumin / Sugar Dipstick',
-                      'Dengue NS1 Antigen Rapid',
-                      'Malaria Rapid Diagnostic Test (RDT)',
-                      'Random Blood Sugar (RBS)',
-                      'Serum Creatinine & Urea',
-                      'Liver Function Test (LFT)',
-                    ].map((test) => (
-                      <button
-                        type="button"
-                        key={test}
-                        onClick={() => toggleLabOrder(test)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                          orderedLabs.includes(test)
-                            ? 'bg-purple-700 text-white border-purple-700 shadow-xs'
-                            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        {orderedLabs.includes(test) ? '✓ ' : '+ '}
-                        {test}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="pt-3 flex justify-end gap-3 border-t border-slate-200">
-                  <button
-                    type="submit"
-                    className="px-6 py-2.5 bg-blue-900 hover:bg-blue-950 text-white font-bold rounded-xl shadow transition-colors flex items-center gap-2"
-                  >
-                    <FileText className="w-4 h-4 text-teal-300" />
-                    <span>{language === 'mr' ? 'प्रिस्क्रिप्शन व OPD नोंद जतन करा' : 'Save Prescription & Update ABDM EHR'}</span>
-                  </button>
-                </div>
-              </form>
-            </div>
+              </div>
+            </>
           ) : (
-            <div className="bg-slate-50 rounded-xl border border-dashed border-slate-300 p-12 text-center text-slate-500">
-              Select a patient from the OPD queue on the left to begin consultation.
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-12 bg-slate-50 dark:bg-slate-800/50">
+              <div className="w-20 h-20 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center mb-4 shadow-sm">
+                <Search className="w-8 h-8 text-slate-300" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-2">No Patient Selected</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm">Select a patient from the incoming queue on the left to review vitals, AI intelligence, and write prescriptions.</p>
             </div>
           )}
         </div>
@@ -510,3 +300,7 @@ export function PhcDoctorDashboard({
     </div>
   );
 }
+
+
+
+

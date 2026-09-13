@@ -54,64 +54,64 @@ export function Header({
       id: 'asha',
       labelEn: 'ASHA Worker / Sub-Centre',
       labelMr: 'आशा सेविका / उपकेंद्र',
-      badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+      badgeColor: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700',
     },
     {
       id: 'phc_doctor',
       labelEn: 'PHC Medical Officer',
       labelMr: 'वैद्यकीय अधिकारी (प्रा.आ.के.)',
-      badgeColor: 'bg-blue-100 text-blue-800 border-blue-300',
+      badgeColor: 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-700',
     },
     {
       id: 'specialist',
       labelEn: 'District Specialist / Casualty',
       labelMr: 'जिल्हा रुग्णालय तज्ज्ञ',
-      badgeColor: 'bg-purple-100 text-purple-800 border-purple-300',
+      badgeColor: 'bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300 border-purple-300 dark:border-purple-700',
     },
     {
       id: 'state_admin',
       labelEn: 'State Health Administrator',
       labelMr: 'राज्य आरोग्य संचालक',
-      badgeColor: 'bg-amber-100 text-amber-800 border-amber-300',
+      badgeColor: 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700',
     },
   ];
 
   return (
-    <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm">
+    <header className="sticky top-0 z-40 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 shadow-sm">
       {/* Top Maha Govt Tricolor Band */}
       <div className="h-1 bg-gradient-to-r from-orange-500 via-white to-green-600" />
 
       {/* Official Government Header Banner */}
       <div className="bg-slate-900 text-slate-200 text-xs px-4 py-1.5 flex flex-wrap justify-between items-center gap-2">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-amber-400">
-            {language === 'mr' ? 'महाराष्ट्र शासन | सार्वजनिक आरोग्य विभाग' : 'GOVERNMENT OF MAHARASHTRA | PUBLIC HEALTH DEPARTMENT'}
+          <span className="font-semibold text-amber-400 tracking-wider">
+            {language === 'mr' ? 'सार्वजनिक आरोग्य विभाग' : 'DEPARTMENT OF PUBLIC HEALTH'}
           </span>
-          <span className="hidden sm:inline text-slate-500">|</span>
-          <span className="hidden sm:inline text-slate-300">
+          <span className="hidden sm:inline text-slate-500 dark:text-slate-400">|</span>
+          <span className="hidden sm:inline text-slate-300 tracking-wider font-semibold">
             {t('abdmConform')}
           </span>
         </div>
 
         {/* Sync Status & Offline Simulation Toggle */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs">
+          <div className="flex items-center gap-2">
             {effectiveOnline ? (
-              <span className="inline-flex items-center gap-1 text-emerald-400 font-medium">
+              <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded border border-emerald-500/30 text-[11px] uppercase tracking-wide">
                 <Wifi className="w-3.5 h-3.5" />
                 <span>{language === 'mr' ? 'ऑनलाइन' : 'Online'}</span>
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-amber-400 font-medium animate-pulse">
+              <span className="inline-flex items-center gap-1.5 bg-amber-500/20 text-amber-300 font-bold px-2 py-0.5 rounded border border-amber-500/30 text-[11px] uppercase tracking-wide animate-pulse">
                 <WifiOff className="w-3.5 h-3.5" />
                 <span>
-                  {language === 'mr' ? 'ऑफलाइन (स्थानिक)' : 'Offline (Local)'}
+                  {language === 'mr' ? 'ऑफलाइन (स्थानिक)' : 'Offline Mode - Data saved locally'}
                 </span>
               </span>
             )}
 
             {syncQueue.length > 0 && (
-              <span className="bg-amber-500 text-slate-950 font-bold px-1.5 py-0.5 rounded-full text-[10px]">
+              <span className="bg-amber-500 dark:bg-amber-500/20 text-slate-950 dark:text-amber-300 font-bold px-1.5 py-0.5 rounded-full text-[10px]">
                 {syncQueue.length} {t('pendingSync')}
               </span>
             )}
@@ -152,14 +152,14 @@ export function Header({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-1.5">
+              <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
                 <span>{language === 'mr' ? 'स्वास्थ्यसेतू' : 'SwasthyaSetu'}</span>
-                <span className="text-[11px] font-semibold tracking-wide px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                <span className="text-[11px] font-semibold tracking-wide px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                   MahaArogya
                 </span>
               </h1>
             </div>
-            <p className="text-xs text-slate-500 font-medium">
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
               {language === 'mr'
                 ? 'उपकेंद्र - प्रा.आ.के. - ग्रामीण व जिल्हा रुग्णालय एकात्मिक नेटवर्क'
                 : 'Sub-Centre • PHC • Rural & District Referral Network'}
@@ -171,15 +171,15 @@ export function Header({
         <div className="flex items-center gap-2">
           <button
             onClick={onOpenSearch}
-            className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-medium px-3 py-2 rounded-lg border border-slate-300 transition-colors"
+            className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-700 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-medium px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 transition-colors"
           >
-            <Search className="w-4 h-4 text-slate-500" />
+            <Search className="w-4 h-4 text-slate-500 dark:text-slate-400" />
             <span className="hidden sm:inline">{language === 'mr' ? 'आभा / रुग्ण शोधा' : 'Search ABHA'}</span>
           </button>
 
           <button
             onClick={onOpenBedMatrix}
-            className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-medium px-3 py-2 rounded-lg border border-slate-300 transition-colors"
+            className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-700 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-medium px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 transition-colors"
           >
             <Building2 className="w-4 h-4 text-blue-600" />
             <span className="hidden md:inline">{t('bedMatrix')}</span>
@@ -188,7 +188,7 @@ export function Header({
 
           <button
             onClick={onOpenStockLedger}
-            className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-medium px-3 py-2 rounded-lg border border-slate-300 transition-colors"
+            className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-700 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-medium px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 transition-colors"
           >
             <Activity className="w-4 h-4 text-rose-600" />
             <span className="hidden md:inline">{t('emergencyStock')}</span>
@@ -222,14 +222,14 @@ export function Header({
 
             {roleDropdownOpen && (
               <div
-                className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-2xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2"
+                className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 py-2 z-50 animate-in fade-in slide-in-from-top-2"
                 onClick={() => setRoleDropdownOpen(false)}
               >
-                <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
-                  <div className="text-sm font-bold text-slate-800 truncate">
+                <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+                  <div className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">
                     {user?.name}
                   </div>
-                  <div className="text-xs text-slate-500 mt-0.5 truncate">
+                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
                     {user?.facilityName}
                   </div>
                 </div>
@@ -240,7 +240,7 @@ export function Header({
                       setRoleDropdownOpen(false);
                       logout();
                     }}
-                    className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-lg text-xs transition-colors"
+                    className="w-full py-2 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-400 font-bold rounded-lg text-xs transition-colors"
                   >
                     {language === 'mr' ? 'बाहेर पडा (Sign Out)' : 'Sign Out'}
                   </button>

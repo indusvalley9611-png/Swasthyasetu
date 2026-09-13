@@ -1,6 +1,28 @@
-'use client';
+﻿'use client';
 
-export type Role = 'asha' | 'phc_doctor' | 'specialist' | 'state_admin' | 'admin';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { Role } from '@/lib/types';
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  role: Role;
+  roleTitleEn: string;
+  roleTitleMr: string;
+  phone: string;
+  facilityName: string;
+  facilityType: string;
+  hfrCode: string; // Health Facility Registry code
+  taluka: string;
+  district: string;
+  registrationNumber: string; // MMC or ASHA ID
+}
+
+export const PRE_REGISTERED_STAFF: Record<string, UserProfile> = {
+  '9822019284': {
+    id: 'user-asha-01',
+    name: 'Smt. Sunita Shinde',
+    role: 'asha',
     roleTitleEn: 'ASHA Facilitator',
     roleTitleMr: 'आशा गट प्रवर्तक / सेविका',
     phone: '9822019284',
@@ -91,51 +113,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const sendOtp = (phone: string) => {
-    const cleanPhone = phone.trim().replace(/\D/g, '');
-    const staff = PRE_REGISTERED_STAFF[cleanPhone];
-    if (!staff) {
-      return {
-        success: false,
-        error: 'Phone number not found in Maharashtra Public Health Staff Registry.',
-      };
-    }
+  const logout = () => {
+    setRoleState(null);
+    setIsAuthenticated(false);
+    setActivePhone('');
+    setGeneratedOtp(null);
+  };
 
-    // Generate random 6-digit OTP
-    const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedOtp(newOtp);
-    return { success: true, otp: newOtp };
+  const sendOtp = (phone: string) => {
+    if (!PRE_REGISTERED_STAFF[phone]) {
+      return { success: false, error: 'Phone number not registered in HPR database.' };
+    }
+    const otp = '123456';
+    setGeneratedOtp(otp);
+    return { success: true, otp };
   };
 
   const verifyOtp = (phone: string, otp: string) => {
-    const cleanPhone = phone.trim().replace(/\D/g, '');
-    const staff = PRE_REGISTERED_STAFF[cleanPhone];
-    if (!staff) {
-      return { success: false, error: 'Staff member not recognized.' };
+    if (otp !== '123456') {
+      return { success: false, error: 'Invalid OTP code.' };
     }
-
-    // Accept generated OTP or demo bypass OTP '123456'
-    if (otp === generatedOtp || otp === '123456') {
-      setRoleState(staff.role);
-      setActivePhone(cleanPhone);
-      setIsAuthenticated(true);
+    const profile = PRE_REGISTERED_STAFF[phone];
+    if (profile) {
+      setRole(profile.role);
       setGeneratedOtp(null);
       return { success: true };
     }
-
-    return { success: false, error: 'Invalid 6-digit OTP code entered.' };
-  };
-
-  const logout = () => {
-    setIsAuthenticated(false);
-    setRoleState(null);
+    return { success: false, error: 'Profile not found.' };
   };
 
   return (
     <AuthContext.Provider
       value={{
         role,
-        user: (role ? USER_PROFILES_BY_ROLE[role] : USER_PROFILES_BY_ROLE['asha']) as UserProfile,
+        user: role ? USER_PROFILES_BY_ROLE[role] : USER_PROFILES_BY_ROLE['asha'],
         isAuthenticated,
         activePhone,
         generatedOtp,
@@ -152,8 +163,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 }
+
+
+

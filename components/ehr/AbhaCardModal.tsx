@@ -35,7 +35,7 @@ export function AbhaCardModal({ patient, onClose }: AbhaCardModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 dark:border-slate-700">
         {/* Modal Header */}
         <div className="bg-slate-900 text-white px-5 py-3.5 flex justify-between items-center print-hide">
           <div className="flex items-center gap-2">
@@ -53,7 +53,7 @@ export function AbhaCardModal({ patient, onClose }: AbhaCardModalProps) {
         </div>
 
         {/* The Official ABHA Card Surface */}
-        <div className="p-6 bg-slate-50 flex justify-center print-section">
+        <div className="p-6 bg-slate-50 dark:bg-slate-800/50 flex justify-center print-section">
           <div className="w-full max-w-[360px] bg-white rounded-xl shadow-lg border-2 border-slate-300 overflow-hidden relative">
             
             {/* Subtle Watermark Background */}
@@ -67,7 +67,7 @@ export function AbhaCardModal({ patient, onClose }: AbhaCardModalProps) {
 
             <div className="relative z-10">
               {/* National Health Authority Banner */}
-              <div className="px-4 py-2 bg-slate-50/90 backdrop-blur-xs border-b border-slate-200 flex justify-between items-center">
+              <div className="px-4 py-2 bg-slate-50 backdrop-blur-xs border-b border-slate-200 flex justify-between items-center">
                 <div>
                   <div className="text-[10px] font-bold text-slate-800 uppercase tracking-wider">
                     {language === 'mr' ? 'राष्ट्रीय आरोग्य प्राधिकरण' : 'NATIONAL HEALTH AUTHORITY'}
@@ -111,7 +111,7 @@ export function AbhaCardModal({ patient, onClose }: AbhaCardModalProps) {
                 </div>
 
                 {/* ABHA Number & QR Code */}
-                <div className="bg-blue-50/90 backdrop-blur-xs rounded-lg p-3 border border-blue-200 flex items-center justify-between gap-3">
+                <div className="bg-blue-50 backdrop-blur-xs rounded-lg p-3 border border-blue-200 flex items-center justify-between gap-3">
                   <div className="space-y-1">
                     <div className="text-[10px] uppercase font-bold text-blue-900">
                       {language === 'mr' ? 'आभा क्रमांक (ABHA Number)' : 'ABHA Number'}
@@ -148,7 +148,7 @@ export function AbhaCardModal({ patient, onClose }: AbhaCardModalProps) {
               </div>
 
               {/* Bottom Govt Seal Line */}
-              <div className="bg-slate-100/90 backdrop-blur-xs px-4 py-1.5 border-t border-slate-200 text-center text-[9px] text-slate-500 flex justify-between items-center">
+              <div className="bg-slate-100 backdrop-blur-xs px-4 py-1.5 border-t border-slate-200 text-center text-[9px] text-slate-500 flex justify-between items-center">
                 <span>{language === 'mr' ? 'सार्वजनिक आरोग्य विभाग' : 'MahaArogya Network'}</span>
                 <span>108 / 104 Helpline</span>
               </div>
@@ -157,15 +157,15 @@ export function AbhaCardModal({ patient, onClose }: AbhaCardModalProps) {
         </div>
 
         {/* Modal Actions */}
-        <div className="px-6 py-3 bg-white border-t border-slate-200 flex flex-wrap justify-between items-center gap-3 print-hide">
-          <div className="text-[10px] text-slate-500 font-medium">
+        <div className="px-6 py-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex flex-wrap justify-between items-center gap-3 print-hide">
+          <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
             Scan QR code with camera or scanner to verify patient identity.
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+              className="px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 rounded-lg transition-colors"
             >
               {language === 'mr' ? 'बंद करा' : 'Close'}
             </button>

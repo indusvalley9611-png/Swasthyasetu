@@ -1,465 +1,286 @@
 'use client';
-
 import React, { useState } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
 import { useSync } from '@/context/SyncContext';
-import { SpecialistTreatmentModal } from './SpecialistTreatmentModal';
-import { Referral, Patient } from '@/lib/types';
+import { Patient, Referral } from '@/lib/types';
 import {
-  AlertOctagon,
-  AlertTriangle,
-  CheckCircle2,
-  Building2,
-  Bed,
-  QrCode,
-  Search,
-  Ambulance,
-  Calendar,
-  UserCheck,
-  Stethoscope,
-  Activity,
-  ArrowRight,
+  Users, Stethoscope, Search, Clock, 
+  MapPin, AlertTriangle, ShieldCheck, 
+  Activity, QrCode
 } from 'lucide-react';
+import { SpecialistTreatmentModal } from './SpecialistTreatmentModal';
 
 interface SpecialistDashboardProps {
-  onOpenReferralToken: (referral: Referral) => void;
   onOpenPatientTimeline: (patient: Patient) => void;
+  onOpenReferralToken: (referral: Referral) => void;
   onOpenBedMatrix: () => void;
 }
 
 export function SpecialistDashboard({
-  onOpenReferralToken,
   onOpenPatientTimeline,
+  onOpenReferralToken,
   onOpenBedMatrix,
 }: SpecialistDashboardProps) {
-  const { language, t } = useLanguage();
+  const { language } = useLanguage();
   const { user } = useAuth();
-  const { referrals, patients, facilities, updateReferralStatus, addClinicalEncounter } = useSync();
+  const { referrals, patients, updateReferralStatus, stockTransfers } = useSync();
 
-  const [triageFilter, setTriageFilter] = useState<'ALL' | 'RED' | 'YELLOW' | 'GREEN'>('ALL');
-  const [tokenLookup, setTokenLookup] = useState('');
-  const [assignBedInput, setAssignBedInput] = useState<{ [refId: string]: string }>({});
+  const [activeTab, setActiveTab] = useState<'incoming' | 'under_review' | 'accepted' | 'admitted' | 'escalated' | 'counter_referral' | 'history'>('incoming');
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Modals
   const [treatmentModalRef, setTreatmentModalRef] = useState<Referral | null>(null);
 
-  const matchingTreatmentPatient = treatmentModalRef 
-    ? patients.find(p => p.id === treatmentModalRef.patientId) 
-    : null;
+  // Advanced Filtering
+  const [urgencyFilter, setUrgencyFilter] = useState<'all' | 'high' | 'routine'>('all');
 
-  // District Hospital Aundh data
-  const hospital = facilities.find((f) => f.id === 'fac-dh-pune') || facilities[0];
+  const getPatientForReferral = (patientId: string) => patients.find(p => p.id === patientId);
 
-  // Sort referrals: RED first, then YELLOW, then GREEN, newest first
-  const sortedReferrals = [...referrals].sort((a, b) => {
-    const priorityWeight = { red: 3, yellow: 2, green: 1 };
-    const diff = priorityWeight[b.triagePriority] - priorityWeight[a.triagePriority];
-    if (diff !== 0) return diff;
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-  });
-
-  const filteredReferrals = sortedReferrals.filter((r) => {
-    if (triageFilter !== 'ALL' && r.triagePriority.toUpperCase() !== triageFilter) {
-      return false;
-    }
-    if (tokenLookup.trim()) {
-      const q = tokenLookup.toLowerCase();
-      return (
-        r.tokenCode.toLowerCase().includes(q) ||
-        r.patientName.toLowerCase().includes(q) ||
-        r.patientAbha.includes(q)
-      );
-    }
-    return true;
-  });
-
-  const handleAcceptAndReserve = (ref: Referral) => {
-    const bedName = assignBedInput[ref.id] || (ref.triagePriority === 'red' ? 'ICU-Emergency Bed #02' : 'General Ward Bed #14');
-    updateReferralStatus(ref.id, 'ACCEPTED', bedName);
-  };
-
-  const handleMarkAdmitted = (ref: Referral) => {
-    updateReferralStatus(ref.id, 'ADMITTED');
-  };
-
-  const handleEscalateToState = (ref: Referral, notes: string, diagnosis: string, targetFacility: string) => {
-    updateReferralStatus(ref.id, 'ESCALATED');
+  const filteredReferrals = referrals.filter(r => {
+    const p = getPatientForReferral(r.patientId);
+    const searchMatch = p?.fullName.toLowerCase().includes(searchQuery.toLowerCase()) || r.id.includes(searchQuery);
     
-    const encounter = {
-      id: 'enc-escalate-' + Date.now(),
-      patientId: ref.patientId,
-      date: new Date().toISOString().split('T')[0],
-      facilityName: 'District Hospital Pune',
-      facilityType: 'District Hospital',
-      providerName: user.name,
-      providerRole: 'District Specialist',
-      chiefComplaints: ['Condition required advanced care beyond district capabilities'],
-      diagnosis: diagnosis,
-      vitals: ref.vitalsAtReferral,
-      notes: `Specialist Treatment Notes: ${notes} | Escalated to: ${targetFacility}`,
-    };
-    addClinicalEncounter(ref.patientId, encounter);
-  };
+    if (activeTab === 'incoming') {
+      if (r.status !== 'PENDING') return false;
+    } else if (activeTab === 'under_review') {
+      // For now, no specific UNDER_REVIEW state, treat PENDING as under review if needed, or add logic
+      if (r.status !== 'PENDING') return false;
+    } else if (activeTab === 'accepted') {
+      if (r.status !== 'ACCEPTED') return false;
+    } else if (activeTab === 'admitted') {
+      if (r.status !== 'ADMITTED') return false;
+    } else if (activeTab === 'escalated') {
+      if (r.status !== 'ESCALATED') return false;
+    } else if (activeTab === 'counter_referral') {
+      // Counter referrals are typically COMPLETED with a counterReferredTo flag
+      if (r.status !== 'COMPLETED' || !r.counterReferredTo) return false;
+    } else if (activeTab === 'history') {
+      if (r.status !== 'COMPLETED' && r.status !== 'CANCELLED') return false;
+    }
 
-  // Specialist on-call rota for District Hospital
-  const specialistRota = [
-    { name: 'Dr. Ananya Kulkarni', specialty: 'Chief Triage & Cardiology', status: 'ON-DUTY', room: 'Emergency Trauma Room 1' },
-    { name: 'Dr. Vivek Sawant', specialty: 'Obstetrics & Gynaecology', status: 'ON-CALL (10 min)', room: 'Maternity OT 2' },
-    { name: 'Dr. Neha Bapat', specialty: 'Pediatrics & Neonatology', status: 'ON-DUTY', room: 'NICU Block B' },
-    { name: 'Dr. Rohan Joshi', specialty: 'Orthopedics & Trauma', status: 'IN-SURGERY', room: 'Main OT 1' },
-    { name: 'Dr. Sanjay Thorat', specialty: 'Anesthesiology & Critical Care', status: 'ON-DUTY', room: 'ICU Unit A' },
-  ];
+    if (urgencyFilter === 'high' && r.triagePriority !== 'red') return false;
+    if (urgencyFilter === 'routine' && r.triagePriority === 'red') return false;
+
+    return searchMatch;
+  });
 
   return (
-    <div className="space-y-6">
-      {/* Specialist Banner */}
-      <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-blue-950 rounded-2xl p-5 sm:p-6 text-white shadow-lg flex flex-wrap justify-between items-center gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-purple-300 text-xs font-semibold uppercase tracking-wider">
-            <Building2 className="w-4 h-4" />
-            <span>{language === 'mr' ? 'जिल्हा सामान्य रुग्णालय • आपत्कालीन ट्रायज डेस्क' : 'District General Hospital • Emergency Triage & Casualty Intake'}</span>
-          </div>
-          <h2 className="text-xl sm:text-2xl font-bold mt-1">{user.name}</h2>
-          <p className="text-xs sm:text-sm text-purple-200 mt-1">
-            {user.facilityName} • {user.roleTitleEn} • Reg: {user.registrationNumber}
-          </p>
+    <div className="space-y-6 animate-in fade-in duration-500 pb-20">
+      
+      {/* 1. DISTRICT HEALTH OPERATIONS */}
+      <div className="mb-2">
+        <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight uppercase">District Health Operations</h2>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        {/* Critical Cases */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-rose-100 dark:border-rose-900 p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+          <div className="text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tight">{referrals.filter(r => r.triagePriority === 'red' && r.status === 'PENDING').length}</div>
+          <div className="text-sm font-bold text-rose-600 dark:text-rose-400 mt-1 uppercase tracking-wide">Critical Cases</div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onOpenBedMatrix}
-            className="px-4 py-2 text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white rounded-xl shadow transition-colors flex items-center gap-1.5"
-          >
-            <Bed className="w-4 h-4" />
-            <span>{language === 'mr' ? 'खाटा उपलब्धता मॅट्रिक्स' : 'Live Bed Matrix'}</span>
-          </button>
+        {/* Incoming Referrals */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-blue-100 dark:border-blue-900 p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden cursor-pointer" onClick={() => setActiveTab('incoming')}>
+          <div className="text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tight">{referrals.filter(r => r.status === 'PENDING').length}</div>
+          <div className="text-sm font-bold text-blue-600 dark:text-blue-400 mt-1 uppercase tracking-wide">Incoming Referrals</div>
+        </div>
+
+        {/* Active Admissions */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-indigo-100 dark:border-indigo-900 p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden cursor-pointer" onClick={() => setActiveTab('admitted')}>
+          <div className="text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tight">{referrals.filter(r => r.status === 'ADMITTED').length}</div>
+          <div className="text-sm font-bold text-indigo-600 dark:text-indigo-400 mt-1 uppercase tracking-wide">Active Admissions</div>
+        </div>
+
+        {/* Available Critical Beds */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-emerald-100 dark:border-emerald-900 p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden cursor-pointer" onClick={onOpenBedMatrix}>
+          <div className="text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tight">18</div>
+          <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-1 uppercase tracking-wide">Critical Beds</div>
+        </div>
+
+        {/* Resource Alerts */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-amber-100 dark:border-amber-900 p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden cursor-pointer" onClick={() => {}}>
+          <div className="text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tight">3</div>
+          <div className="text-sm font-bold text-amber-600 dark:text-amber-400 mt-1 uppercase tracking-wide">Resource Alerts</div>
         </div>
       </div>
 
-      {/* Hospital Capacity Quick Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-[11px] text-slate-500 block font-medium">Total Beds</span>
-          <div className="text-2xl font-bold text-slate-900">
-            {hospital.totalBeds - hospital.occupiedBeds}
-            <span className="text-xs text-slate-500 font-normal"> / {hospital.totalBeds} Available</span>
-          </div>
-          <span className="text-[10px] text-emerald-700 font-semibold block mt-0.5">
-            {Math.round(((hospital.totalBeds - hospital.occupiedBeds) / hospital.totalBeds) * 100)}% Available
-          </span>
+      {/* RESOURCE ALERTS ENGINE */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 p-3 rounded-xl flex items-center gap-3 cursor-pointer" onClick={onOpenBedMatrix}>
+          <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+          <div><div className="text-xs font-bold text-rose-800 dark:text-rose-300">CRITICAL</div><div className="text-xs text-rose-600 dark:text-rose-400">ICU capacity exhausted</div></div>
         </div>
-
-        <div className="bg-blue-50/70 p-4 rounded-xl border border-blue-200 shadow-sm">
-          <span className="text-[11px] text-blue-800 block font-semibold">ICU Beds Vacant</span>
-          <div className="text-2xl font-bold text-blue-950">
-            {hospital.icuBedsTotal - hospital.icuBedsOccupied}
-            <span className="text-xs text-blue-700 font-normal"> / {hospital.icuBedsTotal}</span>
-          </div>
-          <span className="text-[10px] text-blue-700 block mt-0.5 font-bold">
-            {hospital.icuBedsTotal - hospital.icuBedsOccupied <= 2 ? '⚠️ High ICU Pressure' : 'Normal Capacity'}
-          </span>
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 rounded-xl flex items-center gap-3 cursor-pointer">
+          <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+          <div><div className="text-xs font-bold text-amber-800 dark:text-amber-300">WARNING</div><div className="text-xs text-amber-600 dark:text-amber-400">Anti-snake venom below buffer</div></div>
         </div>
-
-        <div className="bg-purple-50/70 p-4 rounded-xl border border-purple-200 shadow-sm">
-          <span className="text-[11px] text-purple-800 block font-semibold">Ventilators Open</span>
-          <div className="text-2xl font-bold text-purple-950">
-            {hospital.ventilatorsTotal - hospital.ventilatorsOccupied}
-            <span className="text-xs text-purple-700 font-normal"> / {hospital.ventilatorsTotal}</span>
-          </div>
-          <span className="text-[10px] text-purple-700 block mt-0.5">Critical Care Unit</span>
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-3 rounded-xl flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('history')}>
+          <Activity className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+          <div><div className="text-xs font-bold text-yellow-800 dark:text-yellow-300">FOLLOW-UP</div><div className="text-xs text-yellow-600 dark:text-yellow-400">14 discharged patients require follow-up</div></div>
         </div>
-
-        <div className="bg-rose-50/70 p-4 rounded-xl border border-rose-200 shadow-sm">
-          <span className="text-[11px] text-rose-800 block font-semibold">Critical Red Inbound</span>
-          <div className="text-2xl font-bold text-rose-900">
-            {referrals.filter((r) => r.triagePriority === 'red' && r.status !== 'ADMITTED').length}
-          </div>
-          <span className="text-[10px] text-rose-700 block mt-0.5 font-bold">108 ALS En Route</span>
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3 rounded-xl flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('incoming')}>
+          <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          <div><div className="text-xs font-bold text-blue-800 dark:text-blue-300">REFERRAL</div><div className="text-xs text-blue-600 dark:text-blue-400">8 referrals waiting for review</div></div>
         </div>
       </div>
 
-      {/* Main Triage Queue Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left 8 Cols: Incoming Smart Referral Queue */}
-        <div className="lg:col-span-8 space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-4">
-            <div className="flex flex-wrap justify-between items-center gap-3">
-              <div>
-                <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                  <AlertOctagon className="w-5 h-5 text-rose-600" />
-                  <span>
-                    {language === 'mr' ? 'थेट ट्रायज रेफरल रांग (Incoming Triage Queue)' : 'Live Incoming Smart Referral Queue'}
-                  </span>
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Priority-ranked: Critical RED referrals trigger immediate casualty bed reserve
-                </p>
-              </div>
-
-              {/* Triage Band Filter Pills */}
-              <div className="flex items-center gap-1.5 text-xs">
-                {(['ALL', 'RED', 'YELLOW', 'GREEN'] as const).map((filter) => (
-                  <button
-                    key={filter}
-                    onClick={() => setTriageFilter(filter)}
-                    className={`px-3 py-1 rounded-full font-bold transition-all ${
-                      triageFilter === filter
-                        ? filter === 'RED'
-                          ? 'bg-rose-600 text-white'
-                          : filter === 'YELLOW'
-                          ? 'bg-amber-500 text-slate-950'
-                          : filter === 'GREEN'
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-slate-900 text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    {filter}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Quick Token Lookup Bar */}
-            <div className="relative">
-              <QrCode className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-              <input
-                type="text"
-                placeholder={language === 'mr' ? 'रेफरल टोकन स्कॅन करा किंवा टाका (उदा. MH-REF-2026-9842)...' : 'Scan or Enter Referral Token ID (e.g. MH-REF-2026-9842)...'}
-                value={tokenLookup}
-                onChange={(e) => setTokenLookup(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-xs font-mono focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
-              />
-            </div>
-
-            {/* Referral Cards */}
-            <div className="space-y-3">
-              {filteredReferrals.map((ref) => {
-                const isRed = ref.triagePriority === 'red';
-                const isYellow = ref.triagePriority === 'yellow';
-                const matchingPatient = patients.find((p) => p.id === ref.patientId);
-
-                return (
-                  <div
-                    key={ref.id}
-                    onClick={() => matchingPatient && onOpenPatientTimeline(matchingPatient)}
-                    className={`rounded-xl border-2 p-4 space-y-3 cursor-pointer hover:shadow-md transition-all ${
-                      isRed
-                        ? 'bg-rose-50/40 border-rose-400 shadow-sm hover:border-rose-500'
-                        : isYellow
-                        ? 'bg-amber-50/30 border-amber-300 hover:border-amber-400'
-                        : 'bg-white border-slate-200 hover:border-blue-300'
-                    }`}
-                  >
-                    {/* Header */}
-                    <div className="flex flex-wrap justify-between items-start gap-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full text-white ${
-                              isRed ? 'bg-rose-600 animate-pulse' : isYellow ? 'bg-amber-600' : 'bg-emerald-600'
-                            }`}
-                          >
-                            {isRed ? t('triageRed') : isYellow ? t('triageYellow') : t('triageGreen')}
-                          </span>
-                          <span className="font-mono font-bold text-xs text-slate-900">
-                            {ref.tokenCode}
-                          </span>
-                          <span className="text-xs font-bold text-blue-900 bg-blue-100 px-2 py-0.2 rounded">
-                            {ref.specialtyRequired}
-                          </span>
-                        </div>
-
-                        <h4 className="font-bold text-slate-900 text-sm mt-1">
-                          {ref.patientName} ({ref.patientGender}, {ref.patientAge} Yrs)
-                        </h4>
-                        <div className="text-xs text-slate-600">
-                          From: <strong>{ref.referringFacility}</strong> → To: <strong>{ref.targetFacility}</strong>
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                            ref.status === 'ESCALATED'
-                              ? 'bg-purple-100 text-purple-800'
-                              : ref.status === 'ADMITTED'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : ref.status === 'ACCEPTED'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
-                        >
-                          {ref.status}
-                        </span>
-                        <div className="text-[10px] text-slate-400 mt-1 font-mono">
-                          {new Date(ref.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Vitals & Triage Rationale Ribbon */}
-                    <div className="bg-white/80 rounded-lg p-2.5 border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">Blood Pressure</span>
-                        <span className="font-mono font-bold text-slate-900">
-                          {ref.vitalsAtReferral.systolicBp}/{ref.vitalsAtReferral.diastolicBp} mmHg
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">SpO2</span>
-                        <span className="font-mono font-bold text-emerald-700">
-                          {ref.vitalsAtReferral.spO2}%
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">Pulse Rate</span>
-                        <span className="font-mono font-bold text-slate-900">
-                          {ref.vitalsAtReferral.heartRate} bpm
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">Ambulance</span>
-                        <span className="font-bold text-blue-700 flex items-center gap-1">
-                          <Ambulance className="w-3.5 h-3.5" />
-                          <span>108 ALS Dispatched</span>
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Clinical Reasons */}
-                    <div className="text-xs text-slate-700">
-                      <strong>Clinical Assessment:</strong> {ref.referralReason}
-                    </div>
-
-                    {ref.assignedBed && (
-                      <div className="text-xs bg-emerald-50 text-emerald-900 p-2 rounded-lg border border-emerald-200 font-bold flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        <span>Reserved Bed: {ref.assignedBed}</span>
-                      </div>
-                    )}
-
-                    {/* Action Bar for Specialist */}
-                    <div className="flex flex-wrap justify-between items-center gap-2 pt-2 border-t border-slate-200">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onOpenReferralToken(ref); }}
-                          className="px-2.5 py-1 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md border border-slate-300 flex items-center gap-1"
-                        >
-                          <QrCode className="w-3.5 h-3.5" />
-                          <span>QR Slip</span>
-                        </button>
-
-                        {matchingPatient && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); onOpenPatientTimeline(matchingPatient); }}
-                            className="px-2.5 py-1 text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-900 rounded-md border border-blue-200"
-                          >
-                            Longitudinal EHR
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {ref.status !== 'ADMITTED' && ref.status !== 'ESCALATED' && (
-                          <>
-                            <input
-                              type="text"
-                              onClick={(e) => e.stopPropagation()}
-                              placeholder="Assign Bed #"
-                              value={assignBedInput[ref.id] || ''}
-                              onChange={(e) =>
-                                setAssignBedInput({ ...assignBedInput, [ref.id]: e.target.value })
-                              }
-                              className="w-32 px-2 py-1 text-xs border border-slate-300 rounded-md"
-                            />
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleAcceptAndReserve(ref); }}
-                              className="px-3 py-1 text-xs font-bold bg-blue-800 hover:bg-blue-900 text-white rounded-md shadow-xs"
-                            >
-                              Accept & Reserve
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleMarkAdmitted(ref); }}
-                              className="px-3 py-1 text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white rounded-md shadow-xs"
-                            >
-                              Mark Admitted
-                            </button>
-                          </>
-                        )}
-                        {ref.status === 'ADMITTED' && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setTreatmentModalRef(ref); }}
-                            className="px-3 py-1 text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white rounded-md shadow-xs flex items-center gap-1"
-                          >
-                            <Stethoscope className="w-3.5 h-3.5" />
-                            Examine & Escalate
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+          <h3 className="font-black text-slate-900 dark:text-white">PHC Medicine Transfer Oversight</h3>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Read-only district coordination view · simulated PHC redistribution records</p>
         </div>
+        <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 dark:bg-slate-950 text-[10px] uppercase tracking-wider text-slate-500"><tr><th className="p-3">Transfer</th><th className="p-3">PHC route</th><th className="p-3">Medicine</th><th className="p-3">Urgency</th><th className="p-3">Status</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{stockTransfers.slice(0, 5).map(transfer => <tr key={transfer.id}><td className="p-3 font-mono text-xs font-bold">{transfer.id}</td><td className="p-3 text-xs">{transfer.sourceFacilityName} &rarr; {transfer.destinationFacilityName}</td><td className="p-3">{transfer.medicineName}<span className="ml-1 text-xs text-slate-500">({transfer.requestedQuantity})</span></td><td className="p-3 text-xs font-bold">{transfer.urgency}</td><td className="p-3 text-xs font-bold">{transfer.status.replaceAll('_', ' ')}</td></tr>)}{stockTransfers.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-sm text-slate-500">No PHC transfer requests currently require district coordination.</td></tr>}</tbody></table></div>
+      </section>
 
-        {/* Right 4 Cols: Specialist On-Duty Rota & Facility Matrix */}
-        <div className="lg:col-span-4 space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
-            <h3 className="font-bold text-slate-900 text-xs flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-purple-700" />
-              <span>{language === 'mr' ? 'तज्ज्ञ वैद्यकीय अधिकारी उपस्थिती (On-Call Rota)' : 'District Specialist On-Call Rota'}</span>
-            </h3>
-
-            <div className="space-y-2.5">
-              {specialistRota.map((spec, i) => (
-                <div key={i} className="p-2.5 rounded-lg border border-slate-100 bg-slate-50 text-xs">
-                  <div className="flex justify-between items-start">
-                    <span className="font-bold text-slate-900">{spec.name}</span>
-                    <span
-                      className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
-                        spec.status.includes('ON-DUTY')
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : spec.status.includes('IN-SURGERY')
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-blue-100 text-blue-800'
-                      }`}
-                    >
-                      {spec.status}
-                    </span>
-                  </div>
-                  <div className="text-teal-800 font-medium text-[11px] mt-0.5">{spec.specialty}</div>
-                  <div className="text-slate-500 text-[10px]">{spec.room}</div>
-                </div>
+      {/* 2. REFERRAL COMMAND CENTER */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl shadow-sm overflow-hidden flex flex-col min-h-[600px] mt-6">
+        {/* Header & Controls */}
+        <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex flex-wrap gap-4 justify-between items-center">
+          <div>
+            <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Referral Command Center</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">{user.facilityName} &middot; Trauma & Triage Desk</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+            <div className="bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap text-sm font-bold shadow-sm">
+              {['incoming', 'under_review', 'accepted', 'admitted', 'escalated', 'counter_referral', 'history'].map(tab => (
+                <button 
+                  key={tab}
+                  onClick={() => setActiveTab(tab as any)} 
+                  className={`px-3 py-1.5 rounded-lg transition-colors capitalize ${activeTab === tab ? 'bg-slate-900 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
+                  {tab.replace('_', ' ')}
+                </button>
               ))}
             </div>
+            <div className="relative flex-1 sm:w-64">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search patient, ABHA..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white shadow-sm"
+              />
+            </div>
+            <button className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 shadow-sm text-slate-600 dark:text-slate-300">
+              <QrCode className="w-5 h-5" />
+            </button>
           </div>
+        </div>
 
-          {/* Quick Helpline Memo */}
-          <div className="bg-slate-900 text-white rounded-xl p-4 space-y-2 text-xs">
-            <h4 className="font-bold text-teal-400 flex items-center gap-1.5">
-              <Activity className="w-4 h-4" />
-              <span>108 Casualty Control Room Link</span>
-            </h4>
-            <p className="text-slate-300 text-[11px] leading-relaxed">
-              Casualty desk is synchronized with MEMS 108 GPS telemetry. Ambulance ETAs are recalculated automatically based on Western Ghats road transit conditions.
-            </p>
+        {/* Filter Ribbon */}
+        <div className="px-6 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-4 overflow-x-auto">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider shrink-0">Filter By Urgency:</span>
+          <div className="flex gap-2">
+            <button onClick={() => setUrgencyFilter('all')} className={"px-3 py-1.5 rounded-md text-xs font-bold transition-colors " + (urgencyFilter === 'all' ? 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 border border-slate-200 dark:border-slate-700')}>All</button>
+            <button onClick={() => setUrgencyFilter('high')} className={"px-3 py-1.5 rounded-md text-xs font-bold transition-colors " + (urgencyFilter === 'high' ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 border border-slate-200 dark:border-slate-700')}>Critical / High Risk</button>
+            <button onClick={() => setUrgencyFilter('routine')} className={"px-3 py-1.5 rounded-md text-xs font-bold transition-colors " + (urgencyFilter === 'routine' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 border border-slate-200 dark:border-slate-700')}>Routine</button>
           </div>
+        </div>
+
+        {/* Data Table */}
+        <div className="flex-1 overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 dark:bg-slate-800/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
+                <th className="p-4 whitespace-nowrap">Urgency</th>
+                <th className="p-4 whitespace-nowrap">Patient Details</th>
+                <th className="p-4 whitespace-nowrap">Origin Facility</th>
+                <th className="p-4 whitespace-nowrap">Specialty & Diagnosis</th>
+                <th className="p-4 whitespace-nowrap">Triage Status</th>
+                <th className="p-4 whitespace-nowrap text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredReferrals.map(ref => {
+                const patient = getPatientForReferral(ref.patientId);
+                if (!patient) return null;
+                const isHigh = ref.triagePriority === 'red';
+
+                return (
+                  <tr key={ref.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
+                    <td className="p-4">
+                      {isHigh ? (
+                        <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-600 animate-pulse">
+                          <AlertTriangle className="w-4 h-4" />
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600">
+                          <Clock className="w-4 h-4" />
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-4">
+                      <div className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-blue-600 transition-colors cursor-pointer" onClick={() => onOpenPatientTimeline(patient)}>
+                        {patient.fullName}
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{patient.age}y &middot; {patient.gender}</div>
+                    </td>
+                    <td className="p-4">
+                      <div className="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-slate-400" /> {ref.referringFacility}</div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Distance: ~45 km</div>
+                    </td>
+                    <td className="p-4">
+                      <div className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-950 px-2 py-1 rounded text-xs font-bold text-slate-700 dark:text-slate-200">
+                        <Stethoscope className="w-3.5 h-3.5 text-indigo-500" /> {ref.specialtyRequired}
+                      </div>
+                      <div className="text-xs text-slate-600 dark:text-slate-300 mt-1.5 line-clamp-1 max-w-[200px]" title={ref.referralReason}>"{ref.referralReason}"</div>
+                    </td>
+                    <td className="p-4">
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${
+                        ref.status === 'ACCEPTED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                        ref.status === 'ADMITTED' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                        ref.status === 'COMPLETED' ? 'bg-slate-100 text-slate-700 border border-slate-200' :
+                        ref.status === 'CANCELLED' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                        'bg-amber-50 text-amber-700 border border-amber-200'
+                      }`}>
+                        {ref.status === 'PENDING' ? '🟡 PENDING' :
+                         ref.status === 'ACCEPTED' ? '🟢 ACCEPTED' :
+                         ref.status === 'ADMITTED' ? '🟢 ADMITTED' :
+                         ref.status === 'COMPLETED' ? '⚪ COMPLETED' :
+                         ref.status === 'CANCELLED' ? '🔴 CANCELLED' :
+                         ref.status === 'ESCALATED' ? '🔵 ESCALATED' :
+                         ref.status}
+                      </span>
+                    </td>
+                    <td className="p-4 text-right space-x-2">
+                      <button onClick={() => onOpenReferralToken(ref)} className="px-3 py-1.5 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-700 dark:text-slate-200 rounded-lg shadow-sm transition-all">
+                        View QR
+                      </button>
+                      <button onClick={() => setTreatmentModalRef(ref)} className="px-3 py-1.5 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-lg shadow-sm transition-all">
+                        Process
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              
+              {filteredReferrals.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="p-12 text-center">
+                    <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <ShieldCheck className="w-8 h-8 text-slate-300" />
+                    </div>
+                    <div className="text-slate-800 dark:text-slate-100 font-bold">No active cases</div>
+                    <div className="text-slate-500 dark:text-slate-400 text-sm mt-1">Queue is empty for the selected filters.</div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      {treatmentModalRef && matchingTreatmentPatient && (
-        <SpecialistTreatmentModal
-          referral={treatmentModalRef}
-          patient={matchingTreatmentPatient}
-          onClose={() => setTreatmentModalRef(null)}
-          onEscalateToState={(notes: string, diagnosis: string, targetFacility: string) => {
-            handleEscalateToState(treatmentModalRef, notes, diagnosis, targetFacility);
-            setTreatmentModalRef(null);
-          }}
+      {treatmentModalRef && (
+        <SpecialistTreatmentModal 
+          referral={treatmentModalRef} 
+          patient={getPatientForReferral(treatmentModalRef.patientId)!} 
+          onClose={() => setTreatmentModalRef(null)} 
+          updateReferralStatus={updateReferralStatus} 
         />
       )}
     </div>
   );
 }
+
+
+

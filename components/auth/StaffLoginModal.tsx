@@ -72,7 +72,7 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-3 sm:p-6 animate-in fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 dark:border-slate-700">
         {/* Top Maharashtra Header */}
         <div className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center border-b border-slate-800">
           <div className="flex items-center gap-2">
@@ -97,8 +97,8 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
         <div className="p-6 space-y-5 text-xs">
           {/* Simulated SMS Alert Banner when OTP is sent */}
           {simulatedSms && step === 'OTP' && (
-            <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3.5 space-y-1 text-emerald-950 animate-in slide-in-from-top-2 shadow-xs">
-              <div className="flex items-center justify-between text-[11px] font-bold text-emerald-800">
+            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700 rounded-xl p-3.5 space-y-1 text-emerald-950 dark:text-emerald-100 animate-in slide-in-from-top-2 shadow-xs">
+              <div className="flex items-center justify-between text-[11px] font-bold text-emerald-800 dark:text-emerald-300">
                 <span className="flex items-center gap-1.5">
                   <Send className="w-3.5 h-3.5" />
                   <span>SIMULATED GOVT SMS GATEWAY</span>
@@ -107,7 +107,7 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
               </div>
               <p className="text-xs font-mono">
                 &ldquo;Your MahaArogya Portal OTP is{' '}
-                <strong className="text-emerald-900 font-extrabold text-sm">{simulatedSms.otp}</strong>. Valid for
+                <strong className="text-emerald-900 dark:text-emerald-200 font-extrabold text-sm">{simulatedSms.otp}</strong>. Valid for
                 10 mins. Do not share this OTP.&rdquo;
               </p>
             </div>
@@ -116,11 +116,11 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
           {step === 'PHONE' && (
             <form onSubmit={handleSendOtp} className="space-y-4">
               <div>
-                <label className="block font-bold text-slate-800 mb-1">
+                <label className="block font-bold text-slate-800 dark:text-slate-100 mb-1">
                   Registered Government Mobile Number
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3 top-2.5 font-bold text-slate-500 font-mono">+91</span>
+                  <span className="absolute left-3 top-2.5 font-bold text-slate-500 dark:text-slate-400 font-mono">+91</span>
                   <input
                     type="tel"
                     required
@@ -128,14 +128,14 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
                     placeholder="10-digit mobile number"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="w-full pl-12 pr-4 py-2 border border-slate-300 rounded-lg text-xs font-mono font-bold focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                    className="w-full pl-12 pr-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs font-mono font-bold focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white"
                   />
                 </div>
               </div>
 
               {/* Pre-Registered Demo Staff Selector */}
               <div className="space-y-2">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                   Select Pre-Registered Staff Member to Auto-Fill:
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -146,13 +146,13 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
                       onClick={() => handleSelectStaff(stf.phone)}
                       className={`p-2.5 rounded-xl border text-left transition-all ${
                         phone === stf.phone
-                          ? 'bg-blue-50 border-blue-600 ring-2 ring-blue-100 shadow-xs'
-                          : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
+                          ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-600 ring-2 ring-blue-100 shadow-xs'
+                          : 'bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 border-slate-200 dark:border-slate-700'
                       }`}
                     >
-                      <div className="font-bold text-slate-900 truncate">{stf.name}</div>
-                      <div className="text-[10px] text-blue-900 font-semibold">{stf.roleTitleEn}</div>
-                      <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                      <div className="font-bold text-slate-900 dark:text-white truncate">{stf.name}</div>
+                      <div className="text-[10px] text-blue-900 dark:text-blue-200 font-semibold">{stf.roleTitleEn}</div>
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
                         📞 +91 {stf.phone}
                       </div>
                       <div className="text-[9px] text-slate-400 truncate mt-0.5">
@@ -164,7 +164,7 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
               </div>
 
               {errorMessage && (
-                <div className="bg-rose-50 border border-rose-300 text-rose-800 p-2.5 rounded-lg flex items-center gap-2 text-xs">
+                <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-300 dark:border-rose-700 text-rose-800 dark:text-rose-300 p-2.5 rounded-lg flex items-center gap-2 text-xs">
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
                   <span>{errorMessage}</span>
                 </div>
@@ -183,10 +183,10 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
           {step === 'OTP' && (
             <form onSubmit={handleVerifyOtp} className="space-y-4">
               <div className="space-y-1">
-                <label className="block font-bold text-slate-800">
+                <label className="block font-bold text-slate-800 dark:text-slate-100">
                   Enter 6-Digit One-Time Password (OTP)
                 </label>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
                   Sent to registered number <strong>+91 {phone}</strong>
                 </p>
                 <input
@@ -196,12 +196,12 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
                   placeholder="e.g. 749201"
                   value={otp}
                   onChange={(e) => setOtp(e.target.value)}
-                  className="w-full text-center tracking-widest text-lg font-mono font-black px-4 py-2.5 border-2 border-slate-300 rounded-xl focus:border-blue-600 focus:outline-hidden"
+                  className="w-full text-center tracking-widest text-lg font-mono font-black px-4 py-2.5 border-2 border-slate-300 dark:border-slate-600 rounded-xl focus:border-blue-600 focus:outline-hidden dark:bg-slate-800 dark:text-white"
                 />
               </div>
 
               {errorMessage && (
-                <div className="bg-rose-50 border border-rose-300 text-rose-800 p-2.5 rounded-lg flex items-center gap-2 text-xs">
+                <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-300 dark:border-rose-700 text-rose-800 dark:text-rose-300 p-2.5 rounded-lg flex items-center gap-2 text-xs">
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
                   <span>{errorMessage}</span>
                 </div>
@@ -211,7 +211,7 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
                 <button
                   type="button"
                   onClick={() => setStep('PHONE')}
-                  className="w-1/3 py-2 border border-slate-300 hover:bg-slate-50 rounded-xl font-semibold text-slate-700"
+                  className="w-1/3 py-2 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl font-semibold text-slate-700 dark:text-slate-200"
                 >
                   Back
                 </button>
@@ -228,20 +228,20 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
 
           {step === 'SUCCESS' && (
             <div className="text-center py-6 space-y-3 animate-in zoom-in-95">
-              <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
+              <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 flex items-center justify-center mx-auto">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
-              <h4 className="font-bold text-slate-900 text-sm">
+              <h4 className="font-bold text-slate-900 dark:text-white text-sm">
                 Identity Verified & Facility Bound Successfully!
               </h4>
-              <p className="text-xs text-slate-600">
+              <p className="text-xs text-slate-600 dark:text-slate-300">
                 Logging you into the Maharashtra Health Gateway...
               </p>
             </div>
           )}
 
           {/* ABDM Security Notice */}
-          <div className="pt-3 border-t border-slate-100 flex items-center gap-2 text-[10px] text-slate-500">
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400">
             <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             <span>
               Tied to National Health Authority (NHA) & Health Facility Registry (HFR) standards.

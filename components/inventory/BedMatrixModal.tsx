@@ -1,206 +1,55 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useLanguage } from '@/context/LanguageContext';
+import React, { useMemo, useState } from 'react';
+import { Activity, CheckCircle2, ChevronRight, Clock3, MapPin, Phone, X } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 import { useSync } from '@/context/SyncContext';
-import { X, Building2, Activity, Plus, Minus, Check, AlertCircle } from 'lucide-react';
+import { BedResourceType, Facility, Patient, Referral } from '@/lib/types';
+import { getAvailableResource, getDistanceKm, getFacilityStatus } from '@/lib/resourceManagement';
 
-interface BedMatrixModalProps {
-  onClose: () => void;
+interface BedMatrixModalProps { onClose: () => void; }
+const labels: Record<BedResourceType, string> = { GENERAL: 'General bed', ICU: 'ICU bed', OXYGEN: 'Oxygen-supported bed', VENTILATOR: 'Ventilator' };
+const statusStyle = { HEALTHY: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300', LIMITED: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300', CRITICAL: 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300' };
+
+function Capacity({ label, available, total }: { label: string; available: number; total: number }) {
+  return <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950"><p className="text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</p><p className="mt-1 text-lg font-black text-slate-900 dark:text-white">{available}<span className="text-xs font-semibold text-slate-400"> / {total} free</span></p></div>;
 }
 
 export function BedMatrixModal({ onClose }: BedMatrixModalProps) {
-  const { language, t } = useLanguage();
-  const { facilities, updateBedOccupancy } = useSync();
-  const [selectedDistrict, setSelectedDistrict] = useState<string>('All');
+  const { user } = useAuth();
+  const { facilities, patients, referrals, createReferral } = useSync();
+  const [resource, setResource] = useState<BedResourceType>('ICU');
+  const [detail, setDetail] = useState<Facility | null>(null);
+  const [destination, setDestination] = useState<Facility | null>(null);
+  const [patientId, setPatientId] = useState('');
+  const [urgency, setUrgency] = useState<'green' | 'yellow' | 'red'>('red');
+  const [note, setNote] = useState('');
+  const origin = facilities.find(f => f.id === 'fac-phc-velhe') ?? facilities[0];
+  const rows = useMemo(() => facilities.map(facility => ({ facility, status: getFacilityStatus(facility), available: getAvailableResource(facility, resource), distance: origin ? getDistanceKm(origin, facility) : null, reserved: referrals.filter(ref => ref.targetFacility === facility.name && (ref.status === 'PENDING' || ref.status === 'ACCEPTED')).length })).sort((a, b) => (b.available - a.available) || ((a.distance ?? Infinity) - (b.distance ?? Infinity))), [facilities, referrals, origin, resource]);
+  const matches = rows.filter(row => row.available > 0 && row.facility.id !== origin?.id);
+  const totals = facilities.reduce((sum, f) => ({ total: sum.total + f.totalBeds, occupied: sum.occupied + f.occupiedBeds, available: sum.available + getAvailableResource(f, 'GENERAL'), reserved: sum.reserved + referrals.filter(r => r.targetFacility === f.name && ['PENDING', 'ACCEPTED'].includes(r.status)).length, icu: sum.icu + getAvailableResource(f, 'ICU'), oxygen: sum.oxygen + getAvailableResource(f, 'OXYGEN'), ventilators: sum.ventilators + getAvailableResource(f, 'VENTILATOR') }), { total: 0, occupied: 0, available: 0, reserved: 0, icu: 0, oxygen: 0, ventilators: 0 });
 
-  const districts = ['All', 'Pune', 'Gadchiroli', 'Nashik'];
+  const submitReferral = () => {
+    const patient = patients.find(item => item.id === patientId);
+    if (!patient || !destination) return;
+    const referral: Referral = { id: `ref-resource-${Date.now()}`, tokenCode: `MH-REF-2026-${String(Date.now()).slice(-4)}`, patientId: patient.id, patientName: patient.fullName, patientAbha: patient.abhaId, patientAge: patient.age, patientGender: patient.gender, referringFacility: user.facilityName, targetFacility: destination.name, specialtyRequired: `${labels[resource]} support`, referralReason: note || `Resource referral requiring ${labels[resource]}.`, triagePriority: urgency, triageScore: urgency === 'red' ? 8 : urgency === 'yellow' ? 5 : 2, triageReasons: [`${labels[resource]} requested through the command center.`], vitalsAtReferral: patient.encounters[0]?.vitals ?? { systolicBp: 120, diastolicBp: 80, heartRate: 76, spO2: 98, respiratoryRate: 18, temperature: 37, consciousLevel: 'alert', recordedAt: new Date().toISOString() }, referringDoctorName: user.name, createdAt: new Date().toISOString(), status: 'PENDING', qrPayload: JSON.stringify({ patient: patient.abhaId, destination: destination.name, resource }) };
+    createReferral(referral); setDestination(null); setPatientId(''); setNote('');
+  };
 
-  const filteredFacilities = facilities.filter((f) => {
-    if (selectedDistrict === 'All') return true;
-    return f.district === selectedDistrict;
-  });
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-xs p-3 sm:p-6 animate-in fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200">
-        {/* Header */}
-        <div className="bg-slate-900 text-white px-6 py-4 flex flex-wrap justify-between items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-teal-400" />
-            <div>
-              <h3 className="font-bold text-base">{t('bedMatrix')}</h3>
-              <p className="text-xs text-slate-400">
-                {language === 'mr'
-                  ? 'थेट आयसीयू, व्हेंटिलेटर व ऑक्सिजन खाटा उपलब्धता मॅट्रिक्स'
-                  : 'Live Statewide ICU, Ventilator & Oxygen Bed Availability'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <select
-              value={selectedDistrict}
-              onChange={(e) => setSelectedDistrict(e.target.value)}
-              className="bg-slate-800 text-white text-xs px-3 py-1.5 rounded-lg border border-slate-700"
-            >
-              {districts.map((d) => (
-                <option key={d} value={d}>
-                  {d === 'All' ? 'All Districts (सर्व जिल्हे)' : `${d} District`}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={onClose}
-              className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors ml-2"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Matrix Content Table */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredFacilities.map((fac) => {
-              const generalVacant = fac.totalBeds - fac.occupiedBeds;
-              const icuVacant = fac.icuBedsTotal - fac.icuBedsOccupied;
-              const ventVacant = fac.ventilatorsTotal - fac.ventilatorsOccupied;
-              const o2Vacant = fac.oxygenBedsTotal - fac.oxygenBedsOccupied;
-
-              const icuOccupancyPercent =
-                fac.icuBedsTotal > 0 ? Math.round((fac.icuBedsOccupied / fac.icuBedsTotal) * 100) : 0;
-
-              return (
-                <div
-                  key={fac.id}
-                  className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3 hover:border-blue-400 transition-colors"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            fac.type === 'District Hospital' || fac.type === 'Medical College'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-emerald-100 text-emerald-800'
-                          }`}
-                        >
-                          {fac.type}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {fac.taluka}, {fac.district}
-                        </span>
-                      </div>
-                      <h4 className="font-bold text-slate-900 text-sm mt-1">{fac.name}</h4>
-                    </div>
-
-                    {fac.icuBedsTotal > 0 && (
-                      <span
-                        className={`text-xs font-bold px-2 py-1 rounded-md ${
-                          icuVacant === 0
-                            ? 'bg-rose-100 text-rose-800'
-                            : icuVacant <= 2
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-emerald-100 text-emerald-800'
-                        }`}
-                      >
-                        {icuVacant} ICU Open
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Beds Matrix 4-Column Grid */}
-                  <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
-                      <span className="text-[10px] text-slate-500 block">Total Beds</span>
-                      <span className="font-mono font-bold text-slate-800 text-sm">
-                        {fac.totalBeds - fac.occupiedBeds}/{fac.totalBeds}
-                      </span>
-                      <span className="text-[9px] text-emerald-700 font-semibold block">
-                        {generalVacant} Free
-                      </span>
-                    </div>
-
-                    <div className="bg-blue-50/70 p-2 rounded-lg border border-blue-200">
-                      <span className="text-[10px] text-blue-900 block font-semibold">ICU Beds</span>
-                      <span className="font-mono font-bold text-blue-950 text-sm">
-                        {fac.icuBedsTotal - fac.icuBedsOccupied}/{fac.icuBedsTotal}
-                      </span>
-                      <span className="text-[9px] text-blue-800 font-bold block">
-                        {icuVacant} Free
-                      </span>
-                    </div>
-
-                    <div className="bg-purple-50/70 p-2 rounded-lg border border-purple-200">
-                      <span className="text-[10px] text-purple-900 block font-semibold">Ventilator</span>
-                      <span className="font-mono font-bold text-purple-950 text-sm">
-                        {fac.ventilatorsTotal - fac.ventilatorsOccupied}/{fac.ventilatorsTotal}
-                      </span>
-                      <span className="text-[9px] text-purple-800 font-bold block">
-                        {ventVacant} Free
-                      </span>
-                    </div>
-
-                    <div className="bg-teal-50/70 p-2 rounded-lg border border-teal-200">
-                      <span className="text-[10px] text-teal-900 block font-semibold">Oxygen (O2)</span>
-                      <span className="font-mono font-bold text-teal-950 text-sm">
-                        {fac.oxygenBedsTotal - fac.oxygenBedsOccupied}/{fac.oxygenBedsTotal}
-                      </span>
-                      <span className="text-[9px] text-teal-800 font-bold block">
-                        {o2Vacant} Free
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Specialists On Duty */}
-                  <div className="text-[11px] text-slate-600">
-                    <strong className="text-slate-800">Specialists:</strong>{' '}
-                    {fac.availableSpecialists.join(' • ')}
-                  </div>
-
-                  {/* Live Simulation Controls */}
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                    <span className="text-[11px] text-slate-500">Simulate Bed Status:</span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => updateBedOccupancy(fac.id, 'icuBedsOccupied', 1)}
-                        disabled={fac.icuBedsOccupied >= fac.icuBedsTotal}
-                        className="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded text-[11px] font-semibold border disabled:opacity-40"
-                        title="Admit patient to ICU (+1 Occupied)"
-                      >
-                        <Plus className="w-3 h-3 text-rose-600" />
-                        <span>Admit ICU</span>
-                      </button>
-
-                      <button
-                        onClick={() => updateBedOccupancy(fac.id, 'icuBedsOccupied', -1)}
-                        disabled={fac.icuBedsOccupied <= 0}
-                        className="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded text-[11px] font-semibold border disabled:opacity-40"
-                        title="Discharge patient from ICU (-1 Occupied)"
-                      >
-                        <Minus className="w-3 h-3 text-emerald-600" />
-                        <span>Discharge ICU</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="bg-slate-100 px-6 py-3 border-t border-slate-200 flex justify-between items-center text-xs text-slate-500">
-          <span>{language === 'mr' ? 'आरोग्य व्यवस्थापन माहिती प्रणाली (HMIS) सह समक्रमित' : 'Real-time telemetry synced with Maharashtra HMIS Portal'}</span>
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-medium transition-colors"
-          >
-            {language === 'mr' ? 'बंद करा' : 'Close'}
-          </button>
-        </div>
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-3 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Hospital resource availability command center">
+    <div className="flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-50 shadow-2xl dark:bg-slate-950">
+      <header className="flex items-start justify-between bg-slate-900 px-5 py-4 text-white sm:px-7"><div><div className="flex items-center gap-2"><Activity className="h-5 w-5 text-emerald-400"/><h2 className="text-lg font-black">Hospital Resource Availability Command Center</h2></div><p className="mt-1 text-xs text-slate-400">SIMULATED operational network data · updated from this demo workspace</p></div><button onClick={onClose} aria-label="Close bed matrix" className="rounded-lg p-2 text-slate-300 hover:bg-slate-800 hover:text-white"><X className="h-5 w-5"/></button></header>
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <section className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">{[["Total beds", totals.total], ["Available", totals.available], ["Occupied", totals.occupied], ["Reserved", totals.reserved], ["ICU available", totals.icu], ["Oxygen beds", totals.oxygen], ["Ventilators", totals.ventilators], ["Critical facilities", facilities.filter(f => getFacilityStatus(f) === 'CRITICAL').length]].map(([label, value]) => <div key={String(label)} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900"><p className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-xl font-black text-slate-900 dark:text-white">{value}</p></div>)}</section>
+        <section className="mt-5 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-900 dark:bg-indigo-950/30"><div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between"><div><p className="text-xs font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Find nearest available</p><p className="mt-1 text-sm text-indigo-950 dark:text-indigo-100">Ranked by {labels[resource].toLowerCase()} availability, then calculated distance from {origin?.name ?? 'your PHC'}.</p></div><div className="flex flex-wrap gap-2">{(Object.keys(labels) as BedResourceType[]).map(key => <button key={key} onClick={() => setResource(key)} className={`rounded-lg px-3 py-2 text-xs font-bold ${resource === key ? 'bg-indigo-700 text-white' : 'bg-white text-indigo-800 ring-1 ring-indigo-200 dark:bg-slate-900 dark:text-indigo-200'}`}>{labels[key]}</button>)}</div></div><div className="mt-3 flex flex-wrap gap-2">{matches.slice(0, 3).map(row => <button key={row.facility.id} onClick={() => setDestination(row.facility)} className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-800 ring-1 ring-indigo-200 hover:bg-indigo-100 dark:bg-slate-900 dark:text-white"><CheckCircle2 className="h-4 w-4 text-emerald-600"/>{row.facility.name} · {row.available} available <ChevronRight className="h-3 w-3"/></button>)}{matches.length === 0 && <span className="text-sm font-semibold text-rose-700">No connected facility currently meets this requirement.</span>}</div></section>
+        <section className="mt-5"><div className="mb-3 flex items-center justify-between"><div><h3 className="font-black text-slate-900 dark:text-white">Referral network facilities</h3><p className="text-xs text-slate-500">Status is calculated from general-bed availability; capacity figures are not estimated.</p></div><span className="inline-flex items-center gap-1 text-xs text-slate-500"><Clock3 className="h-3.5 w-3.5"/> Demo snapshot</span></div><div className="grid gap-3 lg:grid-cols-2">{rows.map(row => { const f = row.facility; return <article key={f.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="flex justify-between gap-3"><div><h4 className="font-bold text-slate-900 dark:text-white">{f.name}</h4><p className="mt-1 flex items-center gap-1 text-xs text-slate-500"><MapPin className="h-3.5 w-3.5"/>{f.type}{row.distance !== null ? ` · ${row.distance} km` : ''}</p></div><span className={`h-fit rounded-full border px-2 py-1 text-[10px] font-black ${statusStyle[row.status]}`}>{row.status}</span></div><div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4"><Capacity label="General" available={getAvailableResource(f, 'GENERAL')} total={f.totalBeds}/><Capacity label="ICU" available={getAvailableResource(f, 'ICU')} total={f.icuBedsTotal}/><Capacity label="Oxygen" available={getAvailableResource(f, 'OXYGEN')} total={f.oxygenBedsTotal}/><Capacity label="Ventilator" available={getAvailableResource(f, 'VENTILATOR')} total={f.ventilatorsTotal}/></div><p className="mt-3 text-xs text-slate-500">Occupied: {f.occupiedBeds} · Reserved referrals: {row.reserved} · Last updated: demo snapshot</p><div className="mt-3 flex gap-2"><button onClick={() => setDetail(f)} className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">View details</button><button onClick={() => setDestination(f)} disabled={row.available === 0} className="flex-1 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Refer patient</button></div></article>; })}</div></section>
       </div>
     </div>
-  );
+    {detail && <FacilityDetail facility={detail} onClose={() => setDetail(null)} onRefer={() => { setDetail(null); setDestination(detail); }} />}
+    {destination && <ReferralForm facility={destination} patients={patients} patientId={patientId} setPatientId={setPatientId} note={note} setNote={setNote} urgency={urgency} setUrgency={setUrgency} resource={resource} onClose={() => setDestination(null)} onSubmit={submitReferral}/>}
+  </div>;
 }
+
+function FacilityDetail({ facility, onClose, onRefer }: { facility: Facility; onClose: () => void; onRefer: () => void }) { return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4"><div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900"><div className="flex justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-wider text-teal-700">Facility resource detail</p><h3 className="mt-1 text-xl font-black text-slate-900 dark:text-white">{facility.name}</h3><p className="mt-1 flex items-center gap-1 text-sm text-slate-500"><Phone className="h-4 w-4"/>{facility.phone}</p></div><button onClick={onClose} aria-label="Close facility details"><X className="h-5 w-5"/></button></div><div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4"><Capacity label="General beds" available={getAvailableResource(facility, 'GENERAL')} total={facility.totalBeds}/><Capacity label="ICU" available={getAvailableResource(facility, 'ICU')} total={facility.icuBedsTotal}/><Capacity label="Oxygen" available={getAvailableResource(facility, 'OXYGEN')} total={facility.oxygenBedsTotal}/><Capacity label="Ventilators" available={getAvailableResource(facility, 'VENTILATOR')} total={facility.ventilatorsTotal}/></div><div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200"><p><strong>Status:</strong> {getFacilityStatus(facility)} operational capacity</p><p className="mt-1"><strong>Referral eligibility:</strong> {getAvailableResource(facility, 'GENERAL') > 0 ? 'Eligible for a resource-appropriate referral.' : 'No general capacity; find an alternative.'}</p><p className="mt-1"><strong>Capabilities:</strong> {facility.availableSpecialists.join(', ')}</p></div><div className="mt-5 flex justify-end gap-2"><button onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-bold text-slate-600">Close</button><button onClick={onRefer} className="rounded-lg bg-indigo-700 px-4 py-2 text-sm font-bold text-white">Refer patient</button></div></div></div>; }
+
+function ReferralForm({ facility, patients, patientId, setPatientId, note, setNote, urgency, setUrgency, resource, onClose, onSubmit }: { facility: Facility; patients: Patient[]; patientId: string; setPatientId: (value: string) => void; note: string; setNote: (value: string) => void; urgency: 'green' | 'yellow' | 'red'; setUrgency: (value: 'green' | 'yellow' | 'red') => void; resource: BedResourceType; onClose: () => void; onSubmit: () => void; }) { return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4"><div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900"><div className="flex justify-between"><div><p className="text-xs font-black uppercase tracking-wider text-indigo-600">Confirm resource referral · demo workflow</p><h3 className="mt-1 text-xl font-black text-slate-900 dark:text-white">{facility.name}</h3></div><button onClick={onClose} aria-label="Close referral form"><X className="h-5 w-5"/></button></div><div className="mt-5 space-y-4"><label className="block text-sm font-bold text-slate-700 dark:text-slate-200">Patient / reference<select value={patientId} onChange={event => setPatientId(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white"><option value="">Select patient</option>{patients.map(patient => <option key={patient.id} value={patient.id}>{patient.fullName} · {patient.abhaId}</option>)}</select></label><div className="grid grid-cols-2 gap-3 text-sm"><div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800"><b>Required resource</b><br/>{labels[resource]}</div><div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800"><b>From facility</b><br/>Velhe PHC</div></div><label className="block text-sm font-bold text-slate-700 dark:text-slate-200">Urgency<select value={urgency} onChange={event => setUrgency(event.target.value as 'green' | 'yellow' | 'red')} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white"><option value="red">Critical / immediate</option><option value="yellow">Urgent</option><option value="green">Routine</option></select></label><label className="block text-sm font-bold text-slate-700 dark:text-slate-200">Clinical note<textarea value={note} onChange={event => setNote(event.target.value)} rows={3} placeholder="Clinical context for the receiving facility" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white"/></label></div><div className="mt-5 flex justify-end gap-2"><button onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-bold text-slate-600">Cancel</button><button disabled={!patientId} onClick={onSubmit} className="rounded-lg bg-indigo-700 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">Confirm referral</button></div></div></div>; }

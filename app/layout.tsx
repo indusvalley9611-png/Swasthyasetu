@@ -19,11 +19,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="h-full bg-slate-100">
+    <html lang="en" className="h-full bg-slate-100 dark:bg-slate-950">
       <head>
         <meta name="theme-color" content="#1e3a8a" />
       </head>
-      <body className={`min-h-full flex flex-col font-sans antialiased text-slate-800 bg-slate-100 ${inter.className}`}>
+      <body className={`min-h-full flex flex-col font-sans antialiased text-slate-800 dark:text-slate-100 bg-slate-100 dark:bg-slate-950 ${inter.className}`}>
         <AuthProvider>
           <LanguageProvider>
             <SyncProvider>

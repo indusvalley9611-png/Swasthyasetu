@@ -82,6 +82,20 @@ export interface Patient {
   };
   encounters: ClinicalEncounter[];
   activeReferralId?: string;
+  activeCareOwner?: string; // e.g. 'DISTRICT', 'STATE', 'PHC'
+}
+
+export interface DischargeSummary {
+  finalDiagnosis: string;
+  investigations: string;
+  treatmentProvided: string;
+  medicines: string;
+  patientCondition: string;
+  followUpDate: string;
+  followUpFacility: string;
+  instructions: string;
+  warningSigns: string;
+  communityFollowUpRequirement: string;
 }
 
 export interface Referral {
@@ -106,6 +120,14 @@ export interface Referral {
   ambulanceDispatched?: boolean;
   qrPayload: string;
   assignedBed?: string;
+  assignedBedType?: 'icuBedsOccupied' | 'ventilatorsOccupied' | 'oxygenBedsOccupied' | 'occupiedBeds';
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancelledByRole?: string;
+  cancellationReason?: string;
+  previousStatus?: string;
+  dischargeSummary?: DischargeSummary;
+  counterReferredTo?: string; // Facility ID or Name
 }
 
 export interface Facility {
@@ -126,7 +148,11 @@ export interface Facility {
   availableSpecialists: string[];
   lat: number;
   lng: number;
+  lastUpdated?: string;
 }
+
+export type ResourceStatus = 'HEALTHY' | 'LIMITED' | 'CRITICAL';
+export type BedResourceType = 'GENERAL' | 'ICU' | 'OXYGEN' | 'VENTILATOR';
 
 export interface DrugStockItem {
   id: string;
@@ -140,6 +166,55 @@ export interface DrugStockItem {
   batchNumber: string;
   expiryDate: string;
   status: 'OPTIMAL' | 'LOW' | 'CRITICAL';
+}
+
+export type RequestStatus = 'PENDING' | 'PENDING_SOURCE_APPROVAL' | 'APPROVED' | 'DISPATCHED' | 'COMPLETED' | 'REJECTED';
+
+export interface MedicineRequest {
+  id: string;
+  medicineStockId: string;
+  medicineName: string;
+  currentStock: number;
+  requestedQuantity: number;
+  urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL';
+  reason: string;
+  requestingFacilityId: string;
+  requestingFacilityName: string;
+  createdAt: string;
+  status: RequestStatus;
+}
+
+export interface StockTransfer {
+  id: string;
+  medicineName: string;
+  sourceStockId: string;
+  destinationStockId: string;
+  sourceFacilityId: string;
+  sourceFacilityName: string;
+  destinationFacilityId: string;
+  destinationFacilityName: string;
+  requestedQuantity: number;
+  urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL';
+  reason: string;
+  createdAt: string;
+  status: RequestStatus;
+  approvedAt?: string;
+  dispatchedAt?: string;
+  receivedAt?: string;
+  rejectionReason?: string;
+}
+
+export interface ResourceAlert {
+  id: string;
+  severity: 'INFO' | 'WARNING' | 'CRITICAL';
+  title: string;
+  description: string;
+  resource: string;
+  facilityId: string;
+  facilityName: string;
+  createdAt: string;
+  recommendedAction: string;
+  status: 'NEW' | 'ACKNOWLEDGED' | 'RESOLVED';
 }
 
 export interface OutbreakData {
@@ -158,7 +233,7 @@ export interface OutbreakData {
 export interface OfflineSyncItem {
   id: string;
   timestamp: number;
-  type: 'PATIENT_SCREENING' | 'NEW_PATIENT' | 'REFERRAL_CREATED' | 'VITALS_UPDATE';
+  type: 'PATIENT_SCREENING' | 'NEW_PATIENT' | 'REFERRAL_CREATED' | 'VITALS_UPDATE' | 'MEDICINE_REQUEST_CREATED' | 'STOCK_TRANSFER_CREATED';
   status: 'PENDING' | 'SYNCED' | 'FAILED';
   payload: any;
   retryCount: number;

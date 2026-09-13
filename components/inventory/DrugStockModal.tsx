@@ -1,260 +1,62 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useLanguage } from '@/context/LanguageContext';
+import React, { useMemo, useState } from 'react';
+import { ArrowRightLeft, CheckCircle2, PackageSearch, Search, X } from 'lucide-react';
 import { useSync } from '@/context/SyncContext';
-import { DrugStockItem } from '@/lib/types';
-import {
-  X,
-  Activity,
-  AlertTriangle,
-  ArrowRightLeft,
-  CheckCircle2,
-  Package,
-  Plus,
-  Minus,
-} from 'lucide-react';
+import { DrugStockItem, StockTransfer } from '@/lib/types';
+import { findSurplusSources, getMedicineStatus, isExpiringSoon } from '@/lib/resourceManagement';
 
-interface DrugStockModalProps {
-  onClose: () => void;
-}
+interface DrugStockModalProps { onClose: () => void; }
+type Filter = 'ALL' | 'LOW' | 'EXPIRING';
+const statusColor = { HEALTHY: 'bg-emerald-100 text-emerald-800 border-emerald-200', LIMITED: 'bg-amber-100 text-amber-800 border-amber-200', CRITICAL: 'bg-rose-100 text-rose-800 border-rose-200' };
 
 export function DrugStockModal({ onClose }: DrugStockModalProps) {
-  const { language, t } = useLanguage();
-  const { stocks, updateDrugStock, requestStockTransfer } = useSync();
-
-  const [filterCategory, setFilterCategory] = useState<string>('All');
-  const [showRequisitionForm, setShowRequisitionForm] = useState<boolean>(false);
-  const [selectedDrug, setSelectedDrug] = useState<string>('Anti-Snake Venom (ASV Polyvalent Lyophilized)');
-  const [requestQty, setRequestQty] = useState<number>(10);
-  const [targetFacility, setTargetFacility] = useState<string>('District Hospital Aundh, Pune');
-
-  const categories = ['All', 'Critical Lifesaving', 'Maternal Health', 'Vaccine', 'Emergency Gas'];
-
-  const filteredStocks = stocks.filter((s) => {
-    if (filterCategory === 'All') return true;
-    return s.category === filterCategory;
+  const { stocks, facilities, medicineRequests, stockTransfers, createMedicineRequest, createStockTransfer, processStockTransfer } = useSync();
+  const phcs = facilities.filter(facility => facility.type === 'PHC');
+  const [workspaceId, setWorkspaceId] = useState('fac-phc-velhe');
+  const [search, setSearch] = useState(''); const [filter, setFilter] = useState<Filter>('ALL');
+  const [historyQuery, setHistoryQuery] = useState(''); const [historyStatus, setHistoryStatus] = useState('ALL'); const [historyUrgency, setHistoryUrgency] = useState('ALL'); const [historyDate, setHistoryDate] = useState('');
+  const [requesting, setRequesting] = useState<DrugStockItem | null>(null); const [surplusFor, setSurplusFor] = useState<DrugStockItem | null>(null); const [reviewing, setReviewing] = useState<StockTransfer | null>(null);
+  const [confirmation, setConfirmation] = useState<{ transfer: StockTransfer; action: 'DISPATCH' | 'RECEIVE' } | null>(null);
+  const workspace = phcs.find(facility => facility.id === workspaceId);
+  const inventory = stocks.filter(stock => stock.facilityId === workspaceId);
+  const rows = useMemo(() => inventory.filter(stock => { const matches = `${stock.drugName} ${stock.category}`.toLowerCase().includes(search.toLowerCase()); if (!matches) return false; if (filter === 'LOW') return getMedicineStatus(stock) !== 'HEALTHY'; if (filter === 'EXPIRING') return isExpiringSoon(stock.expiryDate); return true; }), [inventory, search, filter]);
+  const incoming = stockTransfers.filter(transfer => transfer.sourceFacilityId === workspaceId && !['COMPLETED', 'REJECTED'].includes(transfer.status));
+  const outgoing = stockTransfers.filter(transfer => transfer.destinationFacilityId === workspaceId && !['COMPLETED', 'REJECTED'].includes(transfer.status));
+  const completed = stockTransfers.filter(transfer => {
+    if (transfer.sourceFacilityId !== workspaceId && transfer.destinationFacilityId !== workspaceId) return false;
+    if (historyStatus !== 'ALL' && transfer.status !== historyStatus) return false;
+    if (historyUrgency !== 'ALL' && transfer.urgency !== historyUrgency) return false;
+    if (historyDate && !transfer.createdAt.startsWith(historyDate)) return false;
+    return `${transfer.id} ${transfer.medicineName} ${transfer.sourceFacilityName} ${transfer.destinationFacilityName}`.toLowerCase().includes(historyQuery.toLowerCase());
   });
+  const critical = inventory.filter(stock => getMedicineStatus(stock) === 'CRITICAL').length;
 
-  const handleRequisitionSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    requestStockTransfer(selectedDrug, requestQty, targetFacility);
-    setShowRequisitionForm(false);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-xs p-3 sm:p-6 animate-in fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200">
-        {/* Header */}
-        <div className="bg-slate-900 text-white px-6 py-4 flex flex-wrap justify-between items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Activity className="w-5 h-5 text-rose-400" />
-            <div>
-              <h3 className="font-bold text-base">{t('emergencyStock')}</h3>
-              <p className="text-xs text-slate-400">
-                {language === 'mr'
-                  ? 'सर्पविष प्रतिबंधक लस, रेबीज लस, ऑक्सिटोसिन व ऑक्सिजन सिलिंडर साठा'
-                  : 'Anti-Snake Venom, Rabies, Oxytocin & Life-Saving Drug Reserves'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowRequisitionForm(!showRequisitionForm)}
-              className="inline-flex items-center gap-1.5 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm transition-colors"
-            >
-              <ArrowRightLeft className="w-4 h-4" />
-              <span>{showRequisitionForm ? 'View Stock Ledger' : t('requestStock')}</span>
-            </button>
-            <button
-              onClick={onClose}
-              className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors ml-2"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Requisition Drawer Form */}
-        {showRequisitionForm && (
-          <div className="bg-blue-50/90 border-b border-blue-200 p-5 animate-in slide-in-from-top-2">
-            <h4 className="font-bold text-blue-950 text-xs mb-3 flex items-center gap-2">
-              <ArrowRightLeft className="w-4 h-4 text-blue-700" />
-              <span>
-                {language === 'mr'
-                  ? 'जिल्हा गोदामाकडून तातडीची औषध पुरवठा मागणी (Emergency Requisition)'
-                  : 'Inter-Facility Stock Requisition from District Warehouse'}
-              </span>
-            </h4>
-            <form onSubmit={handleRequisitionSubmit} className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
-              <div className="sm:col-span-2">
-                <label className="block font-semibold text-slate-700 mb-1">Select Medicine</label>
-                <select
-                  value={selectedDrug}
-                  onChange={(e) => setSelectedDrug(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white"
-                >
-                  <option value="Anti-Snake Venom (ASV Polyvalent Lyophilized)">
-                    Anti-Snake Venom (ASV Polyvalent Lyophilized)
-                  </option>
-                  <option value="Anti-Rabies Vaccine (ARV Purified Vero Cell)">
-                    Anti-Rabies Vaccine (ARV Purified Vero Cell)
-                  </option>
-                  <option value="Oxytocin Injection IP (10 IU/ml)">Oxytocin Injection IP (10 IU/ml)</option>
-                  <option value="Magnesium Sulphate 50% Inj">Magnesium Sulphate 50% Inj</option>
-                  <option value="Medical Oxygen D-Type Cylinders">Medical Oxygen D-Type Cylinders</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Quantity</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={500}
-                  value={requestQty}
-                  onChange={(e) => setRequestQty(parseInt(e.target.value) || 1)}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white"
-                />
-              </div>
-
-              <div className="flex items-end">
-                <button
-                  type="submit"
-                  className="w-full py-1.5 bg-blue-900 hover:bg-blue-950 text-white font-bold rounded-lg shadow transition-colors"
-                >
-                  Dispatch Requisition
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* Filter Pills */}
-        <div className="bg-slate-50 border-b border-slate-200 px-6 py-2.5 flex items-center justify-between text-xs overflow-x-auto">
-          <div className="flex gap-1.5">
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setFilterCategory(cat)}
-                className={`px-3 py-1 rounded-full font-medium whitespace-nowrap transition-colors ${
-                  filterCategory === cat
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-300'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-
-          <span className="text-[11px] text-slate-500 font-medium hidden sm:inline">
-            Buffer Threshold Alert at &lt;25%
-          </span>
-        </div>
-
-        {/* Stock Items List */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-3">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left border border-slate-200 rounded-xl overflow-hidden shadow-xs">
-              <thead className="bg-slate-100 text-slate-700 text-[10px] uppercase font-bold tracking-wider">
-                <tr>
-                  <th className="px-4 py-2.5">Medicine Name</th>
-                  <th className="px-3 py-2.5">Facility</th>
-                  <th className="px-3 py-2.5">Category</th>
-                  <th className="px-3 py-2.5">Stock / Buffer</th>
-                  <th className="px-3 py-2.5">Status</th>
-                  <th className="px-3 py-2.5 text-right">Quick Stock Mod</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredStocks.map((stk) => {
-                  const percentOfBuffer = Math.round((stk.currentStock / stk.bufferStock) * 100);
-
-                  return (
-                    <tr key={stk.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="px-4 py-3">
-                        <div className="font-bold text-slate-900">{stk.drugName}</div>
-                        <div className="text-[10px] text-slate-500">
-                          Batch: {stk.batchNumber} • Exp: {stk.expiryDate}
-                        </div>
-                      </td>
-
-                      <td className="px-3 py-3 font-medium text-slate-700">{stk.facilityName}</td>
-
-                      <td className="px-3 py-3">
-                        <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-medium">
-                          {stk.category}
-                        </span>
-                      </td>
-
-                      <td className="px-3 py-3">
-                        <div className="font-mono font-bold text-slate-900">
-                          {stk.currentStock} {stk.unit}
-                        </div>
-                        <div className="text-[10px] text-slate-500">
-                          Buffer: {stk.bufferStock} ({percentOfBuffer}%)
-                        </div>
-                      </td>
-
-                      <td className="px-3 py-3">
-                        {stk.status === 'CRITICAL' ? (
-                          <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-800 font-extrabold px-2 py-0.5 rounded-full text-[10px] border border-rose-300 animate-pulse">
-                            <AlertTriangle className="w-3 h-3" />
-                            CRITICAL SHORTAGE
-                          </span>
-                        ) : stk.status === 'LOW' ? (
-                          <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full text-[10px] border border-amber-300">
-                            <AlertTriangle className="w-3 h-3" />
-                            LOW STOCK
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded-full text-[10px]">
-                            <CheckCircle2 className="w-3 h-3" />
-                            OPTIMAL
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="px-3 py-3 text-right">
-                        <div className="inline-flex items-center gap-1">
-                          <button
-                            onClick={() => updateDrugStock(stk.id, stk.currentStock - 1)}
-                            disabled={stk.currentStock <= 0}
-                            className="w-6 h-6 rounded bg-slate-200 hover:bg-slate-300 flex items-center justify-center text-slate-700 disabled:opacity-30"
-                            title="Dispense 1 unit (-1)"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <button
-                            onClick={() => updateDrugStock(stk.id, stk.currentStock + 5)}
-                            className="w-6 h-6 rounded bg-slate-200 hover:bg-slate-300 flex items-center justify-center text-slate-700"
-                            title="Restock 5 units (+5)"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="bg-slate-100 px-6 py-3 border-t border-slate-200 flex justify-between items-center text-xs text-slate-500">
-          <span>{language === 'mr' ? 'महाराष्ट्र वैद्यकीय वस्तू खरेदी प्राधिकरण (MMGCL) साठा व्यवस्थापन' : 'Integrated with Maha Medical Goods Procurement (e-Aushadhi)'}</span>
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-medium transition-colors"
-          >
-            {language === 'mr' ? 'बंद करा' : 'Close'}
-          </button>
-        </div>
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-3 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Medicine redistribution network">
+    <div className="flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-50 shadow-2xl dark:bg-slate-950">
+      <header className="flex justify-between bg-slate-900 px-5 py-4 text-white sm:px-7"><div><div className="flex items-center gap-2"><PackageSearch className="h-5 w-5 text-amber-400"/><h2 className="text-lg font-black">Medicine Stock & PHC Redistribution Network</h2></div><p className="mt-1 text-xs text-slate-400">SIMULATED operational data · refill and PHC-to-PHC transfer are separate workflows</p></div><button onClick={onClose} aria-label="Close medicine network" className="rounded-lg p-2 text-slate-300 hover:bg-slate-800"><X className="h-5 w-5"/></button></header>
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <section className="flex flex-col justify-between gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-900 dark:bg-indigo-950/30 md:flex-row md:items-center"><div><p className="text-xs font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300">PHC operational workspace · demo switcher</p><p className="mt-1 text-sm text-indigo-950 dark:text-indigo-100">Use this to demonstrate requesting at one PHC and review/dispatch at another. The production auth model currently has only the Velhe PHC account.</p></div><select value={workspaceId} onChange={event => setWorkspaceId(event.target.value)} className="rounded-lg border border-indigo-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 dark:bg-slate-900 dark:text-white">{phcs.map(facility => <option key={facility.id} value={facility.id}>{facility.name}</option>)}</select></section>
+        <section className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">{[["Critical", critical], ["Low stock", inventory.filter(s => getMedicineStatus(s) === 'LIMITED').length], ["Healthy", inventory.filter(s => getMedicineStatus(s) === 'HEALTHY').length], ["Incoming transfers", incoming.length], ["Outgoing transfers", outgoing.length], ["Refill requests", medicineRequests.filter(request => request.requestingFacilityId === workspaceId && request.status === 'PENDING').length]].map(([label, value]) => <div key={String(label)} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900"><p className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-xl font-black text-slate-900 dark:text-white">{value}</p></div>)}</section>
+        <section className="mt-5"><div className="flex flex-col gap-3 sm:flex-row sm:justify-between"><div className="relative flex-1"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400"/><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search this PHC inventory" className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"/></div><div className="flex gap-2"><button onClick={() => setFilter(filter === 'LOW' ? 'ALL' : 'LOW')} className={`rounded-lg px-3 py-2 text-xs font-bold ${filter === 'LOW' ? 'bg-rose-700 text-white' : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200'}`}>Low stock</button><button onClick={() => setFilter(filter === 'EXPIRING' ? 'ALL' : 'EXPIRING')} className={`rounded-lg px-3 py-2 text-xs font-bold ${filter === 'EXPIRING' ? 'bg-violet-700 text-white' : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200'}`}>Expiring soon</button></div></div>
+          <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 dark:bg-slate-950"><tr><th className="p-3">Medicine</th><th className="p-3 text-right">Current / minimum</th><th className="p-3">Expiry</th><th className="p-3">Status</th><th className="p-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{rows.map(stock => { const status = getMedicineStatus(stock); const criticalOrLow = status !== 'HEALTHY'; return <tr key={stock.id}><td className="p-3"><p className="font-bold text-slate-900 dark:text-white">{stock.drugName}</p><p className="text-xs text-slate-500">{stock.category} · {stock.batchNumber}</p></td><td className="p-3 text-right font-bold text-slate-900 dark:text-white">{stock.currentStock} <span className="text-xs font-normal text-slate-500">/ {stock.bufferStock} {stock.unit}</span></td><td className="p-3 text-xs text-slate-600 dark:text-slate-300">{stock.expiryDate}{isExpiringSoon(stock.expiryDate) ? ' · expiry risk' : ''}</td><td className="p-3"><span className={`rounded-full border px-2 py-1 text-[10px] font-black ${statusColor[status]}`}>{status}</span></td><td className="p-3"><div className="flex justify-end gap-2"><button onClick={() => setRequesting(stock)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-700 dark:border-slate-700 dark:text-slate-200">Request refill</button>{criticalOrLow && <button onClick={() => setSurplusFor(stock)} className="rounded-lg bg-indigo-700 px-2.5 py-1.5 text-xs font-bold text-white">Find surplus</button>}</div></td></tr>; })}{rows.length === 0 && <tr><td colSpan={5} className="p-10 text-center text-sm text-slate-500">No inventory records match this filter.</td></tr>}</tbody></table></div></section>
+        <TransferTable title="Incoming transfer requests" transfers={incoming} workspaceId={workspaceId} onReview={setReviewing} onAction={(id, action) => { const transfer = stockTransfers.find(item => item.id === id); if (transfer && (action === 'DISPATCH' || action === 'RECEIVE')) setConfirmation({ transfer, action }); return true; }}/>
+        <section className="mt-6"><div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><h3 className="font-black text-slate-900 dark:text-white">Transfer history</h3><div className="flex flex-wrap gap-2"><input value={historyQuery} onChange={event => setHistoryQuery(event.target.value)} placeholder="Medicine or PHC" className="rounded-lg border px-2 py-1.5 text-xs dark:bg-slate-800"/><select value={historyStatus} onChange={event => setHistoryStatus(event.target.value)} className="rounded-lg border px-2 py-1.5 text-xs dark:bg-slate-800"><option value="ALL">All status</option><option>COMPLETED</option><option>REJECTED</option><option>DISPATCHED</option><option>APPROVED</option><option>PENDING_SOURCE_APPROVAL</option></select><select value={historyUrgency} onChange={event => setHistoryUrgency(event.target.value)} className="rounded-lg border px-2 py-1.5 text-xs dark:bg-slate-800"><option value="ALL">All urgency</option><option>CRITICAL</option><option>URGENT</option><option>ROUTINE</option></select><input type="date" value={historyDate} onChange={event => setHistoryDate(event.target.value)} className="rounded-lg border px-2 py-1.5 text-xs dark:bg-slate-800"/></div></div><TransferTable title="" transfers={completed} workspaceId={workspaceId} onReview={setReviewing} onAction={(id, action) => { const transfer = stockTransfers.find(item => item.id === id); if (transfer && (action === 'DISPATCH' || action === 'RECEIVE')) setConfirmation({ transfer, action }); return true; }} history /></section>
       </div>
     </div>
-  );
+    {requesting && <RefillForm stock={requesting} onClose={() => setRequesting(null)} onSubmit={(quantity, urgency, reason) => { createMedicineRequest({ medicineStockId: requesting.id, medicineName: requesting.drugName, currentStock: requesting.currentStock, requestedQuantity: quantity, urgency, reason, requestingFacilityId: workspaceId, requestingFacilityName: workspace?.name ?? 'Selected PHC' }); setRequesting(null); }} />}
+    {surplusFor && <SurplusForm destination={surplusFor} stocks={stocks} facilities={facilities} transfers={stockTransfers} onClose={() => setSurplusFor(null)} onSubmit={(source, quantity, urgency, reason) => { const created = createStockTransfer({ medicineName: surplusFor.drugName, sourceStockId: source.id, destinationStockId: surplusFor.id, sourceFacilityId: source.facilityId, sourceFacilityName: source.facilityName, destinationFacilityId: surplusFor.facilityId, destinationFacilityName: surplusFor.facilityName, requestedQuantity: quantity, urgency, reason }); if (created) setSurplusFor(null); }} />}
+    {reviewing && <ReviewTransfer transfer={reviewing} stocks={stocks} onClose={() => setReviewing(null)} onAction={(action, reason) => { if (processStockTransfer(reviewing.id, action, reason)) setReviewing(null); }} />}
+    {confirmation && <TransferConfirmation transfer={confirmation.transfer} action={confirmation.action} stocks={stocks} onClose={() => setConfirmation(null)} onConfirm={() => { if (processStockTransfer(confirmation.transfer.id, confirmation.action)) setConfirmation(null); }} />}
+  </div>;
 }
+
+function TransferTable({ title, transfers, workspaceId, onReview, onAction, history = false }: { title: string; transfers: StockTransfer[]; workspaceId: string; onReview: (transfer: StockTransfer) => void; onAction: (id: string, action: 'APPROVE' | 'REJECT' | 'DISPATCH' | 'RECEIVE') => boolean; history?: boolean }) { return <section className="mt-6">{title && <h3 className="font-black text-slate-900 dark:text-white">{title}</h3>}<div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 dark:bg-slate-950"><tr><th className="p-3">Transfer</th><th className="p-3">Route</th><th className="p-3">Medicine</th><th className="p-3">Urgency</th><th className="p-3">Status</th><th className="p-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{transfers.map(transfer => { const sourceWorkspace = transfer.sourceFacilityId === workspaceId; const destinationWorkspace = transfer.destinationFacilityId === workspaceId; return <tr key={transfer.id}><td className="p-3 font-mono text-xs font-bold text-slate-800 dark:text-white">{transfer.id}<br/><span className="font-normal text-slate-500">{new Date(transfer.createdAt).toLocaleDateString()}</span></td><td className="p-3 text-xs">{transfer.sourceFacilityName} <ArrowRightLeft className="mx-1 inline h-3 w-3"/> {transfer.destinationFacilityName}</td><td className="p-3"><b>{transfer.medicineName}</b><br/><span className="text-xs text-slate-500">{transfer.requestedQuantity} units</span></td><td className="p-3 text-xs font-bold">{transfer.urgency}</td><td className="p-3"><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-700 dark:bg-slate-800 dark:text-slate-200">{transfer.status.replaceAll('_', ' ')}</span></td><td className="p-3 text-right">{sourceWorkspace && transfer.status === 'PENDING_SOURCE_APPROVAL' && <button onClick={() => onReview(transfer)} className="rounded-lg bg-indigo-700 px-2.5 py-1.5 text-xs font-bold text-white">Review</button>}{sourceWorkspace && transfer.status === 'APPROVED' && <button onClick={() => onAction(transfer.id, 'DISPATCH')} className="rounded-lg bg-amber-600 px-2.5 py-1.5 text-xs font-bold text-white">Dispatch</button>}{destinationWorkspace && transfer.status === 'DISPATCHED' && <button onClick={() => onAction(transfer.id, 'RECEIVE')} className="rounded-lg bg-emerald-700 px-2.5 py-1.5 text-xs font-bold text-white">Mark received</button>}{history && transfer.status === 'REJECTED' && <span className="text-xs text-rose-600">{transfer.rejectionReason}</span>}</td></tr>; })}{transfers.length === 0 && <tr><td colSpan={6} className="p-7 text-center text-sm text-slate-500">No transfer records for this PHC.</td></tr>}</tbody></table></div></section>; }
+
+function SurplusForm({ destination, stocks, facilities, transfers, onClose, onSubmit }: { destination: DrugStockItem; stocks: DrugStockItem[]; facilities: import('@/lib/types').Facility[]; transfers: StockTransfer[]; onClose: () => void; onSubmit: (source: DrugStockItem, quantity: number, urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL', reason: string) => void }) { const candidates = findSurplusSources(destination, stocks, transfers, facilities); const [sourceId, setSourceId] = useState(candidates[0]?.stock.id ?? ''); const source = candidates.find(candidate => candidate.stock.id === sourceId); const need = Math.max(0, destination.bufferStock - destination.currentStock); const [quantity, setQuantity] = useState(need); const [reason, setReason] = useState('Emergency stock shortage'); const urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL' = getMedicineStatus(destination) === 'CRITICAL' ? 'CRITICAL' : 'URGENT'; const limit = source?.transferable ?? 0; return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4"><div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900"><div className="flex justify-between"><div><p className="text-xs font-black uppercase tracking-wider text-indigo-600">Create PHC medicine transfer request</p><h3 className="mt-1 text-xl font-black text-slate-900 dark:text-white">{destination.drugName}</h3></div><button onClick={onClose} aria-label="Close transfer request"><X className="h-5 w-5"/></button></div><p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Destination current: <b>{destination.currentStock}</b> · minimum: <b>{destination.bufferStock}</b> · need: <b>{need}</b>. Sources are ranked by safe transferable surplus.</p>{candidates.length ? <div className="mt-5 space-y-4"><div className="space-y-2">{candidates.map((candidate, index) => <button key={candidate.stock.id} onClick={() => setSourceId(candidate.stock.id)} className={`w-full rounded-xl border p-3 text-left ${sourceId === candidate.stock.id ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/30' : 'border-slate-200 dark:border-slate-700'}`}><div className="flex justify-between"><b>{index === 0 ? 'RECOMMENDED · ' : ''}{candidate.stock.facilityName}</b><span className="text-sm font-black text-emerald-700">Safe transfer: {candidate.transferable}</span></div><p className="mt-1 text-xs text-slate-500">Current {candidate.stock.currentStock} · minimum {candidate.stock.bufferStock} · reason: sufficient surplus while retaining the source safety buffer.</p></button>)}</div><div className="grid gap-3 sm:grid-cols-2"><label className="text-sm font-bold">Requested quantity (max {limit})<input type="number" min="1" max={limit} value={quantity} onChange={event => setQuantity(Number(event.target.value))} className="mt-1 w-full rounded-lg border p-2 dark:bg-slate-800"/></label><div className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800"><b>Urgency</b><br/>{urgency}<br/><b>After transfer</b><br/>Source: {(source?.stock.currentStock ?? 0) - quantity} · Destination: {destination.currentStock + quantity}</div></div><label className="block text-sm font-bold">Reason<textarea value={reason} onChange={event => setReason(event.target.value)} className="mt-1 w-full rounded-lg border p-2 dark:bg-slate-800"/></label></div> : <p className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-800">No connected PHC has transferable surplus for this medicine. Use Request Refill instead.</p>}<div className="mt-5 flex justify-end gap-2"><button onClick={onClose} className="px-3 py-2 font-bold">Cancel</button>{source && <button disabled={quantity <= 0 || quantity > limit || !reason.trim()} onClick={() => onSubmit(source.stock, quantity, urgency, reason)} className="rounded-lg bg-indigo-700 px-3 py-2 font-bold text-white disabled:opacity-40">Create transfer request</button>}</div></div></div>; }
+
+function ReviewTransfer({ transfer, stocks, onClose, onAction }: { transfer: StockTransfer; stocks: DrugStockItem[]; onClose: () => void; onAction: (action: 'APPROVE' | 'REJECT', reason?: string) => void }) { const [rejecting, setRejecting] = useState(false); const [reason, setReason] = useState(''); const source = stocks.find(stock => stock.id === transfer.sourceStockId); const after = (source?.currentStock ?? 0) - transfer.requestedQuantity; const safetyPass = Boolean(source && after >= source.bufferStock); return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4"><div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900"><div className="flex justify-between"><h3 className="text-xl font-black text-slate-900 dark:text-white">Transfer request review</h3><button onClick={onClose} aria-label="Close transfer review"><X className="h-5 w-5"/></button></div><div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-800"><p><b>Destination</b><br/>{transfer.destinationFacilityName}</p><p><b>Medicine</b><br/>{transfer.medicineName}</p><p><b>Requested</b><br/>{transfer.requestedQuantity} units</p><p><b>Source current / min</b><br/>{source?.currentStock} / {source?.bufferStock}</p><p><b>After transfer</b><br/>{after}</p><p className={safetyPass ? 'text-emerald-700' : 'text-rose-700'}><b>Safety check</b><br/>{safetyPass ? 'PASS' : 'FAIL'}</p></div>{rejecting && <label className="mt-4 block text-sm font-bold">Rejection reason<textarea value={reason} onChange={event => setReason(event.target.value)} className="mt-1 w-full rounded-lg border p-2 dark:bg-slate-800"/></label>}<div className="mt-5 flex justify-end gap-2"><button onClick={() => setRejecting(!rejecting)} className="rounded-lg border border-rose-300 px-3 py-2 text-sm font-bold text-rose-700">Reject</button>{rejecting ? <button disabled={!reason.trim()} onClick={() => onAction('REJECT', reason)} className="rounded-lg bg-rose-700 px-3 py-2 text-sm font-bold text-white disabled:opacity-40">Confirm rejection</button> : <button disabled={!safetyPass} onClick={() => onAction('APPROVE')} className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-bold text-white disabled:opacity-40"><CheckCircle2 className="mr-1 inline h-4 w-4"/>Approve transfer</button>}</div></div></div>; }
+
+function TransferConfirmation({ transfer, action, stocks, onClose, onConfirm }: { transfer: StockTransfer; action: 'DISPATCH' | 'RECEIVE'; stocks: DrugStockItem[]; onClose: () => void; onConfirm: () => void }) { const source = stocks.find(stock => stock.id === transfer.sourceStockId); const destination = stocks.find(stock => stock.id === transfer.destinationStockId); const receiving = action === 'RECEIVE'; return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4"><div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900"><h3 className="text-xl font-black text-slate-900 dark:text-white">Confirm {receiving ? 'receipt' : 'dispatch'}</h3><p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{transfer.sourceFacilityName} &rarr; {transfer.destinationFacilityName}</p><div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-800"><p><b>Medicine</b><br/>{transfer.medicineName}</p><p><b>Quantity</b><br/>{transfer.requestedQuantity}</p><p><b>Source after completion</b><br/>{(source?.currentStock ?? 0) - transfer.requestedQuantity}</p><p><b>Destination after receipt</b><br/>{(destination?.currentStock ?? 0) + transfer.requestedQuantity}</p></div><p className="mt-4 text-xs text-slate-500">{receiving ? 'Confirming receipt updates both inventories and recalculates stock status.' : 'Dispatch does not update inventory until the destination confirms receipt.'}</p><div className="mt-5 flex justify-end gap-2"><button onClick={onClose} className="px-3 py-2 font-bold">Cancel</button><button onClick={onConfirm} className="rounded-lg bg-emerald-700 px-3 py-2 font-bold text-white">Confirm {receiving ? 'receipt' : 'dispatch'}</button></div></div></div>; }
+
+function RefillForm({ stock, onClose, onSubmit }: { stock: DrugStockItem; onClose: () => void; onSubmit: (quantity: number, urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL', reason: string) => void }) { const [quantity, setQuantity] = useState(Math.max(1, stock.bufferStock - stock.currentStock)); const [reason, setReason] = useState('Restore minimum buffer stock.'); const urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL' = getMedicineStatus(stock) === 'CRITICAL' ? 'CRITICAL' : 'URGENT'; return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4"><div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900"><h3 className="text-xl font-black text-slate-900 dark:text-white">Request central refill</h3><p className="mt-1 text-sm text-slate-500">Separate from PHC-to-PHC redistribution. This request goes to district supply coordination.</p><div className="mt-4 space-y-3"><label className="block text-sm font-bold">Quantity<input min="1" type="number" value={quantity} onChange={event => setQuantity(Number(event.target.value))} className="mt-1 w-full rounded-lg border p-2 dark:bg-slate-800"/></label><label className="block text-sm font-bold">Reason<textarea value={reason} onChange={event => setReason(event.target.value)} className="mt-1 w-full rounded-lg border p-2 dark:bg-slate-800"/></label></div><div className="mt-5 flex justify-end gap-2"><button onClick={onClose} className="px-3 py-2 font-bold">Cancel</button><button disabled={quantity <= 0 || !reason.trim()} onClick={() => onSubmit(quantity, urgency, reason)} className="rounded-lg bg-amber-600 px-3 py-2 font-bold text-white disabled:opacity-40">Create refill request</button></div></div></div>; }

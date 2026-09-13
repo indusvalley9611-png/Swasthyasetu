@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { useSync } from '@/context/SyncContext';
@@ -11,6 +11,7 @@ import { AshaDashboard } from '@/components/dashboards/AshaDashboard';
 import { PhcDoctorDashboard } from '@/components/dashboards/PhcDoctorDashboard';
 import { SpecialistDashboard } from '@/components/dashboards/SpecialistDashboard';
 import { StateAdminDashboard } from '@/components/dashboards/StateAdminDashboard';
+import WorkerWorkspace from '@/components/directory/WorkerWorkspace';
 import { NewPatientModal } from '@/components/ehr/NewPatientModal';
 import { PatientTimelineModal } from '@/components/ehr/PatientTimelineModal';
 import { AbhaCardModal } from '@/components/ehr/AbhaCardModal';
@@ -20,14 +21,17 @@ import { BedMatrixModal } from '@/components/inventory/BedMatrixModal';
 import { DrugStockModal } from '@/components/inventory/DrugStockModal';
 import { GlobalPatientSearchModal } from '@/components/ehr/GlobalPatientSearchModal';
 import { StaffLoginModal } from '@/components/auth/StaffLoginModal';
+import { PatientDownloadModal } from '@/components/auth/PatientDownloadModal';
 import {
-  Users,
+  Users, User,
   Stethoscope,
   Building2,
   BarChart3,
   HeartPulse,
   Activity,
   Languages,
+    Moon,
+    Sun,
 } from 'lucide-react';
 
 export default function Home() {
@@ -41,15 +45,45 @@ export default function Home() {
   const [isBedMatrixOpen, setIsBedMatrixOpen] = useState(false);
   const [isDrugStockOpen, setIsDrugStockOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [selectedLoginRole, setSelectedLoginRole] = useState<Role | undefined>(undefined);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  useEffect(() => {
+    // Only use dark mode if user explicitly saved it
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark' || (!savedTheme && document.documentElement.classList.contains('dark'))) {
+      setIsDarkMode(true);
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
+    } else {
+      setIsDarkMode(false);
+      document.documentElement.classList.remove('dark');
+      document.documentElement.classList.add('light');
+    }
+  }, []);
+
+  const toggleDarkMode = () => {
+    const nextDark = !isDarkMode;
+    setIsDarkMode(nextDark);
+    if (nextDark) {
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.documentElement.classList.add('light');
+      localStorage.setItem('theme', 'light');
+    }
+  };
+
+  const [selectedLoginRole, setSelectedLoginRole] = useState<Role | 'patient' | undefined>(undefined);
   const [timelinePatient, setTimelinePatient] = useState<Patient | null>(null);
   const [abhaCardPatient, setAbhaCardPatient] = useState<Patient | null>(null);
   const [referralPatient, setReferralPatient] = useState<Patient | null>(null);
   const [referralToken, setReferralToken] = useState<Referral | null>(null);
 
-  const rolesNavigation: { id: Role; titleEn: string; titleMr: string; icon: any; descEn: string; descMr: string }[] = [
+  const rolesNavigation = [
     {
-      id: 'asha',
+      id: 'asha' as Role,
       titleEn: '1. ASHA / Sub-Centre',
       titleMr: '१. आशा सेविका / उपकेंद्र',
       icon: Users,
@@ -57,7 +91,7 @@ export default function Home() {
       descMr: 'जलद शारीरिक तपासणी व HRP माता निरीक्षण',
     },
     {
-      id: 'phc_doctor',
+      id: 'phc_doctor' as Role,
       titleEn: '2. PHC Medical Officer',
       titleMr: '२. वैद्यकीय अधिकारी (PHC)',
       icon: Stethoscope,
@@ -65,7 +99,7 @@ export default function Home() {
       descMr: 'रुग्ण इतिहास, औषध योजना व स्मार्ट रेफरल',
     },
     {
-      id: 'specialist',
+      id: 'specialist' as Role,
       titleEn: '3. District Specialist',
       titleMr: '३. जिल्हा रुग्णालय तज्ज्ञ',
       icon: Building2,
@@ -73,18 +107,26 @@ export default function Home() {
       descMr: 'कॅज्युअल्टी ट्रायज, QR टोकन व खाटा वाटप',
     },
     {
-      id: 'state_admin',
+      id: 'state_admin' as Role,
       titleEn: '4. State Administrator',
       titleMr: '४. राज्य आरोग्य संचालक',
       icon: BarChart3,
       descEn: 'Outbreak Maps, Bottlenecks & Emergency Stock',
       descMr: 'रोग प्रादुर्भाव नकाशे, अडथळे व औषध साठा',
     },
+    {
+      id: 'patient' as any,
+      titleEn: 'Patient Access',
+      titleMr: 'रुग्ण प्रवेश',
+      icon: User,
+      descEn: 'Download your official EHR record via ABHA.',
+      descMr: 'आभा द्वारे तुमचा अधिकृत आरोग्य अहवाल डाउनलोड करा.',
+    },
   ];
 
   if (!role) {
     return (
-      <div className="min-h-screen flex flex-col lg:flex-row bg-white font-sans">
+      <div className="min-h-screen flex flex-col lg:flex-row bg-white dark:bg-slate-900 font-sans">
         {/* Left Side - Branding & Beautiful Background */}
         <div className="lg:w-5/12 text-white flex flex-col justify-between p-8 lg:p-12 relative overflow-hidden bg-slate-900">
           {/* Stunning Background Image with Overlay */}
@@ -112,41 +154,6 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="relative z-10 flex-1 flex flex-col items-start justify-center py-8">
-            {/* Visual Healthcare Network Nodes using CSS/Icons */}
-            <div className="bg-white/10 backdrop-blur-xl border border-white/20 p-6 rounded-3xl shadow-2xl w-full max-w-sm">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center border border-emerald-500/50">
-                  <Activity className="w-5 h-5 text-emerald-400" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-white">Statewide Coverage</h4>
-                  <p className="text-xs text-slate-300">Active real-time monitoring</p>
-                </div>
-              </div>
-              <div className="space-y-3 relative before:absolute before:inset-y-0 before:left-5 before:w-0.5 before:bg-white/20">
-                <div className="flex items-center gap-4 relative z-10">
-                  <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center border-2 border-slate-600 shadow-lg">
-                    <span className="w-3 h-3 rounded-full bg-teal-400 shadow-[0_0_10px_rgba(45,212,191,0.8)]"></span>
-                  </div>
-                  <span className="text-sm font-semibold text-slate-200">10,000+ Sub-Centres (ASHA)</span>
-                </div>
-                <div className="flex items-center gap-4 relative z-10">
-                  <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center border-2 border-slate-600 shadow-lg">
-                    <span className="w-3 h-3 rounded-full bg-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.8)]"></span>
-                  </div>
-                  <span className="text-sm font-semibold text-slate-200">1,900+ Primary Health Centres</span>
-                </div>
-                <div className="flex items-center gap-4 relative z-10">
-                  <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center border-2 border-slate-600 shadow-lg">
-                    <span className="w-3 h-3 rounded-full bg-purple-400 shadow-[0_0_10px_rgba(192,132,252,0.8)]"></span>
-                  </div>
-                  <span className="text-sm font-semibold text-slate-200">District & Rural Hospitals</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <div className="relative z-10 mt-8 flex items-center justify-between text-sm font-semibold text-slate-300">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -157,25 +164,31 @@ export default function Home() {
         </div>
 
         {/* Right Side - Role Selection */}
-        <div className="lg:w-7/12 bg-slate-50 flex flex-col justify-center p-6 sm:p-12 lg:p-16 xl:p-24 relative">
+        <div className="lg:w-7/12 bg-slate-50 dark:bg-slate-900 flex flex-col justify-center p-6 sm:p-12 lg:p-16 xl:p-24 relative transition-colors duration-300">
           
-          {/* Language Switcher at Top Right */}
-          <div className="absolute top-6 right-6 sm:top-8 sm:right-8">
-            <button
-              onClick={toggleLanguage}
-              className="inline-flex items-center gap-2 bg-white hover:bg-slate-100 text-slate-700 px-3.5 py-2 rounded-full text-sm font-semibold border border-slate-200 shadow-sm transition-all"
-            >
-              <Languages className="w-4 h-4 text-teal-600" />
-              <span>{language === 'en' ? 'मराठी' : 'English'}</span>
-            </button>
-          </div>
+          {/* Language & Theme Switcher at Top Right */}
+            <div className="absolute top-6 right-6 sm:top-8 sm:right-8 flex gap-3 z-50">
+              <button
+                onClick={toggleDarkMode}
+                className="inline-flex items-center justify-center bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 w-10 h-10 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm transition-all"
+              >
+                {isDarkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-slate-600 dark:text-slate-400" />}
+              </button>
+              <button
+                onClick={toggleLanguage}
+                className="inline-flex items-center gap-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3.5 py-2 rounded-full text-sm font-semibold border border-slate-200 dark:border-slate-700 shadow-sm transition-all"
+              >
+                <Languages className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                <span>{language === 'en' ? 'मराठी' : 'English'}</span>
+              </button>
+            </div>
 
           <div className="max-w-2xl w-full mx-auto mt-12 sm:mt-0">
             <div className="mb-10 text-center lg:text-left">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-4">
                 {language === 'mr' ? 'प्रणालीमध्ये प्रवेश करा' : 'Sign in to Portal'}
               </h2>
-              <p className="text-slate-500 text-lg">
+              <p className="text-slate-500 dark:text-slate-400 text-lg">
                 {language === 'mr' ? 'कृपया सुरू ठेवण्यासाठी तुमची भूमिका निवडा:' : 'Select your authorized healthcare tier to continue:'}
               </p>
             </div>
@@ -190,16 +203,16 @@ export default function Home() {
                       setSelectedLoginRole(r.id);
                       setIsLoginModalOpen(true);
                     }}
-                    className="bg-white border border-slate-200 hover:border-blue-600 rounded-2xl p-5 sm:p-6 text-left transition-all duration-300 shadow-sm hover:shadow-xl flex flex-col gap-4 group"
+                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-blue-600 dark:hover:border-blue-400 rounded-2xl p-5 sm:p-6 text-left transition-all duration-300 shadow-sm hover:shadow-xl flex flex-col gap-4 group"
                   >
-                    <div className="bg-slate-50 p-3 rounded-xl group-hover:bg-blue-600 transition-colors w-fit border border-slate-100 group-hover:border-blue-500">
-                      <Icon className="w-7 h-7 text-blue-900 group-hover:text-white" />
+                    <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl group-hover:bg-blue-600 dark:group-hover:bg-blue-600 transition-colors w-fit border border-slate-100 dark:border-slate-800 group-hover:border-blue-500">
+                      <Icon className="w-7 h-7 text-blue-900 dark:text-blue-200 dark:text-blue-400 group-hover:text-white" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-slate-800 mb-1 group-hover:text-blue-900 transition-colors">
+                      <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1 group-hover:text-blue-900 dark:hover:text-blue-200 dark:group-hover:text-white transition-colors">
                         {language === 'mr' ? r.titleMr : r.titleEn}
                       </h3>
-                      <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+                      <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
                         {language === 'mr' ? r.descMr : r.descEn}
                       </p>
                     </div>
@@ -216,7 +229,7 @@ export default function Home() {
           </div>
         </div>
 
-        {isLoginModalOpen && (
+        {isLoginModalOpen && selectedLoginRole !== 'patient' && (
           <StaffLoginModal 
             onClose={() => {
               setIsLoginModalOpen(false);
@@ -225,13 +238,16 @@ export default function Home() {
             initialRole={selectedLoginRole}
           />
         )}
+        {isLoginModalOpen && selectedLoginRole === 'patient' && (
+          <PatientDownloadModal onClose={() => setIsLoginModalOpen(false)} />
+        )}
       </div>
     );
   }
 
   // Dashboard View for Logged-In Users
   return (
-    <div className="min-h-screen flex flex-col bg-slate-100">
+    <div className="min-h-screen flex flex-col bg-slate-100 dark:bg-slate-950">
       <Header
         onOpenNewPatient={() => setIsNewPatientOpen(true)}
         onOpenSearch={() => setIsGlobalSearchOpen(true)}
@@ -241,21 +257,10 @@ export default function Home() {
       />
 
       <main className="flex-1 w-full mx-auto max-w-7xl px-2 sm:px-6 lg:px-8 py-4 sm:py-6">
-        {role === 'asha' && (
-          <AshaDashboard
-            onOpenNewPatient={() => setIsNewPatientOpen(true)}
-            onOpenPatientTimeline={(patient) => setTimelinePatient(patient)}
-            onOpenAbhaCard={(patient) => setAbhaCardPatient(patient)}
-            onOpenReferral={(patient) => setReferralPatient(patient)}
-          />
-        )}
-
-        {role === 'phc_doctor' && (
-          <PhcDoctorDashboard
-            onOpenNewPatient={() => setIsNewPatientOpen(true)}
-            onOpenPatientTimeline={(patient) => setTimelinePatient(patient)}
-            onOpenAbhaCard={(patient) => setAbhaCardPatient(patient)}
-            onOpenReferral={(patient) => setReferralPatient(patient)}
+        {role === 'state_admin' && (
+          <StateAdminDashboard
+            onOpenBedMatrix={() => setIsBedMatrixOpen(true)}
+            onOpenStockLedger={() => setIsDrugStockOpen(true)}
           />
         )}
 
@@ -267,10 +272,14 @@ export default function Home() {
           />
         )}
 
-        {role === 'state_admin' && (
-          <StateAdminDashboard
-            onOpenBedMatrix={() => setIsBedMatrixOpen(true)}
-            onOpenStockLedger={() => setIsDrugStockOpen(true)}
+        {(role === 'asha' || role === 'phc_doctor') && (
+          <WorkerWorkspace
+            role={role as any}
+            onOpenNewPatient={() => setIsNewPatientOpen(true)}
+            onOpenPatientTimeline={(patient) => setTimelinePatient(patient)}
+            onOpenAbhaCard={(patient) => setAbhaCardPatient(patient)}
+            onOpenReferral={(patient) => setReferralPatient(patient)}
+            onOpenReferralToken={(ref) => setReferralToken(ref)}
           />
         )}
       </main>
