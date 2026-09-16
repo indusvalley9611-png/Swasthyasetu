@@ -55,11 +55,6 @@ import {
   Radio,
   FileText,
   QrCode,
-  ArrowRight,
-  PhoneCall,
-  BedDouble,
-  Siren,
-  Hospital,
 } from 'lucide-react';
 
 export interface SpecialistDashboardProps {
@@ -150,28 +145,9 @@ export function SpecialistDashboard({
     });
   }, [referrals, currentHospitalName]);
 
-  // Prioritize Critical/Emergency referrals first, then Urgent, then Routine
   const pendingIncomingReferrals = useMemo(() => {
-    const list = myHospitalReferrals.filter((r) => r.status === 'PENDING');
-    const priorityWeight: Record<string, number> = { red: 3, yellow: 2, green: 1 };
-    return list.sort((a, b) => {
-      const weightA = priorityWeight[a.triagePriority] || 1;
-      const weightB = priorityWeight[b.triagePriority] || 1;
-      if (weightB !== weightA) return weightB - weightA;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
+    return myHospitalReferrals.filter((r) => r.status === 'PENDING');
   }, [myHospitalReferrals]);
-
-  // Critical Action items requiring immediate specialist review
-  const criticalActionItems = useMemo(() => {
-    const criticalRefs = pendingIncomingReferrals.filter((r) => r.triagePriority === 'red');
-    const criticalWalkIns = walkIns.filter((w) => w.triagePriority === 'red' && w.status !== 'ADMITTED');
-    return {
-      referrals: criticalRefs,
-      walkIns: criticalWalkIns,
-      totalCount: criticalRefs.length + criticalWalkIns.length,
-    };
-  }, [pendingIncomingReferrals, walkIns]);
 
   const admittedReferrals = useMemo(() => {
     return myHospitalReferrals.filter((r) => r.status === 'ADMITTED');
@@ -256,7 +232,7 @@ export function SpecialistDashboard({
     setReviewReferral(null);
   };
 
-  // HANDLER: Confirm Admission & Bed Assignment
+  // HANDLER: Confirm Admission & Bed Assignment (Feature 5)
   const handleConfirmAdmission = ({
     bedId,
     department,
@@ -327,7 +303,7 @@ export function SpecialistDashboard({
     setAdmissionTarget(null);
   };
 
-  // HANDLER: Confirm Discharge with Refer-Back-to-PHC
+  // HANDLER: Confirm Discharge with Refer-Back-to-PHC (Feature 6)
   const handleConfirmDischarge = (
     dischargeData: Omit<FacilityDischargeRecord, 'id' | 'dischargedAt'>
   ) => {
@@ -386,264 +362,99 @@ export function SpecialistDashboard({
     setDischargeTargetBed(null);
   };
 
-  // Operational metrics from existing real data
+  // Quick stats
+  const criticalIntakeCount =
+    pendingIncomingReferrals.filter((r) => r.triagePriority === 'red').length +
+    walkIns.filter((w) => w.triagePriority === 'red' && w.status !== 'ADMITTED').length;
+
   const totalAvailableBeds = bedSlots.filter((b) => b.status === 'AVAILABLE').length;
-  const icuAvailableBeds = bedSlots.filter((b) => b.status === 'AVAILABLE' && b.department === 'ICU').length;
   const occupiedBedsCount = bedSlots.filter((b) => b.status === 'OCCUPIED').length;
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-300 pb-16">
-      {/* ── 1. COMPACT ACTION-FIRST HOSPITAL COMMAND HEADER (Reduced by ~25-30%) ── */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 rounded-2xl px-4 py-3.5 text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-blue-600/90 flex items-center justify-center shrink-0 shadow-sm border border-blue-400/30">
-            <Stethoscope className="w-5 h-5 text-white" />
+    <div className="space-y-6 animate-in fade-in duration-500 pb-20">
+      {/* ── 1. HOSPITAL COMMAND HEADER ── */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-slate-800 rounded-3xl p-5 text-white shadow-2xl flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-600 flex items-center justify-center shrink-0 shadow-lg border border-indigo-400/30">
+            <Stethoscope className="w-7 h-7 text-white" />
           </div>
-          <div className="min-w-0">
+          <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-black uppercase tracking-wider text-blue-400 flex items-center gap-1">
-                <Hospital className="w-3 h-3" />
-                DISTRICT CASUALTY &amp; REFERRAL OPERATIONS
+              <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-indigo-400" />
+                DISTRICT HOSPITAL SPECIALIST &amp; CASUALTY DESK
               </span>
-              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Facility-Scoped Session
+                FACILITY-SCOPED SESSION
               </span>
             </div>
-            <h2 className="text-base sm:text-lg font-black tracking-tight text-white truncate mt-0.5">
-              {currentHospitalName}
-              <span className="text-xs font-normal text-slate-300 ml-2">
-                &bull; {user?.name || 'Dr. Ananya Kulkarni'} ({user?.roleTitleEn || 'Chief Casualty Specialist'})
+            <h2 className="text-xl md:text-2xl font-black tracking-tight text-white mt-1 flex items-center gap-2">
+              <span>{currentHospitalName}</span>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-200 border border-indigo-400/30">
+                {user?.name || 'Dr. Ananya Kulkarni'} ({user?.roleTitleEn || 'Chief Casualty & Triage Specialist'})
               </span>
             </h2>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Trauma triage, inpatient bed assignments, on-call roster cross-checks &amp; refer-back care loop
+            </p>
           </div>
         </div>
 
-        {/* Quick Operational Actions */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Quick Actions */}
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setIsScanModalOpen(true)}
-            className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
-            title="Scan Referral QR Pass"
+            className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-teal-950/40 cursor-pointer hover:scale-102"
           >
-            <QrCode className="w-3.5 h-3.5 text-teal-200" />
+            <QrCode className="w-4 h-4 text-teal-200" />
             <span>Scan QR Pass</span>
           </button>
 
           {onOpenNewPatient && (
             <button
               onClick={onOpenNewPatient}
-              className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
-              title="Direct Casualty Registration"
+              className="px-3.5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-blue-950/40 cursor-pointer"
             >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>+ Register Walk-In</span>
+              <UserPlus className="w-4 h-4" />
+              <span>+ Register Patient</span>
             </button>
           )}
 
           <Link
             href="/maha-aushadhi"
-            className="px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition-all flex items-center gap-1.5"
-            title="Open MahaAushadhi Emergency Drug Network"
+            className="px-3.5 py-2.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition-all flex items-center gap-1.5"
           >
-            <Flame className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
-            <span>Drug Grid &rarr;</span>
+            <Flame className="w-4 h-4 text-rose-400 animate-pulse" />
+            <span>Emergency Drug Grid &rarr;</span>
           </Link>
         </div>
       </div>
 
-      {/* ── 2. 5 ACTIONABLE CLINICAL METRIC CARDS ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
-        {/* Metric 1: Critical Cases */}
-        <div
-          onClick={() => setActiveTab('intake')}
-          className={`p-3 rounded-xl border transition-all cursor-pointer ${
-            activeTab === 'intake'
-              ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-400 ring-2 ring-rose-500/20 shadow-xs'
-              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-rose-300'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Critical Cases
-            </span>
-            <Siren className="w-3.5 h-3.5 text-rose-500 animate-pulse" />
-          </div>
-          <div className="flex items-baseline gap-1.5 mt-1.5">
-            <span className="text-xl font-black text-rose-600 dark:text-rose-400">
-              {criticalActionItems.totalCount}
-            </span>
-            <span className="text-[11px] text-slate-500">Red Triage</span>
-          </div>
-        </div>
-
-        {/* Metric 2: Awaiting Acceptance */}
-        <div
-          onClick={() => setActiveTab('referrals')}
-          className={`p-3 rounded-xl border transition-all cursor-pointer ${
-            activeTab === 'referrals'
-              ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-400 ring-2 ring-blue-500/20 shadow-xs'
-              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-blue-300'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Awaiting Acceptance
-            </span>
-            <Users className="w-3.5 h-3.5 text-blue-500" />
-          </div>
-          <div className="flex items-baseline gap-1.5 mt-1.5">
-            <span className="text-xl font-black text-blue-600 dark:text-blue-400">
-              {pendingIncomingReferrals.length}
-            </span>
-            <span className="text-[11px] text-slate-500">Inbound PHCs</span>
-          </div>
-        </div>
-
-        {/* Metric 3: Available Beds */}
-        <div
-          onClick={() => setActiveTab('beds')}
-          className={`p-3 rounded-xl border transition-all cursor-pointer ${
-            activeTab === 'beds'
-              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-400 ring-2 ring-emerald-500/20 shadow-xs'
-              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-emerald-300'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Available Beds
-            </span>
-            <BedDouble className="w-3.5 h-3.5 text-emerald-500" />
-          </div>
-          <div className="flex items-baseline gap-1.5 mt-1.5">
-            <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">
-              {totalAvailableBeds}
-            </span>
-            <span className="text-[11px] text-slate-500">({icuAvailableBeds} ICU Free)</span>
-          </div>
-        </div>
-
-        {/* Metric 4: Active Inpatients */}
-        <div
-          onClick={() => setActiveTab('admitted')}
-          className={`p-3 rounded-xl border transition-all cursor-pointer ${
-            activeTab === 'admitted'
-              ? 'bg-purple-50 dark:bg-purple-950/40 border-purple-400 ring-2 ring-purple-500/20 shadow-xs'
-              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-purple-300'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Active Inpatients
-            </span>
-            <Activity className="w-3.5 h-3.5 text-purple-500" />
-          </div>
-          <div className="flex items-baseline gap-1.5 mt-1.5">
-            <span className="text-xl font-black text-purple-600 dark:text-purple-400">
-              {occupiedBedsCount}
-            </span>
-            <span className="text-[11px] text-slate-500">Under Care</span>
-          </div>
-        </div>
-
-        {/* Metric 5: Discharged & Refer-Back */}
-        <div
-          onClick={() => setActiveTab('discharges')}
-          className={`p-3 rounded-xl border transition-all cursor-pointer ${
-            activeTab === 'discharges'
-              ? 'bg-teal-50 dark:bg-teal-950/40 border-teal-400 ring-2 ring-teal-500/20 shadow-xs'
-              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-teal-300'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Care Continuity Loop
-            </span>
-            <FileCheck className="w-3.5 h-3.5 text-teal-500" />
-          </div>
-          <div className="flex items-baseline gap-1.5 mt-1.5">
-            <span className="text-xl font-black text-teal-600 dark:text-teal-400">
-              {dischargeRecords.length}
-            </span>
-            <span className="text-[11px] text-slate-500">Referred to PHCs</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── 3. COMPACT "NEEDS IMMEDIATE ATTENTION" CALLOUT (If Critical Cases Exist) ── */}
-      {criticalActionItems.totalCount > 0 && (
-        <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border-l-4 border-rose-600 border-y border-r border-rose-200 dark:border-rose-900/60 shadow-xs">
-          <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping" />
-              <span className="text-xs font-black uppercase tracking-wider text-rose-700 dark:text-rose-300 flex items-center gap-1.5">
-                <Siren className="w-4 h-4 text-rose-600" />
-                Immediate Action Required &bull; {criticalActionItems.totalCount} Critical Triage Case(s)
-              </span>
-            </div>
-            <span className="text-[11px] text-slate-500 font-medium">
-              Review and allocate ICU/Emergency beds immediately
-            </span>
-          </div>
-
-          <div className="space-y-2">
-            {criticalActionItems.referrals.slice(0, 2).map((ref) => (
-              <div
-                key={ref.id}
-                className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
-              >
-                <div className="space-y-0.5 flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="px-1.5 py-0.2 rounded bg-rose-600 text-white font-black text-[9px] uppercase">
-                      CRITICAL RED
-                    </span>
-                    <span className="font-bold text-slate-900 dark:text-white">
-                      {ref.patientName} ({ref.patientAge}y &bull; {ref.patientGender})
-                    </span>
-                    <span className="text-slate-400 font-mono text-[10px]">
-                      #{ref.tokenCode || ref.id}
-                    </span>
-                  </div>
-                  <p className="text-slate-600 dark:text-slate-300 truncate">
-                    <strong>Complaint:</strong> {ref.referralReason} &bull; From: <strong>{ref.referringFacility}</strong> ({ref.specialtyRequired})
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => setReviewReferral(ref)}
-                  className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shrink-0 flex items-center justify-center gap-1 cursor-pointer transition-colors shadow-xs"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>Review &amp; Accept</span>
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── 4. CONSOLIDATED HORIZONTAL CLINICAL WORKSPACE NAVIGATION ── */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-1.5 shadow-xs flex items-center gap-1 overflow-x-auto scrollbar-none">
+      {/* ── 2. HOSPITAL NAVIGATION TABS ── */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-2 shadow-sm flex items-center gap-1.5 overflow-x-auto">
         <button
           onClick={() => setActiveTab('intake')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
             activeTab === 'intake'
-              ? 'bg-rose-600 text-white shadow-xs'
+              ? 'bg-rose-600 text-white shadow-sm'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
           <Flame className="w-3.5 h-3.5" />
           <span>Casualty Intake Queue</span>
-          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${activeTab === 'intake' ? 'bg-white text-rose-600' : 'bg-rose-500 text-white'}`}>
-            {pendingIncomingReferrals.length + walkIns.filter((w) => w.status !== 'ADMITTED').length}
-          </span>
+          {criticalIntakeCount > 0 && (
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${activeTab === 'intake' ? 'bg-white text-rose-600' : 'bg-rose-500 text-white'}`}>
+              {criticalIntakeCount}
+            </span>
+          )}
         </button>
 
         <button
           onClick={() => setActiveTab('referrals')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-            activeTab === 'referrals' || activeTab === 'incoming'
-              ? 'bg-blue-600 text-white shadow-xs'
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            activeTab === 'referrals'
+              ? 'bg-blue-600 text-white shadow-sm'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
@@ -658,24 +469,36 @@ export function SpecialistDashboard({
 
         <button
           onClick={() => setActiveTab('beds')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
             activeTab === 'beds'
-              ? 'bg-emerald-600 text-white shadow-xs'
+              ? 'bg-indigo-600 text-white shadow-sm'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
-          <BedDouble className="w-3.5 h-3.5" />
+          <Bed className="w-3.5 h-3.5" />
           <span>Department Bed Matrix</span>
-          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${activeTab === 'beds' ? 'bg-white text-emerald-600' : 'bg-emerald-500 text-white'}`}>
+          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${activeTab === 'beds' ? 'bg-white text-indigo-600' : 'bg-emerald-500 text-white'}`}>
             {totalAvailableBeds} Free
           </span>
         </button>
 
         <button
+          onClick={() => setActiveTab('roster')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            activeTab === 'roster'
+              ? 'bg-teal-600 text-white shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Stethoscope className="w-3.5 h-3.5" />
+          <span>Specialist On-Call Roster</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('admitted')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
             activeTab === 'admitted'
-              ? 'bg-purple-600 text-white shadow-xs'
+              ? 'bg-purple-600 text-white shadow-sm'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
@@ -688,57 +511,128 @@ export function SpecialistDashboard({
 
         <button
           onClick={() => setActiveTab('discharges')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
             activeTab === 'discharges'
-              ? 'bg-teal-600 text-white shadow-xs'
+              ? 'bg-emerald-600 text-white shadow-sm'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
           <FileCheck className="w-3.5 h-3.5" />
-          <span>Care Continuity Loop</span>
-          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${activeTab === 'discharges' ? 'bg-white text-teal-600' : 'bg-teal-500 text-white'}`}>
+          <span>Refer-Back Loop</span>
+          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${activeTab === 'discharges' ? 'bg-white text-emerald-600' : 'bg-emerald-500 text-white'}`}>
             {dischargeRecords.length}
           </span>
         </button>
 
         <button
-          onClick={() => setActiveTab('roster')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-            activeTab === 'roster'
-              ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-xs'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <Stethoscope className="w-3.5 h-3.5" />
-          <span>On-Call Roster</span>
-        </button>
-
-        <button
           onClick={() => setActiveTab('audit')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
             activeTab === 'audit'
-              ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-xs'
+              ? 'bg-slate-900 text-white shadow-sm dark:bg-slate-100 dark:text-slate-900'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
           <ShieldCheck className="w-3.5 h-3.5" />
-          <span>Facility Audit</span>
+          <span>Facility Tamper Audit</span>
         </button>
 
         <button
           onClick={() => setActiveTab('inventory_sla')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
             activeTab === 'inventory_sla'
-              ? 'bg-rose-700 text-white shadow-xs'
+              ? 'bg-rose-700 text-white shadow-sm'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
           <Droplet className="w-3.5 h-3.5" />
-          <span>Blood &amp; Drug Buffer</span>
+          <span>Blood, Drugs &amp; SLA</span>
         </button>
       </div>
 
-      {/* ── 5. TAB VIEW 1: CASUALTY / ER INTAKE QUEUE ── */}
+      {/* ── 3. 4 TOP CLINICAL SUMMARY CARDS ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Card 1: Critical Emergency Cases */}
+        <div
+          onClick={() => setActiveTab('intake')}
+          className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+            activeTab === 'intake'
+              ? 'bg-rose-500/10 border-rose-500/40 ring-2 ring-rose-500/20 shadow-sm'
+              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Emergency Intake
+            </span>
+            <Flame className="w-4 h-4 text-rose-500 animate-pulse" />
+          </div>
+          <div className="flex items-baseline gap-2 mt-2">
+            <span className="text-2xl font-black text-rose-600 dark:text-rose-400">
+              {pendingIncomingReferrals.length + walkIns.filter((w) => w.status !== 'ADMITTED').length}
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">Arriving / Triaged</span>
+          </div>
+        </div>
+
+        {/* Card 2: Active Inpatients */}
+        <div
+          onClick={() => setActiveTab('admitted')}
+          className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-purple-300 dark:hover:border-purple-800 transition-all cursor-pointer shadow-sm"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Active Inpatients
+            </span>
+            <Activity className="w-4 h-4 text-purple-500" />
+          </div>
+          <div className="flex items-baseline gap-2 mt-2">
+            <span className="text-2xl font-black text-purple-600 dark:text-purple-400">
+              {occupiedBedsCount}
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">Under Care</span>
+          </div>
+        </div>
+
+        {/* Card 3: Free Inpatient Beds */}
+        <div
+          onClick={() => setActiveTab('beds')}
+          className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-800 transition-all cursor-pointer shadow-sm"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Available Beds
+            </span>
+            <Bed className="w-4 h-4 text-emerald-500" />
+          </div>
+          <div className="flex items-baseline gap-2 mt-2">
+            <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+              {totalAvailableBeds}
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">of {bedSlots.length} Slots</span>
+          </div>
+        </div>
+
+        {/* Card 4: Discharged & Counter-Referred */}
+        <div
+          onClick={() => setActiveTab('discharges')}
+          className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-teal-300 dark:hover:border-teal-800 transition-all cursor-pointer shadow-sm"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Refer-Back Care Loop
+            </span>
+            <FileCheck className="w-4 h-4 text-teal-500" />
+          </div>
+          <div className="flex items-baseline gap-2 mt-2">
+            <span className="text-2xl font-black text-teal-600 dark:text-teal-400">
+              {dischargeRecords.length}
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">Referred to PHCs</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 4. FEATURE 1: CASUALTY / ER INTAKE QUEUE ── */}
       {activeTab === 'intake' && (
         <CasualtyIntakeQueue
           hospitalName={currentHospitalName}
@@ -761,99 +655,77 @@ export function SpecialistDashboard({
         />
       )}
 
-      {/* ── 6. TAB VIEW 2: INCOMING REFERRALS REVIEW ── */}
+      {/* ── 5. FEATURE 2 & 4: INCOMING REFERRALS REVIEW ── */}
       {(activeTab === 'referrals' || activeTab === 'incoming') && (
-        <div className="space-y-3">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold shrink-0">
-                <Users className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight">
-                  Incoming PHC &amp; Sub-Centre Referrals
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Sorted by clinical triage priority (Red &rarr; Yellow &rarr; Routine) destined for <strong>{currentHospitalName}</strong>.
-                </p>
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
+                  <Users className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                    Incoming PHC &amp; CHC Referrals
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Patient cases referred specifically to <strong>{currentHospitalName}</strong> awaiting clinical acceptance.
+                  </p>
+                </div>
               </div>
             </div>
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-              {pendingIncomingReferrals.length} Pending Cases
-            </span>
           </div>
 
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             {pendingIncomingReferrals.length === 0 ? (
-              <div className="text-center py-10 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
-                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-1.5" />
-                <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">No Pending Inbound Referrals</h4>
-                <p className="text-xs text-slate-400 mt-0.5">All incoming cases for this hospital have been accepted or triaged.</p>
+              <div className="text-center py-12 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800">
+                <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
+                <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">No Pending Referrals</h4>
+                <p className="text-xs text-slate-400 mt-1">All incoming cases for this hospital have been accepted or triaged.</p>
               </div>
             ) : (
               pendingIncomingReferrals.map((ref) => {
                 const patient = patients.find((p) => p.id === ref.patientId);
-                const isRed = ref.triagePriority === 'red';
 
                 return (
                   <div
                     key={ref.id}
-                    className={`p-4 rounded-2xl bg-white dark:bg-slate-900 border ${
-                      isRed ? 'border-rose-300 dark:border-rose-900/60 shadow-xs' : 'border-slate-200 dark:border-slate-800'
-                    } hover:border-blue-400 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-3`}
+                    className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:border-blue-400 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-4"
                   >
-                    {/* Information Hierarchy: Triage -> Patient -> Complaint -> Facility -> Specialty -> Action */}
-                    <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="space-y-2 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
-                            isRed
-                              ? 'bg-rose-600 text-white animate-pulse'
-                              : ref.triagePriority === 'yellow'
-                              ? 'bg-amber-500 text-slate-950 font-bold'
-                              : 'bg-emerald-600 text-white font-bold'
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                            ref.triagePriority === 'red'
+                              ? 'bg-rose-500 text-white'
+                              : 'bg-amber-500 text-slate-950'
                           }`}
                         >
                           {ref.triagePriority.toUpperCase()} TRIAGE
                         </span>
-                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                        <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
                           {ref.patientName} ({ref.patientAge}y &bull; {ref.patientGender})
                         </span>
-                        <span className="text-[10px] font-mono text-slate-400">
+                        <span className="text-[11px] font-mono text-slate-400">
                           #{ref.tokenCode || ref.id}
                         </span>
-                        {patient?.abhaId && (
-                          <span className="text-[10px] font-mono text-blue-600 dark:text-blue-400">
-                            ABHA: {patient.abhaId}
-                          </span>
-                        )}
                       </div>
 
-                      <p className="text-xs text-slate-800 dark:text-slate-200 font-medium">
+                      <p className="text-xs text-slate-700 dark:text-slate-300 font-medium">
                         <strong>Reason:</strong> {ref.referralReason}
                       </p>
 
-                      <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400 flex-wrap">
-                        <span className="flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-slate-400" />
-                          From: <strong className="text-slate-700 dark:text-slate-300">{ref.referringFacility}</strong>
-                        </span>
+                      <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+                        <span>From: <strong className="text-slate-700 dark:text-slate-300">{ref.referringFacility}</strong></span>
                         <span>&bull;</span>
-                        <span>
-                          Required Specialty: <strong className="text-blue-600 dark:text-blue-400">{ref.specialtyRequired}</strong>
-                        </span>
-                        <span>&bull;</span>
-                        <span className="font-mono">
-                          Referred: {new Date(ref.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
+                        <span>Specialty: <strong className="text-blue-600 dark:text-blue-400">{ref.specialtyRequired}</strong></span>
                       </div>
                     </div>
 
-                    {/* Contextual Action Buttons */}
                     <div className="shrink-0 flex items-center gap-2">
                       <button
                         onClick={() => setReviewReferral(ref)}
-                        className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                        className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
                       >
                         <Eye className="w-3.5 h-3.5" />
                         <span>Review &amp; Accept / Reject</span>
@@ -867,7 +739,7 @@ export function SpecialistDashboard({
         </div>
       )}
 
-      {/* ── 7. TAB VIEW 3: DEPARTMENT BED MATRIX ── */}
+      {/* ── 6. FEATURE 3: DEPARTMENT BED MATRIX ── */}
       {activeTab === 'beds' && (
         <DepartmentBedMatrixView
           hospitalName={currentHospitalName}
@@ -884,7 +756,7 @@ export function SpecialistDashboard({
         />
       )}
 
-      {/* ── 8. TAB VIEW 4: SPECIALIST ON-CALL ROSTER ── */}
+      {/* ── 7. FEATURE 4: SPECIALIST ON-CALL ROSTER ── */}
       {activeTab === 'roster' && (
         <SpecialistRosterView
           hospitalName={currentHospitalName}
@@ -892,66 +764,65 @@ export function SpecialistDashboard({
         />
       )}
 
-      {/* ── 9. TAB VIEW 5: ACTIVE ADMISSIONS & INPATIENT MANAGEMENT ── */}
+      {/* ── 8. ACTIVE ADMISSIONS & INPATIENT MANAGEMENT ── */}
       {activeTab === 'admitted' && (
-        <div className="space-y-3">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold shrink-0">
-                <Activity className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight">
-                  Active Inpatients Under Care
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Currently occupied beds across ICU, General Wards, Maternity &amp; Casualty Bays.
-                </p>
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
+                  <Activity className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                    Active Inpatients Under Care
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Currently admitted patients in ICU, General Wards, Maternity &amp; Casualty Bays.
+                  </p>
+                </div>
               </div>
             </div>
-            <span className="text-xs font-bold text-purple-600 dark:text-purple-400">
-              {occupiedBedsCount} Inpatients
-            </span>
           </div>
 
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             {bedSlots
               .filter((b) => b.status === 'OCCUPIED' && b.patientName)
               .map((bed) => (
                 <div
                   key={bed.bedId}
-                  className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-purple-400 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-3"
+                  className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:border-purple-400 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-4"
                 >
-                  <div className="space-y-1 flex-1 min-w-0">
+                  <div className="space-y-2 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-300 border border-purple-500/30 text-[10px] font-black uppercase">
+                      <span className="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-300 border border-purple-500/30 text-[10px] font-black uppercase">
                         {bed.bedNumber} ({bed.department})
                       </span>
                       {bed.triagePriority && (
                         <span
-                          className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase ${
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
                             bed.triagePriority === 'red' ? 'bg-rose-500 text-white' : 'bg-amber-500 text-slate-950'
                           }`}
                         >
                           {bed.triagePriority}
                         </span>
                       )}
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                         {bed.patientName}
                       </h4>
-                      <span className="text-[10px] font-mono text-slate-400">
+                      <span className="text-[11px] font-mono text-slate-400">
                         ABHA: {bed.patientAbha || 'ABDM-VERIFIED'}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-3 text-[11px] text-slate-600 dark:text-slate-400 flex-wrap">
+                    <div className="flex items-center gap-3 text-xs text-slate-600 dark:text-slate-400 flex-wrap">
                       <span>Ward: <strong>{bed.wardName}</strong></span>
                       <span>&bull;</span>
                       <span>Attending: <strong className="text-indigo-600 dark:text-indigo-400">{bed.attendingSpecialist || 'Dr. Ananya Kulkarni'}</strong></span>
                       {bed.assignedAt && (
                         <>
                           <span>&bull;</span>
-                          <span className="font-mono text-[10px]">
+                          <span className="font-mono text-[11px]">
                             Admitted: {new Date(bed.assignedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </>
@@ -962,7 +833,7 @@ export function SpecialistDashboard({
                   <div className="shrink-0 flex items-center gap-2">
                     <button
                       onClick={() => setDischargeTargetBed(bed)}
-                      className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                      className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                       <span>Discharge &amp; Refer Back</span>
@@ -974,42 +845,39 @@ export function SpecialistDashboard({
         </div>
       )}
 
-      {/* ── 10. TAB VIEW 6: DISCHARGE & REFER-BACK CARE-CONTINUITY LOOP ── */}
+      {/* ── 9. FEATURE 6: DISCHARGE & REFER-BACK CARE-CONTINUITY LOOP ── */}
       {activeTab === 'discharges' && (
-        <div className="space-y-3">
-          <div className="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 border border-teal-900/40 rounded-2xl p-4 text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="space-y-4">
+          <div className="bg-gradient-to-r from-slate-900 via-emerald-950 to-slate-900 border border-emerald-900/40 rounded-3xl p-5 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-teal-500/20 text-teal-300 border border-teal-400/30 flex items-center gap-1">
-                  <FileCheck className="w-3 h-3 text-teal-400" />
-                  POST-DISCHARGE CARE CONTINUITY LOOP
+                <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
+                  <FileCheck className="w-3 h-3 text-emerald-400" />
+                  POST-DISCHARGE CARE-CONTINUITY LOOP
                 </span>
               </div>
-              <h3 className="text-base font-black tracking-tight text-white mt-1">
+              <h3 className="text-xl font-black tracking-tight text-white mt-1">
                 Completed Discharges &amp; PHC Counter-Referrals
               </h3>
-              <p className="text-xs text-teal-200/80 mt-0.5">
-                Clinical discharge summaries routed back down to originating PHCs and community ASHA workers.
+              <p className="text-xs text-emerald-200/80 mt-0.5">
+                Structured clinical discharge summaries routed back down to originating PHCs and community ASHA workers.
               </p>
             </div>
-            <span className="text-xs font-bold text-teal-300">
-              {dischargeRecords.length} Completed
-            </span>
           </div>
 
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             {dischargeRecords.map((dis) => (
               <div
                 key={dis.id}
-                className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-2.5"
+                className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3"
               >
                 <div className="flex items-start justify-between flex-wrap gap-2">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/30 text-[9px] font-black uppercase">
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-black uppercase">
                         DISCHARGE #{dis.id}
                       </span>
-                      <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
                         {dis.patientName}
                       </span>
                       <span className="text-[10px] font-mono text-slate-400">
@@ -1027,10 +895,10 @@ export function SpecialistDashboard({
                 </div>
 
                 {/* Refer-Back Routing Box */}
-                <div className="p-3 rounded-xl bg-teal-50/50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800/60 text-xs space-y-1">
-                  <div className="flex items-center justify-between text-teal-800 dark:text-teal-300 font-bold flex-wrap gap-1">
+                <div className="p-3.5 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between text-emerald-800 dark:text-emerald-300 font-bold">
                     <span className="flex items-center gap-1">
-                      <MapPin className="w-3.5 h-3.5 text-teal-600" />
+                      <MapPin className="w-3.5 h-3.5 text-emerald-600" />
                       Routed Back To: {dis.referBackFacilityName}
                     </span>
                     <span>Follow-Up Due: {dis.followUpDate}</span>
@@ -1047,7 +915,7 @@ export function SpecialistDashboard({
         </div>
       )}
 
-      {/* ── 11. TAB VIEW 7: FACILITY TAMPER-EVIDENT AUDIT TRAIL ── */}
+      {/* ── 10. FEATURE 7: FACILITY TAMPER-EVIDENT AUDIT TRAIL ── */}
       {activeTab === 'audit' && (
         <FacilityTamperAuditView
           hospitalName={currentHospitalName}
@@ -1055,7 +923,7 @@ export function SpecialistDashboard({
         />
       )}
 
-      {/* ── 12. TAB VIEW 8: BLOOD BANK, DRUGS & SLA ── */}
+      {/* ── 11. FEATURES 8 & 9: BLOOD BANK, DRUGS & SLA ── */}
       {activeTab === 'inventory_sla' && (
         <FacilityBloodDrugWidget
           hospitalName={currentHospitalName}
@@ -1065,9 +933,9 @@ export function SpecialistDashboard({
         />
       )}
 
-      {/* ── 13. OVERLAY MODALS ── */}
+      {/* ── 12. OVERLAY MODALS ── */}
 
-      {/* Referral Review Modal */}
+      {/* Referral Review Modal (Feature 2 & 4) */}
       {reviewReferral && (
         <SpecialistReferralReviewModal
           referral={reviewReferral}
@@ -1080,7 +948,7 @@ export function SpecialistDashboard({
         />
       )}
 
-      {/* Patient Admission & Bed Assignment Modal */}
+      {/* Patient Admission & Bed Assignment Modal (Feature 5) */}
       {admissionTarget && (
         <PatientAdmissionModal
           patientName={admissionTarget.patientName}
@@ -1099,7 +967,7 @@ export function SpecialistDashboard({
         />
       )}
 
-      {/* Patient Discharge & Refer-Back Modal */}
+      {/* Patient Discharge & Refer-Back Modal (Feature 6) */}
       {dischargeTargetBed && (
         <PatientDischargeModal
           bedSlot={dischargeTargetBed}
