@@ -453,23 +453,17 @@ export function Sidebar({
                 icon: MapPin,
               },
               {
-                id: 'scorecard',
-                labelEn: 'Health Scorecards',
-                labelMr: 'आरोग्य गुणपत्रिका',
-                icon: Award,
+                id: 'capacity',
+                labelEn: 'Hospital Capacity',
+                labelMr: 'खाटा व ICU क्षमता',
+                icon: Building2,
               },
             ],
           },
           {
-            titleEn: 'Track',
+            titleEn: 'Live Tracking',
             titleMr: 'थेट स्थिती ट्रॅकिंग',
             items: [
-              {
-                id: 'track_medicine',
-                labelEn: 'Track Medicine',
-                labelMr: 'औषध साठा ट्रॅकिंग',
-                icon: Pill,
-              },
               {
                 id: 'track_referrals',
                 labelEn: 'Track Referrals',
@@ -482,31 +476,11 @@ export function Sidebar({
                 labelMr: 'रुग्ण प्रवास व अहवाल',
                 icon: Activity,
               },
-            ],
-          },
-          {
-            titleEn: 'Clinical & Logistics',
-            titleMr: 'रुग्ण सेवा व रसद',
-            items: [
               {
-                id: 'tertiary',
-                labelEn: 'Referral Risk Queue',
-                labelMr: 'रुग्ण संदर्भ व ट्रायज',
-                icon: Users,
-                badge: (referrals || []).filter((r) => r.status === 'PENDING').length > 0 ? (referrals || []).filter((r) => r.status === 'PENDING').length : undefined,
-                badgeColor: 'bg-blue-600 text-white',
-              },
-              {
-                id: 'reallocation',
-                labelEn: 'Smart Reallocation',
-                labelMr: 'संसाधन वाटप',
-                icon: Sparkles,
-              },
-              {
-                id: 'capacity',
-                labelEn: 'Hospital Capacity',
-                labelMr: 'खाटा व ICU क्षमता',
-                icon: Building2,
+                id: 'track_medicine',
+                labelEn: 'Track Medicine',
+                labelMr: 'औषध साठा ट्रॅकिंग',
+                icon: Pill,
               },
               {
                 id: 'link:maha_aushadhi',
@@ -521,26 +495,40 @@ export function Sidebar({
             ],
           },
           {
-            titleEn: 'Governance & Security',
-            titleMr: 'प्रशासन व सुरक्षा',
+            titleEn: 'Operations & Response',
+            titleMr: 'रुग्ण सेवा व रसद',
             items: [
+              {
+                id: 'tertiary',
+                labelEn: 'Referral Risk Queue',
+                labelMr: 'रुग्ण संदर्भ व ट्रायज',
+                icon: Users,
+                badge: (referrals || []).filter((r) => r.status === 'PENDING').length > 0 ? (referrals || []).filter((r) => r.status === 'PENDING').length : undefined,
+                badgeColor: 'bg-blue-600 text-white',
+              },
+              {
+                id: 'reallocation',
+                labelEn: 'Resource Reallocation',
+                labelMr: 'संसाधन वाटप',
+                icon: Sparkles,
+              },
               {
                 id: 'escalations',
                 labelEn: 'State Escalations',
                 labelMr: 'राज्य संदर्भ गेटवे',
                 icon: Radio,
               },
+            ],
+          },
+          {
+            titleEn: 'Governance & Security',
+            titleMr: 'प्रशासन व सुरक्षा',
+            items: [
               {
                 id: 'audit',
                 labelEn: 'Tamper Audit Trail',
                 labelMr: 'सुरक्षा व ऑडिट ट्रेल',
                 icon: ShieldAlert,
-              },
-              {
-                id: 'roadmap',
-                labelEn: 'Architecture Roadmap',
-                labelMr: 'आर्किटेक्चर आराखडा',
-                icon: Milestone,
               },
             ],
           },
