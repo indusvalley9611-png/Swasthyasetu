@@ -130,6 +130,8 @@ export function AppShell({
           return 'Cryptographic Audit Trail';
         case 'link:maha_aushadhi':
           return language === 'mr' ? 'महा औषधी आपत्कालीन नेटवर्क' : 'MahaAushadhi Emergency Network';
+        case 'medicine_requests':
+          return language === 'mr' ? 'औषध मागण्या' : 'Medicine Requests';
         default:
           return 'Dashboard';
       }

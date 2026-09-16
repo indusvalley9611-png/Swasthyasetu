@@ -40,6 +40,7 @@ import {
   Sparkles,
   Radio,
   Milestone,
+  Inbox,
 } from 'lucide-react';
 
 export interface SidebarProps {
@@ -116,6 +117,15 @@ export function Sidebar({
     const target = r.targetFacility.toLowerCase();
     const fac = user.facilityName.toLowerCase();
     return target.includes(fac) || fac.includes(target) || (target.includes('aundh') && fac.includes('aundh'));
+  }).length;
+
+  // Pending incoming medicine requests for this facility (where this facility is the SOURCE being asked to supply)
+  const pendingIncomingTransfersCount = (stockTransfers || []).filter((t) => {
+    const isSourceThis =
+      t.sourceFacilityId === user?.facilityId ||
+      (t.sourceFacilityName && user?.facilityName && t.sourceFacilityName.toLowerCase().includes(user.facilityName.toLowerCase()));
+    const isPending = t.status === 'PENDING' || t.status === 'PENDING_SOURCE_APPROVAL';
+    return isSourceThis && isPending;
   }).length;
 
   // Level-specific badge styling
@@ -230,6 +240,14 @@ export function Sidebar({
                 badge: activeEmergencyTransfersCount > 0 ? activeEmergencyTransfersCount : undefined,
                 badgeColor: 'bg-rose-600 text-white animate-pulse',
               },
+              {
+                id: 'medicine_requests',
+                labelEn: 'Medicine Requests',
+                labelMr: 'औषध मागण्या',
+                icon: Inbox,
+                badge: pendingIncomingTransfersCount > 0 ? pendingIncomingTransfersCount : undefined,
+                badgeColor: 'bg-purple-600 text-white animate-pulse',
+              },
             ],
           },
           {
@@ -285,6 +303,14 @@ export function Sidebar({
                 badge: activeEmergencyTransfersCount > 0 ? activeEmergencyTransfersCount : undefined,
                 badgeColor: 'bg-rose-600 text-white',
               },
+              {
+                id: 'medicine_requests',
+                labelEn: 'Medicine Requests',
+                labelMr: 'औषध मागण्या',
+                icon: Inbox,
+                badge: pendingIncomingTransfersCount > 0 ? pendingIncomingTransfersCount : undefined,
+                badgeColor: 'bg-purple-600 text-white animate-pulse',
+              },
             ],
           },
         ];
@@ -331,6 +357,14 @@ export function Sidebar({
                 href: '/maha-aushadhi',
                 badge: activeEmergencyTransfersCount > 0 ? activeEmergencyTransfersCount : undefined,
                 badgeColor: 'bg-rose-600 text-white animate-pulse',
+              },
+              {
+                id: 'medicine_requests',
+                labelEn: 'Medicine Requests',
+                labelMr: 'औषध मागण्या',
+                icon: Inbox,
+                badge: pendingIncomingTransfersCount > 0 ? pendingIncomingTransfersCount : undefined,
+                badgeColor: 'bg-purple-600 text-white animate-pulse',
               },
             ],
           },

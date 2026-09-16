@@ -474,7 +474,7 @@ export default function Home() {
       {(role === 'asha' || role === 'phc_doctor' || role === 'nurse' || role === 'pharmacist') && (
         <WorkerWorkspace
           role={role as any}
-          activeSubView={activeNavItem === 'dashboard' ? 'dashboard' : 'directory'}
+          activeSubView={activeNavItem === 'dashboard' ? 'dashboard' : activeNavItem === 'medicine_requests' ? 'medicine_requests' : 'directory'}
           onSubViewChange={(subView) => setActiveNavItem(subView)}
           onOpenNewPatient={() => setIsNewPatientOpen(true)}
           onOpenPatientTimeline={(patient) => setTimelinePatient(patient)}

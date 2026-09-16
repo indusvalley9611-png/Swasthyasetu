@@ -14,6 +14,7 @@ import { PhcDoctorDashboard } from '@/components/dashboards/PhcDoctorDashboard';
 import { AshaDashboard } from '@/components/dashboards/AshaDashboard';
 import { NurseDashboard } from '@/components/dashboards/NurseDashboard';
 import { PharmacistDashboard } from '@/components/dashboards/PharmacistDashboard';
+import { MedicineRequestsModule } from '@/components/maha-aushadhi/MedicineRequestsModule';
 import { Users, Stethoscope, ClipboardList, ShieldCheck, Flame } from 'lucide-react';
 
 interface WorkerWorkspaceProps {
@@ -24,8 +25,8 @@ interface WorkerWorkspaceProps {
   onOpenReferral: (patient: Patient) => void;
   onOpenReferralToken?: (referral: Referral) => void;
   onOpenRapidScreening?: (patient: Patient) => void;
-  activeSubView?: 'directory' | 'dashboard';
-  onSubViewChange?: (view: 'directory' | 'dashboard') => void;
+  activeSubView?: 'directory' | 'dashboard' | 'medicine_requests';
+  onSubViewChange?: (view: 'directory' | 'dashboard' | 'medicine_requests') => void;
 }
 
 export default function WorkerWorkspace({
@@ -64,12 +65,12 @@ export default function WorkerWorkspace({
 
   const [selectedMember, setSelectedMember] = useState<Patient | null>(null);
   const [isRapidScreeningOpen, setIsRapidScreeningOpen] = useState(false);
-  const [internalSubView, setInternalSubView] = useState<'directory' | 'dashboard'>(
+  const [internalSubView, setInternalSubView] = useState<'directory' | 'dashboard' | 'medicine_requests'>(
     externalSubView || 'directory'
   );
 
   const activeSubView = externalSubView !== undefined ? externalSubView : internalSubView;
-  const setActiveSubView = (v: 'directory' | 'dashboard') => {
+  const setActiveSubView = (v: 'directory' | 'dashboard' | 'medicine_requests') => {
     setInternalSubView(v);
     if (onSubViewChange) onSubViewChange(v);
   };
@@ -170,6 +171,11 @@ export default function WorkerWorkspace({
 
       {activeSubView === 'dashboard' && !selectedMember && role === 'pharmacist' && (
         <PharmacistDashboard />
+      )}
+
+      {/* Medicine Requests Module — Inter-facility medicine request management */}
+      {activeSubView === 'medicine_requests' && (
+        <MedicineRequestsModule />
       )}
 
     </div>
