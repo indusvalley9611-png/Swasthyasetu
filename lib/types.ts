@@ -28,10 +28,10 @@ export interface AuditLogEntry {
   userName: string;
   userRole: Role;
   userFacility: string;
-  administrativeLevel: AdministrativeLevel;
-  patientId: string;
-  patientName: string;
-  patientAbha: string;
+  administrativeLevel?: AdministrativeLevel;
+  patientId?: string;
+  patientName?: string;
+  patientAbha?: string;
   action:
     | 'VIEW_PATIENT_REPORT'
     | 'CREATE_REFERRAL'
@@ -79,6 +79,7 @@ export interface UserProfile {
   district: string;
   state?: string;
   village?: string;
+  villageId?: string; // Stable Geographic LGD Code
   registrationNumber: string; // MMC or ASHA ID
   administrativeLevel: AdministrativeLevel;
   assignedPatientIds?: string[];
@@ -153,6 +154,7 @@ export interface Patient {
   gender: 'Female' | 'Male' | 'Other';
   phone: string;
   village: string;
+  villageId?: string;
   taluka: string;
   district: string;
   bloodGroup: string;
@@ -203,9 +205,11 @@ export interface Referral {
   patientAge: number;
   patientGender: string;
   referringFacility: string;
+  referringFacilityId: string;
   referringDoctorName: string;
   referringUserId?: string;
   targetFacility: string;
+  targetFacilityId: string;
   specialtyRequired: string;
   referralReason: string;
   triagePriority: TriagePriority;
@@ -237,7 +241,9 @@ export interface Facility {
     | 'District Hospital'
     | 'Medical College'
     | 'Directorate of Health Services'
-    | 'National Health Authority';
+    | 'National Health Authority'
+    | 'State Medical Reserve'
+    | 'National Medical Reserve';
   taluka: string;
   district: string;
   phone: string;
@@ -274,18 +280,80 @@ export interface DrugStockItem {
 
 export type RequestStatus = 'PENDING' | 'PENDING_SOURCE_APPROVAL' | 'APPROVED' | 'DISPATCHED' | 'COMPLETED' | 'REJECTED';
 
-export interface MedicineRequest {
+/** One medicine line item within a ReplenishmentRequest. */
+export interface ReplenishmentRequestItem {
+  /** Stable item ID — never a medicine name. Format: "item-<timestamp>-<index>" */
   id: string;
-  medicineStockId: string;
+  /** DrugStockItem.id of the shortage stock at the destination facility */
+  stockId: string;
+  /** Display name — never used as an identity or ownership key */
   medicineName: string;
+  /** Snapshot of currentStock at time of request */
   currentStock: number;
+  bufferStock: number;
   requestedQuantity: number;
+  unit: string;
   urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL';
   reason: string;
-  requestingFacilityId: string;
-  requestingFacilityName: string;
-  createdAt: string;
+  /** Independent per-item lifecycle status */
   status: RequestStatus;
+  /** Populated after district/system allocation */
+  sourceFacilityId?: string;
+  /** Resolved dynamically from facilities[] — never hard-coded */
+  sourceFacilityName?: string;
+  supplyTier?: 'PHC' | 'DISTRICT' | 'STATE' | 'NATIONAL';
+  /** Links to a StockTransfer.id for this item */
+  transferId?: string;
+}
+
+/** Overall status of a parent replenishment request (derived from item statuses). */
+export type ReplenishmentOverallStatus =
+  | 'PENDING'
+  | 'IN_PROGRESS'
+  | 'PARTIALLY_FULFILLED'
+  | 'FULFILLED'
+  | 'REJECTED';
+
+/**
+ * Parent Medicine Replenishment Request — contains 1..N line items.
+ * Each item independently tracks its own supply source and transfer lifecycle.
+ */
+export interface ReplenishmentRequest {
+  /** Format: "REQ-2026-XXXX" */
+  id: string;
+  /** Authenticated PHC's facilityId — the authoritative workspace identity */
+  destinationFacilityId: string;
+  /** Resolved dynamically from facilities[] — never hard-coded */
+  destinationFacilityName: string;
+  requestedByUserId: string;
+  requestedByUserName: string;
+  createdAt: string;
+  overallStatus: ReplenishmentOverallStatus;
+  urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL';
+  notes?: string;
+  /** 1..N medicine line items — no artificial maximum */
+  items: ReplenishmentRequestItem[];
+}
+
+/**
+ * Backward-compatible alias. Existing code referencing MedicineRequest continues to work.
+ * New code should use ReplenishmentRequest directly.
+ */
+export type MedicineRequest = ReplenishmentRequest;
+
+/**
+ * Input shape for a single line item when calling createMedicineRequest or createReplenishmentRequest.
+ * The id, status, and resolved fields are stamped by the context function.
+ */
+export interface CreateReplenishmentItemInput {
+  stockId: string;
+  medicineName: string;
+  currentStock: number;
+  bufferStock: number;
+  requestedQuantity: number;
+  unit: string;
+  urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL';
+  reason: string;
 }
 
 export interface StockTransfer {
@@ -319,6 +387,11 @@ export interface StockTransfer {
   allocatedByDistrictUserId?: string;
   allocatedByDistrictUserName?: string;
   allocatedAt?: string;
+  supplyTier?: 'PHC' | 'DISTRICT' | 'STATE' | 'NATIONAL';
+  /** Links this transfer to a parent ReplenishmentRequest.id */
+  requestId?: string;
+  /** Links this transfer to a specific ReplenishmentRequestItem.id within the parent request */
+  requestItemId?: string;
 }
 
 export interface ResourceAlert {
@@ -382,6 +455,10 @@ export interface FollowUpTask {
   status: 'DUE' | 'OVERDUE' | 'COMPLETED';
   notes: string;
   assignedAshaName: string;
+  assignedFacilityId?: string;
+  sourceReferralId?: string;
+  createdByUserId?: string;
+  createdAt?: string;
 }
 
 export interface TeleconsultSession {

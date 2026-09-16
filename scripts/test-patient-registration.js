@@ -117,7 +117,7 @@ const specialistUser = { id: 'user-spec-01', name: 'Dr. Ananya Kulkarni', role: 
 
 const pharmacistUser = { id: 'user-pharm-01', name: 'Shri Anand Kadam', role: 'pharmacist', facilityId: 'fac-phc-nasrapur', facilityName: 'Nasrapur PHC', permissions: ['view_basic_demographics', 'view_prescriptions_only'] };
 const dhoUser = { id: 'user-dist-admin-01', name: 'Dr. Vinod Chavan', role: 'district_officer', facilityId: 'fac-dh-pune', facilityName: 'District Hospital Aundh, Pune', permissions: ['view_basic_demographics'] };
-const stateAdminUser = { id: 'user-admin-01', name: 'Dr. Nitin Patil', role: 'state_admin', facilityId: 'fac-dhs-mumbai', facilityName: 'DHS Mumbai', permissions: ['view_aggregate_analytics'] };
+const stateAdminUser = { id: 'user-admin-01', name: 'Dr. Nitin Patil', role: 'state_admin', facilityId: 'fac-state-reserve', facilityName: 'State Medical Reserve Depot, Maharashtra', permissions: ['view_aggregate_analytics'] };
 
 let passCount = 0;
 let testCount = 0;

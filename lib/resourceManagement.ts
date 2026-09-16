@@ -1,4 +1,5 @@
 import { BedResourceType, DrugStockItem, Facility, ResourceStatus, StockTransfer } from './types';
+import { isValidCanonicalFacilityId, resolveCanonicalFacility } from './mockData';
 
 export const EXPIRY_WINDOW_DAYS = 90;
 
@@ -26,19 +27,9 @@ export function getMedicineStatus(stock: DrugStockItem): ResourceStatus {
 }
 
 export function getSafeTransferableQuantity(stock: DrugStockItem, transfers: StockTransfer[] = []): number {
-  const reserved = transfers
-    .filter(transfer => transfer.sourceStockId === stock.id && transfer.donorAllocated !== false && !['REJECTED', 'COMPLETED'].includes(transfer.status))
-    .reduce((total, transfer) => total + transfer.requestedQuantity, 0);
-  return Math.max(0, stock.currentStock - stock.bufferStock - reserved);
+  return Math.max(0, stock.currentStock - stock.bufferStock);
 }
 
-export function findSurplusSources(destination: DrugStockItem, stocks: DrugStockItem[], transfers: StockTransfer[], facilities: Facility[]) {
-  return stocks
-    .filter(stock => stock.drugName === destination.drugName && stock.facilityId !== destination.facilityId)
-    .map(stock => ({ stock, transferable: getSafeTransferableQuantity(stock, transfers), facility: facilities.find(facility => facility.id === stock.facilityId) }))
-    .filter(candidate => candidate.transferable > 0 && candidate.facility?.type === 'PHC')
-    .sort((a, b) => b.transferable - a.transferable);
-}
 
 export function isExpiringSoon(expiryDate: string, now = new Date(), windowDays = EXPIRY_WINDOW_DAYS): boolean {
   if (expiryDate === 'N/A') return false;
@@ -55,4 +46,174 @@ export function getDistanceKm(origin: Facility, destination: Facility): number |
   const longitudeDelta = toRadians(destination.lng - origin.lng);
   const a = Math.sin(latitudeDelta / 2) ** 2 + Math.cos(toRadians(origin.lat)) * Math.cos(toRadians(destination.lat)) * Math.sin(longitudeDelta / 2) ** 2;
   return Math.round(earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 10) / 10;
+}
+
+export interface SupplyCandidate {
+  tier: 'PHC' | 'DISTRICT' | 'STATE' | 'NATIONAL';
+  tierLabel: string;
+  badgeColor: string;
+  stock: DrugStockItem;
+  facility: Facility | undefined;
+  distanceKm: number | null;
+  transferable: number;
+  isAvailable: boolean;
+}
+
+export interface HierarchicalSupplyResult {
+  recommendedCandidate: SupplyCandidate | null;
+  phcCandidates: SupplyCandidate[];
+  districtCandidates: SupplyCandidate[];
+  stateCandidates: SupplyCandidate[];
+  nationalCandidates: SupplyCandidate[];
+  phcAvailableUnits: number;
+  districtAvailableUnits: number;
+  stateAvailableUnits: number;
+  nationalAvailableUnits: number;
+  escalatedToDistrict: boolean;
+  escalatedToState: boolean;
+  escalatedToNational: boolean;
+}
+
+export function findHierarchicalSupplySources(
+  destination: DrugStockItem,
+  stocks: DrugStockItem[],
+  transfers: StockTransfer[],
+  facilities: Facility[],
+  userDistrict = 'Pune'
+): HierarchicalSupplyResult {
+  const destFacility = resolveCanonicalFacility(destination.facilityId) || facilities.find(f => f.id === destination.facilityId && isValidCanonicalFacilityId(f.id));
+
+  // Matching drug stocks excluding destination itself — strictly valid canonical facilities only
+  // Use case-insensitive fuzzy matching: either name contains the other (handles user-typed vs canonical names)
+  const destDrugLower = destination.drugName.toLowerCase();
+  const matchingStocks = stocks.filter(
+    s => {
+      if (s.facilityId === destination.facilityId) return false;
+      if (!isValidCanonicalFacilityId(s.facilityId)) return false;
+      const srcDrugLower = s.drugName.toLowerCase();
+      return srcDrugLower === destDrugLower ||
+             srcDrugLower.includes(destDrugLower) ||
+             destDrugLower.includes(srcDrugLower);
+    }
+  );
+
+  const phcCandidates: SupplyCandidate[] = [];
+  const districtCandidates: SupplyCandidate[] = [];
+  const stateCandidates: SupplyCandidate[] = [];
+  const nationalCandidates: SupplyCandidate[] = [];
+
+  matchingStocks.forEach(stock => {
+    const facility = resolveCanonicalFacility(stock.facilityId) || facilities.find(f => f.id === stock.facilityId);
+    if (!facility || !isValidCanonicalFacilityId(facility.id)) return;
+
+    const transferable = getSafeTransferableQuantity(stock, transfers);
+    const distanceKm = destFacility ? getDistanceKm(facility, destFacility) : null;
+    const isSameDistrict = facility.district.toLowerCase() === userDistrict.toLowerCase();
+
+    // 1. Level 1: PHC / Rural Hospital in same district
+    if (facility && (facility.type === 'PHC' || facility.type === 'Rural Hospital') && isSameDistrict) {
+      phcCandidates.push({
+        tier: 'PHC',
+        tierLabel: 'Facility Surplus',
+        badgeColor: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300',
+        stock,
+        facility,
+        distanceKm,
+        transferable,
+        isAvailable: transferable > 0,
+      });
+    }
+    // 2. Level 2: District Hospital / Sub-District in same district
+    else if (facility && (facility.type === 'District Hospital' || facility.type === 'Medical College') && isSameDistrict) {
+      districtCandidates.push({
+        tier: 'DISTRICT',
+        tierLabel: 'District Supply',
+        badgeColor: 'bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300',
+        stock,
+        facility,
+        distanceKm,
+        transferable,
+        isAvailable: transferable > 0,
+      });
+    }
+    // 3. Level 3: State Level / State Medical Reserve Depot
+    else if (facility && (facility.type === 'State Medical Reserve' || stock.facilityId === 'fac-state-reserve')) {
+      stateCandidates.push({
+        tier: 'STATE',
+        tierLabel: 'State Supply',
+        badgeColor: 'bg-purple-100 text-purple-800 dark:bg-purple-900/60 dark:text-purple-300',
+        stock,
+        facility,
+        distanceKm,
+        transferable,
+        isAvailable: transferable > 0,
+      });
+    }
+    // 4. Level 4: National Level / National Medical Reserve / Central Depot
+    else if (facility && (facility.type === 'National Medical Reserve' || stock.facilityId === 'fac-nha-delhi')) {
+      nationalCandidates.push({
+        tier: 'NATIONAL',
+        tierLabel: 'National Supply',
+        badgeColor: 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300',
+        stock,
+        facility,
+        distanceKm,
+        transferable,
+        isAvailable: transferable > 0,
+      });
+    }
+  });
+
+  // Sort available candidates by proximity or quantity
+  phcCandidates.sort((a, b) => {
+    if (a.distanceKm !== null && b.distanceKm !== null) return a.distanceKm - b.distanceKm;
+    return b.transferable - a.transferable;
+  });
+  districtCandidates.sort((a, b) => b.transferable - a.transferable);
+  stateCandidates.sort((a, b) => b.transferable - a.transferable);
+  nationalCandidates.sort((a, b) => b.transferable - a.transferable);
+
+  const phcAvailableUnits = phcCandidates.reduce((sum, c) => sum + c.transferable, 0);
+  const districtAvailableUnits = districtCandidates.reduce((sum, c) => sum + c.transferable, 0);
+  const stateAvailableUnits = stateCandidates.reduce((sum, c) => sum + c.transferable, 0);
+  const nationalAvailableUnits = nationalCandidates.reduce((sum, c) => sum + c.transferable, 0);
+
+  // Hierarchy prioritization logic
+  let recommendedCandidate: SupplyCandidate | null = null;
+  let escalatedToDistrict = false;
+  let escalatedToState = false;
+  let escalatedToNational = false;
+
+  const bestPhc = phcCandidates.find(c => c.isAvailable);
+  const bestDistrict = districtCandidates.find(c => c.isAvailable);
+  const bestState = stateCandidates.find(c => c.isAvailable);
+  const bestNational = nationalCandidates.find(c => c.isAvailable);
+
+  if (bestPhc && bestPhc.transferable > 0) {
+    recommendedCandidate = bestPhc;
+  } else if (bestDistrict && bestDistrict.transferable > 0) {
+    recommendedCandidate = bestDistrict;
+    escalatedToDistrict = true;
+  } else if (bestState && bestState.transferable > 0) {
+    recommendedCandidate = bestState;
+    escalatedToState = true;
+  } else if (bestNational && bestNational.transferable > 0) {
+    recommendedCandidate = bestNational;
+    escalatedToNational = true;
+  }
+
+  return {
+    recommendedCandidate,
+    phcCandidates,
+    districtCandidates,
+    stateCandidates,
+    nationalCandidates,
+    phcAvailableUnits,
+    districtAvailableUnits,
+    stateAvailableUnits,
+    nationalAvailableUnits,
+    escalatedToDistrict,
+    escalatedToState,
+    escalatedToNational,
+  };
 }

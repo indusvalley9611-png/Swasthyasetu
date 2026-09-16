@@ -25,7 +25,7 @@ interface StaffLoginModalProps {
 export type StaffTier = 'asha' | 'phc' | 'district' | 'state' | 'national';
 
 export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) {
-  const { sendOtp, verifyOtp, user, loginAsUser } = useAuth();
+  const { sendOtp, verifyOtp, user } = useAuth();
   const { language } = useLanguage();
 
   const allStaff = Object.values(PRE_REGISTERED_STAFF);
@@ -47,9 +47,13 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
       case 'asha':
         return allStaff.filter((s) => s.role === 'asha');
       case 'phc':
+        if (initialRole === 'nurse') return allStaff.filter((s) => s.role === 'nurse');
+        if (initialRole === 'pharmacist') return allStaff.filter((s) => s.role === 'pharmacist');
         return allStaff.filter((s) => s.role === 'phc_doctor' || s.role === 'nurse' || s.role === 'pharmacist');
       case 'district':
-        return allStaff.filter((s) => s.role === 'specialist' || s.role === 'district_officer');
+        if (initialRole === 'district_officer') return allStaff.filter((s) => s.role === 'district_officer');
+        if (initialRole === 'specialist') return allStaff.filter((s) => s.role === 'specialist');
+        return allStaff.filter((s) => s.role === 'district_officer' || s.role === 'specialist');
       case 'state':
         return allStaff.filter((s) => s.role === 'state_admin');
       case 'national':
@@ -78,30 +82,36 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
     setErrorMessage('');
   };
 
-  const handleDirectLogin = (selectedProfile: (typeof allStaff)[0]) => {
-    loginAsUser(selectedProfile);
-    onClose();
-  };
-
-  const handleSendOtp = (e: React.FormEvent) => {
+  const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
-    const result = sendOtp(phone);
+    if (!phone || phone.trim().length < 10) {
+      setErrorMessage('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    const result = await sendOtp(phone.trim());
     if (result.success) {
-      setSimulatedSms({ phone, otp: result.otp || '123456' });
+      setSimulatedSms({ phone: phone.trim(), otp: result.otp || '' });
       setStep('OTP');
-      setOtp(result.otp || '123456'); // Pre-fill for demonstration convenience
+      setOtp('');
     } else {
       setErrorMessage(result.error || 'Failed to send OTP.');
     }
   };
 
-  const handleVerifyOtp = (e: React.FormEvent) => {
+  const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
-    const result = verifyOtp(phone, otp);
+    if (!otp.trim()) {
+      setErrorMessage('Please enter the 6-digit OTP code.');
+      return;
+    }
+    const result = await verifyOtp(phone.trim(), otp.trim());
     if (result.success) {
-      onClose();
+      setStep('SUCCESS');
+      setTimeout(() => {
+        onClose();
+      }, 500);
     } else {
       setErrorMessage(result.error || 'Invalid OTP code.');
     }
@@ -121,7 +131,9 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
                   : activeTier === 'phc'
                   ? (language === 'mr' ? 'प्राथमिक आरोग्य केंद्र (PHC) कर्मचारी प्रवेश' : 'PHC Medical Officer & Staff Login')
                   : activeTier === 'district'
-                  ? (language === 'mr' ? 'जिल्हा रुग्णालय तज्ज्ञ व प्रशासन प्रवेश' : 'District Hospital Team Login')
+                  ? (initialRole === 'district_officer'
+                      ? (language === 'mr' ? 'जिल्हा आरोग्य अधिकारी व प्रशासन (DHO) प्रवेश' : 'District Health Authority (DHO) Login')
+                      : (language === 'mr' ? 'जिल्हा रुग्णालय तज्ज्ञ व कॅज्युअल्टी प्रवेश' : 'District Hospital Specialist Team Login'))
                   : activeTier === 'state'
                   ? (language === 'mr' ? 'राज्य आरोग्य प्राधिकरण (DHS) प्रवेश' : 'State Health Directorate Login (DHS Maharashtra)')
                   : activeTier === 'national'
@@ -130,11 +142,11 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
               </h3>
               <p className="text-[11px] text-slate-400">
                 {activeTier === 'state'
-                  ? 'Directorate of Health Services (DHS), Mumbai • ABDM HPR Gateway'
+                  ? 'State Medical Reserve Depot & DHS, Maharashtra • ABDM HPR Gateway'
                   : activeTier === 'national'
                   ? 'National Health Authority (NHA) & MoHFW, New Delhi • Apex Mission Control'
                   : activeTier === 'district'
-                  ? 'District Hospital Aundh (Pune) & Civil Hospital (Nashik)'
+                  ? 'Pune District Health Office & District Hospital Network'
                   : activeTier === 'phc'
                   ? 'Velhe PHC & Nasrapur PHC Catchment Areas'
                   : 'Velhe & Nasrapur Field & Sub-Centre Network'}
@@ -203,7 +215,7 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
                       : (language === 'mr' ? 'आशा सेविका निवडा:' : 'Select ASHA Field Worker:')}
                   </span>
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                    {language === 'mr' ? 'थेट प्रवेशासाठी क्लिक करा' : 'Click card for instant login'}
+                    {language === 'mr' ? 'खाते निवडण्यासाठी क्लिक करा' : 'Click card to select account'}
                   </span>
                 </div>
 
@@ -236,7 +248,7 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
                     return (
                       <div
                         key={stf.phone}
-                        onClick={() => handleDirectLogin(stf)}
+                        onClick={() => handleSelectStaff(stf.phone)}
                         className={`p-2.5 rounded-xl border text-left transition-all relative cursor-pointer hover:scale-[1.01] active:scale-[0.99] ${
                           isSelected
                             ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-600 ring-2 ring-blue-500/20 shadow-sm'
@@ -268,12 +280,16 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDirectLogin(stf);
+                              handleSelectStaff(stf.phone);
                             }}
-                            className="px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-[9px] transition-colors shrink-0 shadow-xs"
-                            title="Instant Login as this staff member"
+                            className={`px-2 py-0.5 rounded font-bold text-[9px] transition-colors shrink-0 shadow-xs ${
+                              isSelected
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-blue-600 hover:text-white'
+                            }`}
+                            title="Select this staff member"
                           >
-                            {language === 'mr' ? 'प्रवेश' : 'Login'}
+                            {language === 'mr' ? 'निवडा' : 'Select'}
                           </button>
                         </div>
                       </div>

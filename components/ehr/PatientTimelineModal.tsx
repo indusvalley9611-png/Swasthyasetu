@@ -582,7 +582,7 @@ export function PatientTimelineModal({
                   <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-700">
                     <span className="font-bold text-slate-500 dark:text-slate-400">Assigned Primary Doctor:</span>
                     <span className="font-bold text-blue-700 dark:text-blue-400">
-                      {patient.assignedDoctorName || 'Dr. Rajesh Deshmukh'} ({patient.assignedFacilityName || 'Velhe PHC'})
+                      {patient.assignedDoctorName || 'Medical Officer'} ({patient.assignedFacilityName || 'Primary Health Centre'})
                     </span>
                   </div>
                   <div className="flex justify-between items-center">

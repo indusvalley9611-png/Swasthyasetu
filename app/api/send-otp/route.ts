@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-// In-memory OTP cache for development/demo (in production, use Redis or DB)
-const otpStore = new Map<string, { otp: string; expiresAt: number }>();
+import { otpStore } from '@/lib/authStore';
 
 export async function POST(req: NextRequest) {
   try {
@@ -127,10 +125,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       phone: cleanPhone,
-      otp: generatedOtp, // Included so frontend can show fallback if no real SMS API key is set yet
       realSmsSent: smsSentReal,
       gateway: gatewayUsed,
       gatewayError: gatewayErrorMessage || undefined,
+      demoSimulation: {
+        deliveredTo: smsSentReal ? 'Real SMS + Local Browser (Simulation)' : 'Local Browser (Simulation)',
+        otp: generatedOtp,
+        note: 'DEMO ONLY: In production, OTPs are never returned in the API response.'
+      },
       message: smsSentReal
         ? `Real SMS dispatched to +91 ${cleanPhone} via ${gatewayUsed}.`
         : gatewayErrorMessage

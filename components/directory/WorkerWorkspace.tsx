@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Role, Patient, Referral } from '@/lib/types';
 import Link from 'next/link';
 import { useSync } from '@/context/SyncContext';
 import { useAuth } from '@/context/AuthContext';
 import { useLanguage } from '@/context/LanguageContext';
+import { filterPatientsForUser } from '@/lib/patientPrivacyService';
 import MemberDirectory from './MemberDirectory';
 import MemberProfile from './MemberProfile';
 import RapidScreeningModal from '@/components/ehr/RapidScreeningModal';
@@ -41,6 +42,29 @@ export default function WorkerWorkspace({
   const { user } = useAuth();
   const { language } = useLanguage();
   const { patients, referrals } = useSync();
+
+  // Scoped patient collection based on authenticated worker's role and facility
+  const scopedDirectoryPatients = useMemo(() => {
+    if (!user) return [];
+    const filtered = filterPatientsForUser(user, patients, referrals);
+    if (user.role === 'asha') {
+      return filtered.assignedPatients; // Community catchment patients
+    }
+    if (user.role === 'phc_doctor' || user.role === 'nurse' || user.role === 'pharmacist') {
+      return filtered.facilityPatients;
+    }
+    if (user.role === 'specialist') {
+      return filtered.facilityPatients; // Facility patients + incoming referrals
+    }
+    if (user.role === 'district_officer') {
+      return filtered.facilityPatients; // District patients
+    }
+    if (user.administrativeLevel === 'state' || user.administrativeLevel === 'national') {
+      return filtered.allPatients;
+    }
+    return filtered.facilityPatients;
+  }, [user, patients, referrals]);
+
   const [selectedMember, setSelectedMember] = useState<Patient | null>(null);
   const [isRapidScreeningOpen, setIsRapidScreeningOpen] = useState(false);
   const [internalSubView, setInternalSubView] = useState<'directory' | 'dashboard'>(
@@ -86,9 +110,38 @@ export default function WorkerWorkspace({
 
   return (
     <div className="w-full h-full relative space-y-4">
-      {/* Subview Content: Directly rendered per Sidebar selection without duplicate in-page navigation bars */}
 
-      {/* Subview Content */}
+      {/* Patients Directory: Clean Directory List → Full Patient Profile (Image 2) */}
+      {activeSubView === 'directory' && (
+        <div className="w-full h-full relative">
+          {!selectedMember ? (
+            <MemberDirectory
+              patients={scopedDirectoryPatients}
+              onSelectMember={setSelectedMember}
+              workerName={workerInfo.name}
+              workerRoleName={workerInfo.roleName}
+              workerLocation={workerInfo.location}
+              onOpenNewPatient={onOpenNewPatient}
+            />
+          ) : (
+            <MemberProfile
+              patient={selectedMember}
+              role={role}
+              onBack={() => setSelectedMember(null)}
+              onOpenAction={handleOpenAction}
+            />
+          )}
+
+          {isRapidScreeningOpen && selectedMember && (
+            <RapidScreeningModal
+              patient={selectedMember}
+              onClose={() => setIsRapidScreeningOpen(false)}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Legacy 'dashboard' subview — kept for pharmacist and any future use */}
       {activeSubView === 'dashboard' && !selectedMember && role === 'phc_doctor' && (
         <PhcDoctorDashboard
           onOpenNewPatient={onOpenNewPatient}
@@ -120,34 +173,6 @@ export default function WorkerWorkspace({
         <PharmacistDashboard />
       )}
 
-      {(activeSubView === 'directory' || selectedMember || (!hasConsoleToggle)) && (
-        <div className="w-full h-full relative">
-          {!selectedMember ? (
-            <MemberDirectory
-              patients={patients}
-              onSelectMember={setSelectedMember}
-              workerName={workerInfo.name}
-              workerRoleName={workerInfo.roleName}
-              workerLocation={workerInfo.location}
-              onOpenNewPatient={onOpenNewPatient}
-            />
-          ) : (
-            <MemberProfile
-              patient={selectedMember}
-              role={role}
-              onBack={() => setSelectedMember(null)}
-              onOpenAction={handleOpenAction}
-            />
-          )}
-
-          {isRapidScreeningOpen && selectedMember && (
-            <RapidScreeningModal
-              patient={selectedMember}
-              onClose={() => setIsRapidScreeningOpen(false)}
-            />
-          )}
-        </div>
-      )}
     </div>
   );
 }

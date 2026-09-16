@@ -90,7 +90,7 @@ export function NurseDashboard({
       <PageHeader
         title={language === 'mr' ? 'केंद्रातील परिचारिका कार्यकक्ष' : 'In-Facility Nursing & Triage Console'}
         subtitle={language === 'mr' ? 'आरोग्य केंद्र वॉर्ड व प्राथमिक तपासणी' : 'Primary Care Ward & Triage Workflow'}
-        facilityContext={user?.facilityName || 'Velhe Primary Health Centre'}
+        facilityContext={user?.facilityName || 'Primary Health Centre'}
         badge={{
           label: language === 'mr' ? 'परिचारिका (GNM)' : 'Staff Nurse (Level 2)',
           level: 'facility',
@@ -301,85 +301,71 @@ export function NurseDashboard({
               description={language === 'mr' ? 'सध्या तपासणीसाठी कोणतेही रुग्ण रांगेत नाहीत.' : 'All registered patients have had vitals taken or no matches found.'}
             />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase text-[10px]">
-                    <th className="py-2.5 px-3">Patient Details</th>
-                    <th className="py-2.5 px-3">Village / Taluka</th>
-                    <th className="py-2.5 px-3">Status / Category</th>
-                    <th className="py-2.5 px-3">Last Vitals</th>
-                    <th className="py-2.5 px-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {searchedPatients.map((patient) => {
-                    const lastEncounter = patient.encounters && patient.encounters.length > 0 ? patient.encounters[patient.encounters.length - 1] : null;
-                    const isHighRisk = patient.isHighRiskPregnancy || (patient.chronicConditions && patient.chronicConditions.length > 0);
+            <div className="space-y-1.5">
+              {searchedPatients.map((patient) => {
+                const isHighRisk = patient.isHighRiskPregnancy || (patient.chronicConditions && patient.chronicConditions.length > 0);
+                const needsVitals = patient.encounters.length === 0 ||
+                  patient.encounters[patient.encounters.length - 1].date !== new Date().toISOString().split('T')[0];
 
-                    return (
-                      <tr key={patient.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
-                        <td className="py-3 px-3">
-                          <div className="font-bold text-slate-900 dark:text-white">
-                            {patient.fullName}
-                          </div>
-                          <div className="text-[11px] text-slate-400">
-                            {patient.age}y &bull; {patient.gender} &bull; <span className="font-mono text-slate-500">{patient.abhaId}</span>
-                          </div>
-                        </td>
+                return (
+                  <div
+                    key={patient.id}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:border-slate-200 dark:hover:border-slate-700 transition-all group"
+                  >
+                    {/* Avatar */}
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${
+                      isHighRisk
+                        ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300'
+                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                    }`}>
+                      {patient.fullName.charAt(0)}
+                    </div>
 
-                        <td className="py-3 px-3 text-slate-600 dark:text-slate-300">
-                          <div>{patient.village}</div>
-                          <div className="text-[10px] text-slate-400">{patient.taluka}</div>
-                        </td>
+                    {/* Name + demographics */}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm text-slate-900 dark:text-white truncate">{patient.fullName}</div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        {patient.age}y · {patient.gender} · {patient.village}
+                      </div>
+                    </div>
 
-                        <td className="py-3 px-3">
-                          {isHighRisk ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
-                              HIGH-RISK
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                              ROUTINE
-                            </span>
-                          )}
-                        </td>
+                    {/* Status badge */}
+                    <div className="shrink-0">
+                      {isHighRisk ? (
+                        <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
+                          High-Risk
+                        </span>
+                      ) : needsVitals ? (
+                        <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+                          Needs Vitals
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
+                          Screened
+                        </span>
+                      )}
+                    </div>
 
-                        <td className="py-3 px-3 text-slate-600 dark:text-slate-300">
-                          {lastEncounter?.vitals ? (
-                            <div>
-                              <span className="font-bold">{lastEncounter.vitals.systolicBp}/{lastEncounter.vitals.diastolicBp}</span> mmHg &bull; {lastEncounter.vitals.spO2}% SpO2
-                            </div>
-                          ) : (
-                            <span className="text-amber-600 dark:text-amber-400 font-bold text-[11px]">
-                              Needs Recording
-                            </span>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-3 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => setSelectedPatientForScreening(patient)}
-                              className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors cursor-pointer"
-                              title="Measure & Record Vitals"
-                            >
-                              Record Vitals
-                            </button>
-                            <button
-                              onClick={() => onOpenPatientTimeline(patient)}
-                              className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-lg transition-colors cursor-pointer"
-                              title="View Patient Care Timeline"
-                            >
-                              Timeline
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    {/* Actions */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={() => setSelectedPatientForScreening(patient)}
+                        className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-xs cursor-pointer"
+                        title="Record Vitals"
+                      >
+                        Record Vitals
+                      </button>
+                      <button
+                        onClick={() => onOpenPatientTimeline(patient)}
+                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-lg transition-colors text-xs cursor-pointer"
+                        title="View Patient Care Timeline"
+                      >
+                        Timeline
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

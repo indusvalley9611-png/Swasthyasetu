@@ -24,12 +24,10 @@ const ROLE_MENU_EXPECTATIONS = {
   },
   phc_doctor: {
     allowedItems: [
-      'dashboard',
       'directory',
       'action:search',
       'action:new_patient',
       'action:beds',
-      'action:stock',
       'link:maha_aushadhi',
       'action:audit',
     ],
@@ -38,7 +36,6 @@ const ROLE_MENU_EXPECTATIONS = {
   },
   nurse: {
     allowedItems: [
-      'dashboard',
       'directory',
       'action:search',
       'action:new_patient',
@@ -80,15 +77,10 @@ const ROLE_MENU_EXPECTATIONS = {
       'overview',
       'tertiary',
       'capacity',
-      'resources',
-      'surveillance',
-      'counter_referral',
-      'gis_map',
       'link:maha_aushadhi',
-      'action:search',
       'audit',
     ],
-    forbiddenItems: [],
+    forbiddenItems: ['resources', 'surveillance', 'counter_referral', 'gis_map'],
     level: 'district',
   },
   state_admin: {

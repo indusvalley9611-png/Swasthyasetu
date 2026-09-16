@@ -31,7 +31,7 @@ export function SpecialistDashboard({
 }: SpecialistDashboardProps) {
   const { language } = useLanguage();
   const { user } = useAuth();
-  const { referrals, patients, updateReferralStatus, stockTransfers } = useSync();
+  const { referrals, patients, updateReferralStatus } = useSync();
 
   const [internalTab, setInternalTab] = useState<
     'incoming' | 'under_review' | 'accepted' | 'admitted' | 'escalated' | 'counter_referral' | 'history'
@@ -76,7 +76,8 @@ export function SpecialistDashboard({
     }
 
     const p = getPatientForReferral(r.patientId);
-    const searchMatch = p?.fullName.toLowerCase().includes(searchQuery.toLowerCase()) || r.id.includes(searchQuery);
+    const pName = p?.fullName || r.patientName || '';
+    const searchMatch = pName.toLowerCase().includes(searchQuery.toLowerCase()) || r.id.includes(searchQuery) || (r.tokenCode && r.tokenCode.includes(searchQuery));
     
     if (activeTab === 'incoming') {
       if (r.status !== 'PENDING') return false;
@@ -119,10 +120,10 @@ export function SpecialistDashboard({
               type="button"
               onClick={onOpenNewPatient}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-2xs transition-colors cursor-pointer"
-              title="Direct Walk-in Patient Registration / ABDM Search"
+              title="Direct Hospital Patient Intake / ABDM Search & Registration"
             >
               <UserPlus className="w-3.5 h-3.5" />
-              <span>+ Register Walk-in Patient</span>
+              <span>+ Patient Intake</span>
             </button>
           )}
           <Link
@@ -186,14 +187,6 @@ export function SpecialistDashboard({
           <div><div className="text-xs font-bold text-blue-800 dark:text-blue-300">REFERRAL</div><div className="text-xs text-blue-600 dark:text-blue-400">8 referrals waiting for review</div></div>
         </div>
       </div>
-
-      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
-          <h3 className="font-black text-slate-900 dark:text-white">PHC Medicine Transfer Oversight</h3>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Read-only district coordination view · simulated PHC redistribution records</p>
-        </div>
-        <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 dark:bg-slate-950 text-[10px] uppercase tracking-wider text-slate-500"><tr><th className="p-3">Transfer</th><th className="p-3">PHC route</th><th className="p-3">Medicine</th><th className="p-3">Urgency</th><th className="p-3">Status</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{stockTransfers.slice(0, 5).map(transfer => <tr key={transfer.id}><td className="p-3 font-mono text-xs font-bold">{transfer.id}</td><td className="p-3 text-xs">{transfer.sourceFacilityName} &rarr; {transfer.destinationFacilityName}</td><td className="p-3">{transfer.medicineName}<span className="ml-1 text-xs text-slate-500">({transfer.requestedQuantity})</span></td><td className="p-3 text-xs font-bold">{transfer.urgency}</td><td className="p-3 text-xs font-bold">{transfer.status.replaceAll('_', ' ')}</td></tr>)}{stockTransfers.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-sm text-slate-500">No PHC transfer requests currently require district coordination.</td></tr>}</tbody></table></div>
-      </section>
 
       {/* 2. REFERRAL COMMAND CENTER */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl shadow-sm overflow-hidden flex flex-col min-h-[600px] mt-6">
@@ -266,134 +259,132 @@ export function SpecialistDashboard({
           </div>
         </div>
 
-        {/* Data Table */}
-        <div className="flex-1 overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
-                <th className="p-4 whitespace-nowrap">Urgency</th>
-                <th className="p-4 whitespace-nowrap">Patient Details</th>
-                <th className="p-4 whitespace-nowrap">Origin Facility</th>
-                <th className="p-4 whitespace-nowrap">Specialty & Diagnosis</th>
-                <th className="p-4 whitespace-nowrap">Triage Status</th>
-                <th className="p-4 whitespace-nowrap text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
+        {/* Patient List */}
+        <div className="flex-1 overflow-y-auto">
+          {filteredReferrals.length === 0 ? (
+            <div className="p-12 text-center">
+              <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center mx-auto mb-3">
+                <ShieldCheck className="w-8 h-8 text-slate-300" />
+              </div>
+              <div className="text-slate-800 dark:text-slate-100 font-bold">No active cases</div>
+              <div className="text-slate-500 dark:text-slate-400 text-sm mt-1">Queue is empty for the selected filters.</div>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredReferrals.map(ref => {
-                const patient = getPatientForReferral(ref.patientId);
+                const patient = getPatientForReferral(ref.patientId) || (ref.patientName ? ({
+                  id: ref.patientId,
+                  fullName: ref.patientName,
+                  age: ref.patientAge || 30,
+                  gender: (ref.patientGender as any) || 'Female',
+                  abhaId: ref.patientAbha || 'ABDM-WALKIN',
+                  phone: '9823091823',
+                  village: 'Pune',
+                  district: 'Pune',
+                  bloodGroup: 'B Positive',
+                  encounters: [],
+                } as unknown as Patient) : null);
                 if (!patient) return null;
                 const isHigh = ref.triagePriority === 'red';
                 const isMyFacility = isReferralForMyFacility(ref);
 
                 return (
-                  <tr key={ref.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
-                    <td className="p-4">
-                      {isHigh ? (
-                        <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-600 animate-pulse">
-                          <AlertTriangle className="w-4 h-4" />
-                        </div>
-                      ) : (
-                        <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600">
-                          <Clock className="w-4 h-4" />
-                        </div>
-                      )}
-                    </td>
-                    <td className="p-4">
+                  <div key={ref.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group">
+
+                    {/* Urgency avatar */}
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+                      isHigh
+                        ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-600 animate-pulse'
+                        : 'bg-blue-100 dark:bg-blue-900/40 text-blue-600'
+                    }`}>
+                      {isHigh
+                        ? <AlertTriangle className="w-4 h-4" />
+                        : <Clock className="w-4 h-4" />
+                      }
+                    </div>
+
+                    {/* Patient identity */}
+                    <div className="flex-1 min-w-0">
                       {isMyFacility ? (
                         <div
-                          className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-blue-600 transition-colors cursor-pointer"
+                          className="font-semibold text-sm text-slate-900 dark:text-white group-hover:text-blue-600 transition-colors cursor-pointer truncate"
                           onClick={() => onOpenPatientTimeline(patient)}
-                          title="Open Longitudinal Clinical EHR (Authorized Receiving Care Team)"
+                          title="Open full EHR"
                         >
                           {patient.fullName}
                         </div>
                       ) : (
                         <div
-                          className="font-bold text-slate-700 dark:text-slate-300 text-sm hover:text-amber-600 transition-colors cursor-pointer flex items-center gap-1.5"
+                          className="font-semibold text-sm text-slate-700 dark:text-slate-300 hover:text-amber-600 transition-colors cursor-pointer flex items-center gap-1.5 truncate"
                           onClick={() => setTreatmentModalRef(ref)}
-                          title="Clinical details restricted — click to view District Referral Summary"
+                          title="View referral summary (coordination only)"
                         >
                           {patient.fullName}
                           <Lock className="w-3 h-3 text-amber-500 shrink-0" />
                         </div>
                       )}
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xs text-slate-500 dark:text-slate-400">{patient.age}y &middot; {patient.gender}</span>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1.5">
+                        <span>{patient.age}y · {patient.gender}</span>
                         {!isMyFacility && (
                           <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800">
                             Coordination Only
                           </span>
                         )}
                       </div>
-                    </td>
-                    <td className="p-4">
-                      <div className="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-slate-400" /> {ref.referringFacility}</div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Destination: {ref.targetFacility}</div>
-                      {!isMyFacility && (
-                        <span className="inline-block mt-1 text-[9px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 px-1.5 py-0.5 rounded">
-                          External Hospital
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-4">
-                      <div className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-950 px-2 py-1 rounded text-xs font-bold text-slate-700 dark:text-slate-200">
-                        <Stethoscope className="w-3.5 h-3.5 text-indigo-500" /> {ref.specialtyRequired}
+                    </div>
+
+                    {/* Origin */}
+                    <div className="hidden md:block w-40 shrink-0">
+                      <div className="text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1 truncate">
+                        <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span className="truncate">{ref.referringFacility}</span>
                       </div>
-                      <div className="text-xs text-slate-600 dark:text-slate-300 mt-1.5 line-clamp-1 max-w-[200px]" title={ref.referralReason}>"{ref.referralReason}"</div>
-                    </td>
-                    <td className="p-4">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${
+                      <div className="text-[10px] text-slate-400 mt-0.5 truncate">{ref.targetFacility}</div>
+                    </div>
+
+                    {/* Status badge */}
+                    <div className="shrink-0">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${
                         ref.status === 'ACCEPTED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
                         ref.status === 'ADMITTED' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
-                        ref.status === 'COMPLETED' ? 'bg-slate-100 text-slate-700 border border-slate-200' :
+                        ref.status === 'COMPLETED' ? 'bg-slate-100 text-slate-600 border border-slate-200' :
                         ref.status === 'CANCELLED' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
                         'bg-amber-50 text-amber-700 border border-amber-200'
                       }`}>
-                        {ref.status === 'PENDING' ? '🟡 PENDING' :
-                         ref.status === 'ACCEPTED' ? '🟢 ACCEPTED' :
-                         ref.status === 'ADMITTED' ? '🟢 ADMITTED' :
-                         ref.status === 'COMPLETED' ? '⚪ COMPLETED' :
-                         ref.status === 'CANCELLED' ? '🔴 CANCELLED' :
-                         ref.status === 'ESCALATED' ? '🔵 ESCALATED' :
+                        {ref.status === 'PENDING' ? 'Pending' :
+                         ref.status === 'ACCEPTED' ? 'Accepted' :
+                         ref.status === 'ADMITTED' ? 'Admitted' :
+                         ref.status === 'COMPLETED' ? 'Done' :
+                         ref.status === 'CANCELLED' ? 'Cancelled' :
+                         ref.status === 'ESCALATED' ? 'Escalated' :
                          ref.status}
                       </span>
-                    </td>
-                    <td className="p-4 text-right space-x-2">
-                      <button onClick={() => onOpenReferralToken(ref)} className="px-3 py-1.5 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-700 dark:text-slate-200 rounded-lg shadow-sm transition-all">
-                        View QR
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button onClick={() => onOpenReferralToken(ref)} className="px-2.5 py-1.5 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-700 dark:text-slate-200 rounded-lg shadow-sm transition-all">
+                        QR
                       </button>
                       {isMyFacility ? (
-                        <button onClick={() => setTreatmentModalRef(ref)} className="px-3 py-1.5 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-lg shadow-sm transition-all">
-                          Process
+                        <button onClick={() => setTreatmentModalRef(ref)} className="px-2.5 py-1.5 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-lg shadow-sm transition-all">
+                          Open
                         </button>
                       ) : (
                         <button
                           onClick={() => setTreatmentModalRef(ref)}
-                          className="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600 rounded-lg shadow-xs transition-all"
-                          title="View District Referral Coordination Summary (Clinical actions restricted)"
+                          className="px-2.5 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 rounded-lg transition-all"
+                          title="View coordination summary"
                         >
-                          View Summary
+                          Summary
                         </button>
                       )}
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 );
               })}
-              
-              {filteredReferrals.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="p-12 text-center">
-                    <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center mx-auto mb-3">
-                      <ShieldCheck className="w-8 h-8 text-slate-300" />
-                    </div>
-                    <div className="text-slate-800 dark:text-slate-100 font-bold">No active cases</div>
-                    <div className="text-slate-500 dark:text-slate-400 text-sm mt-1">Queue is empty for the selected filters.</div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+            </div>
+          )}
         </div>
       </div>
 

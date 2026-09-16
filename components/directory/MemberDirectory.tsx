@@ -49,37 +49,51 @@ export default function MemberDirectory({
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [scopeTab, setScopeTab] = useState<'ASSIGNED' | 'ALL'>('ASSIGNED');
 
+  const isAdmin = user?.administrativeLevel === 'state' || user?.administrativeLevel === 'national' || user?.role === 'district_officer';
+
   // Determine if a patient is assigned to this user's direct care
   const isDirectlyAssignedToUser = (pat: Patient): boolean => {
     if (!user) return false;
     if (user.role === 'phc_doctor') {
-      return (
+      return !!(
         pat.assignedDoctorId === user.id ||
         (user.assignedPatientIds && user.assignedPatientIds.includes(pat.id)) ||
-        pat.assignedDoctorName === user.name
+        (pat.registrationFacilityId && pat.registrationFacilityId === user.facilityId)
       );
     }
     if (user.role === 'specialist') {
+      const isDirectWalkIn = !!(
+        (pat.registrationFacilityId && pat.registrationFacilityId === user.facilityId) ||
+        (pat.assignedFacilityId && pat.assignedFacilityId === user.facilityId) ||
+        (pat.assignedFacilityName && user.facilityName && pat.assignedFacilityName === user.facilityName) ||
+        (pat.registeredByUserId && pat.registeredByUserId === user.id) ||
+        (pat.assignedDoctorId && pat.assignedDoctorId === user.id)
+      );
+      if (isDirectWalkIn) return true;
       // Patient with active referral directed to this specialist facility
       return referrals.some(
         (r) =>
           r.patientId === pat.id &&
           ['PENDING', 'ACCEPTED', 'ADMITTED'].includes(r.status) &&
-          (r.targetFacility.toLowerCase().includes(user.facilityName.toLowerCase()) ||
-            user.facilityName.toLowerCase().includes(r.targetFacility.toLowerCase()) ||
-            (user.facilityName.includes('District Hospital') && r.targetFacility.includes('District Hospital')))
+          !!(
+            (r.targetFacilityId && r.targetFacilityId === user.facilityId) ||
+            (r.targetFacility && user.facilityName && r.targetFacility === user.facilityName)
+          )
       );
     }
     if (user.role === 'nurse' || user.role === 'pharmacist') {
-      return (
-        pat.assignedFacilityId === user.facilityId ||
-        pat.assignedFacilityName === user.facilityName
+      return !!(
+        (pat.assignedFacilityId && pat.assignedFacilityId === user.facilityId) ||
+        (pat.registrationFacilityId && pat.registrationFacilityId === user.facilityId) ||
+        (pat.assignedFacilityName && user.facilityName && pat.assignedFacilityName === user.facilityName)
       );
     }
     if (user.role === 'asha') {
-      return (
-        pat.village.toLowerCase().includes(user.facilityName.split(' ')[0].toLowerCase()) ||
-        pat.taluka.toLowerCase() === user.taluka.toLowerCase()
+      return !!(
+        (pat.assignedFacilityId && pat.assignedFacilityId === user.facilityId) ||
+        (pat.registrationFacilityId && pat.registrationFacilityId === user.facilityId) ||
+        (user.villageId && pat.villageId && pat.villageId === user.villageId) ||
+        (user.village && pat.village && pat.village === user.village)
       );
     }
     return true;
@@ -199,7 +213,7 @@ export default function MemberDirectory({
           }`}
         >
           <Building2 className="w-4 h-4" />
-          <span>All Network Patients</span>
+          <span>{isAdmin ? 'All Network Patients' : user?.role === 'asha' ? 'Catchment Area Patients' : 'Facility Care Roster'}</span>
           <span
             className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
               scopeTab === 'ALL'
@@ -340,7 +354,7 @@ export default function MemberDirectory({
                           <div className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1">
                             <Building2 className="w-3 h-3" />
                             <span className="truncate max-w-[150px]">
-                              {pat.assignedFacilityName || 'Velhe PHC'}
+                              {pat.assignedFacilityName || 'Primary Health Centre'}
                             </span>
                           </div>
                         </div>

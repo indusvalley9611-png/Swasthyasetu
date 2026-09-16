@@ -71,14 +71,16 @@ export function AppShell({
           role === 'national_admin'
             ? 'National Health Authority'
             : role === 'state_admin'
-            ? 'Directorate of Health Services, Maharashtra'
+            ? 'State Medical Reserve Depot, Maharashtra'
+            : role === 'district_officer'
+            ? `${user?.district || 'Pune'} District`
             : user?.district
             ? `${user.district} District`
             : 'Public Health Department',
       },
     ];
 
-    if (user?.facilityName) {
+    if (user?.facilityName && role !== 'district_officer') {
       crumbs.push({ label: user.facilityName });
     }
 
@@ -115,9 +117,17 @@ export function AppShell({
             ? 'National Mission Control'
             : role === 'state_admin'
             ? 'Apex State Command Center'
+            : role === 'district_officer'
+            ? language === 'mr'
+              ? 'जिल्हा नियंत्रण कक्ष'
+              : 'District Health Control Center'
             : 'District Health Operations';
         case 'tertiary':
-          return 'Tertiary Escalation Flow';
+          return role === 'district_officer'
+            ? language === 'mr'
+              ? 'जिल्हा रुग्ण संदर्भ'
+              : 'District Referrals'
+            : 'Tertiary Escalation Flow';
         case 'capacity':
           return 'Hospital Bed & ICU Grid';
         case 'resources':

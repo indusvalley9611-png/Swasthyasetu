@@ -39,7 +39,7 @@ export function Header({
   onOpenStockLedger,
   onOpenAuditLogs,
 }: HeaderProps) {
-  const { role, user, setRole, logout } = useAuth();
+  const { role, user, logout } = useAuth();
   const { language, toggleLanguage, t } = useLanguage();
   const {
     effectiveOnline,
@@ -204,29 +204,33 @@ export function Header({
             <span className="md:hidden">Beds</span>
           </button>
 
-          <button
-            onClick={onOpenStockLedger}
-            className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-700 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-medium px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 transition-colors"
-          >
-            <Activity className="w-4 h-4 text-rose-600" />
-            <span className="hidden md:inline">{t('emergencyStock')}</span>
-            <span className="md:hidden">Stock</span>
-          </button>
+          {role !== 'asha' && (
+            <>
+              <button
+                onClick={onOpenStockLedger}
+                className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-700 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-medium px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 transition-colors"
+              >
+                <Activity className="w-4 h-4 text-rose-600" />
+                <span className="hidden md:inline">{t('emergencyStock')}</span>
+                <span className="md:hidden">Stock</span>
+              </button>
 
-          <Link
-            href="/maha-aushadhi"
-            className="inline-flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 text-xs sm:text-sm font-extrabold px-3 py-2 rounded-lg border border-rose-200 dark:border-rose-800 transition-colors"
-            title="MahaAushadhi — Emergency Drug Response Network"
-          >
-            <Flame className="w-4 h-4 text-rose-600 animate-pulse" />
-            <span className="hidden md:inline">MahaAushadhi</span>
-            <span className="md:hidden">SOS</span>
-            {activeEmergencyTransfersCount > 0 && (
-              <span className="px-1.5 py-0.2 bg-rose-600 text-white rounded-full text-[10px] font-black">
-                {activeEmergencyTransfersCount}
-              </span>
-            )}
-          </Link>
+              <Link
+                href="/maha-aushadhi"
+                className="inline-flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 text-xs sm:text-sm font-extrabold px-3 py-2 rounded-lg border border-rose-200 dark:border-rose-800 transition-colors"
+                title="MahaAushadhi — Emergency Drug Response Network"
+              >
+                <Flame className="w-4 h-4 text-rose-600 animate-pulse" />
+                <span className="hidden md:inline">MahaAushadhi</span>
+                <span className="md:hidden">SOS</span>
+                {activeEmergencyTransfersCount > 0 && (
+                  <span className="px-1.5 py-0.2 bg-rose-600 text-white rounded-full text-[10px] font-black">
+                    {activeEmergencyTransfersCount}
+                  </span>
+                )}
+              </Link>
+            </>
+          )}
 
           {onOpenAuditLogs && (
             <button

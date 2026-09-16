@@ -191,7 +191,7 @@ export function StateAdminDashboard({
       userId: user?.id || 'state-admin-01',
       userName: user?.name || 'Dr. Nitin Patil',
       userRole: 'state_admin',
-      userFacility: 'Directorate of Health Services (DHS), Mumbai',
+      userFacility: user?.facilityName || 'State Medical Reserve Depot, Maharashtra',
       administrativeLevel: 'state',
       patientId: referral.patientId,
       patientName: referral.patientName,
@@ -213,7 +213,7 @@ export function StateAdminDashboard({
       userId: user?.id || 'state-admin-01',
       userName: user?.name || 'Dr. Nitin Patil',
       userRole: 'state_admin',
-      userFacility: 'Directorate of Health Services (DHS), Mumbai',
+      userFacility: user?.facilityName || 'State Medical Reserve Depot, Maharashtra',
       administrativeLevel: 'state',
       patientId: 'AGGREGATED_SYSTEM_OP',
       patientName: 'Statewide Divert Protocol',
@@ -254,7 +254,7 @@ export function StateAdminDashboard({
         userId: user?.id || 'state-admin-01',
         userName: user?.name || 'Dr. Nitin Patil',
         userRole: 'state_admin',
-        userFacility: 'Directorate of Health Services (DHS), Mumbai',
+        userFacility: user?.facilityName || 'State Medical Reserve Depot, Maharashtra',
         administrativeLevel: 'state',
         patientId: 'STATE_INVENTORY_OP',
         patientName: 'State Stock Redistribution',
@@ -290,7 +290,7 @@ export function StateAdminDashboard({
       userId: user?.id || 'state-admin-01',
       userName: user?.name || 'Dr. Nitin Patil',
       userRole: 'state_admin',
-      userFacility: 'Directorate of Health Services (DHS), Mumbai',
+      userFacility: user?.facilityName || 'State Medical Reserve Depot, Maharashtra',
       administrativeLevel: 'state',
       patientId: 'EPIDEMIOLOGY_OUTBREAK',
       patientName: `${activeRrtOutbreak.district} ${activeRrtOutbreak.diseaseName} Outbreak`,
@@ -318,7 +318,7 @@ export function StateAdminDashboard({
       ? 'National Health Authority (NHA) & MoHFW \u2022 New Delhi'
       : isAdminLevelDistrict
       ? `${user?.facilityName || 'District Hospital Aundh'}, ${user?.district || 'Pune'} District`
-      : 'Directorate of Health Services (DHS) \u2022 Mumbai, Maharashtra',
+      : `${user?.facilityName || 'State Medical Reserve Depot'} \u2022 Maharashtra`,
     officerName: user?.name || (isAdminLevelNational ? 'Dr. Arvind Sharma' : isAdminLevelDistrict ? 'Dr. Vinod Chavan' : 'Dr. Nitin Patil'),
     roleTitle: user?.roleTitleEn || (isAdminLevelNational ? 'National Mission Director' : isAdminLevelDistrict ? 'District Health Officer (DHO)' : 'Director of Health Services'),
     hfrNode: user?.hfrCode || (isAdminLevelNational ? 'HFR-IND-DEL-NHA01' : isAdminLevelDistrict ? 'HFR-MH-PUN-00001' : 'MH-HFR-STATE-01'),
@@ -650,7 +650,7 @@ export function StateAdminDashboard({
                     <span>Maharashtra District Stress Index</span>
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Real-time operational load calculated across sentinel district hospitals
+                    Demo-simulated operational load calculated across sentinel district hospitals
                   </p>
                 </div>
                 <button
@@ -1389,7 +1389,7 @@ export function StateAdminDashboard({
               {/* Geographic visual note */}
               <div className="pt-4 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
                 <span>Western Maharashtra &bull; Pune HQ Hub</span>
-                <span>Directorate of Health Services (DHS) GIS v3.1</span>
+                <span>State Health Operations GIS v3.1</span>
               </div>
             </div>
 

@@ -199,23 +199,8 @@ export function Sidebar({
               },
             ],
           },
-          {
-            titleEn: 'Resources',
-            titleMr: 'संसाधने',
-            items: [
-              {
-                id: 'link:maha_aushadhi',
-                labelEn: 'MahaAushadhi',
-                labelMr: 'महा औषधी',
-                icon: Pill,
-                isExternalLink: true,
-                href: '/maha-aushadhi',
-                badge: activeEmergencyTransfersCount > 0 ? activeEmergencyTransfersCount : undefined,
-                badgeColor: 'bg-rose-600 text-white animate-pulse',
-              },
-            ],
-          },
         ];
+
 
       case 'phc_doctor':
         return [
@@ -224,16 +209,10 @@ export function Sidebar({
             titleMr: 'कार्यक्षेत्र',
             items: [
               {
-                id: 'dashboard',
-                labelEn: 'Clinical OPD',
-                labelMr: 'क्लिनिकल OPD',
-                icon: Stethoscope,
-              },
-              {
                 id: 'directory',
                 labelEn: 'Patients Directory',
                 labelMr: 'रुग्ण निर्देशिका',
-                icon: Users,
+                icon: Stethoscope,
               },
             ],
           },
@@ -248,14 +227,6 @@ export function Sidebar({
                 icon: Building2,
                 isAction: true,
                 actionKey: 'beds',
-              },
-              {
-                id: 'action:stock',
-                labelEn: 'Medicine Inventory',
-                labelMr: 'औषध साठा नोंदवही',
-                icon: Pill,
-                isAction: true,
-                actionKey: 'stock',
               },
               {
                 id: 'link:maha_aushadhi',
@@ -285,6 +256,7 @@ export function Sidebar({
           },
         ];
 
+
       case 'nurse':
         return [
           {
@@ -292,16 +264,10 @@ export function Sidebar({
             titleMr: 'कार्यक्षेत्र',
             items: [
               {
-                id: 'dashboard',
-                labelEn: 'In-Facility Care',
-                labelMr: 'केंद्रातील काळजी व वॉर्ड',
-                icon: Stethoscope,
-              },
-              {
                 id: 'directory',
-                labelEn: 'In-Facility Patients',
-                labelMr: 'केंद्रातील रुग्ण',
-                icon: Users,
+                labelEn: 'Patients Directory',
+                labelMr: 'रुग्ण व ट्रायज यादी',
+                icon: Stethoscope,
               },
             ],
           },
@@ -330,6 +296,7 @@ export function Sidebar({
             ],
           },
         ];
+
 
       case 'pharmacist':
         return [
@@ -466,6 +433,67 @@ export function Sidebar({
         ];
 
       case 'district_officer':
+        return [
+          {
+            titleEn: 'District',
+            titleMr: 'जिल्हा',
+            items: [
+              {
+                id: 'overview',
+                labelEn: 'District Overview',
+                labelMr: 'जिल्हा आढावा',
+                icon: BarChart3,
+              },
+            ],
+          },
+          {
+            titleEn: 'Patient Flow',
+            titleMr: 'रुग्ण प्रवाह',
+            items: [
+              {
+                id: 'tertiary',
+                labelEn: 'Referrals',
+                labelMr: 'रुग्ण संदर्भ',
+                icon: Users,
+              },
+            ],
+          },
+          {
+            titleEn: 'Resources',
+            titleMr: 'संसाधने',
+            items: [
+              {
+                id: 'capacity',
+                labelEn: 'Hospital Capacity',
+                labelMr: 'रुग्णालय खाटा क्षमता',
+                icon: Building2,
+              },
+              {
+                id: 'link:maha_aushadhi',
+                labelEn: 'MahaAushadhi',
+                labelMr: 'महा औषधी',
+                icon: Flame,
+                isExternalLink: true,
+                href: '/maha-aushadhi',
+                badge: activeEmergencyTransfersCount > 0 ? activeEmergencyTransfersCount : undefined,
+                badgeColor: 'bg-rose-600 text-white animate-pulse',
+              },
+            ],
+          },
+          {
+            titleEn: 'Oversight',
+            titleMr: 'देखरेख व सुरक्षा',
+            items: [
+              {
+                id: 'audit',
+                labelEn: 'Audit Trail',
+                labelMr: 'सुरक्षा व ऑडिट ट्रेल',
+                icon: ShieldAlert,
+              },
+            ],
+          },
+        ];
+
       case 'state_admin':
       case 'national_admin':
         return [
@@ -475,7 +503,7 @@ export function Sidebar({
             items: [
               {
                 id: 'overview',
-                labelEn: role === 'national_admin' ? 'National Control' : role === 'state_admin' ? 'Apex Command Center' : 'District Command',
+                labelEn: role === 'national_admin' ? 'National Control' : 'Apex Command Center',
                 labelMr: 'सर्वोच्च नियंत्रण कक्ष',
                 icon: BarChart3,
               },
@@ -586,7 +614,7 @@ export function Sidebar({
 
       {/* Unified 220–240px Left Sidebar (Collapses to 76px) */}
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 flex flex-col bg-slate-950 text-slate-100 border-r border-slate-800 shadow-2xl transition-all duration-300 ease-in-out ${
+        className={`fixed top-0 bottom-0 left-0 z-50 flex flex-col bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-100 border-r border-slate-200 dark:border-slate-800 shadow-2xl transition-all duration-300 ease-in-out ${
           isMobileOpen ? 'translate-x-0 w-[230px]' : '-translate-x-full lg:translate-x-0'
         } ${isCollapsed ? 'lg:w-[76px]' : 'lg:w-[230px]'}`}
       >
@@ -597,7 +625,7 @@ export function Sidebar({
         <div
           className={`h-14 px-3.5 flex items-center ${
             isCollapsed ? 'justify-center' : 'justify-between'
-          } border-b border-slate-850 shrink-0`}
+          } border-b border-slate-200 dark:border-slate-800 shrink-0`}
         >
           <div className="flex items-center gap-2.5 overflow-hidden">
             <div
@@ -609,14 +637,14 @@ export function Sidebar({
             {!isCollapsed && (
               <div className="overflow-hidden leading-tight">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-black tracking-tight text-white">
+                  <span className="text-sm font-black tracking-tight text-slate-900 dark:text-white">
                     Swasthya<span className="text-blue-400">Setu</span>
                   </span>
                   <span className="text-[9px] uppercase tracking-wider font-extrabold px-1.5 py-0.2 rounded bg-blue-900/60 text-blue-300">
                     MH
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 font-medium truncate mt-0.5">
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate mt-0.5">
                   Govt. of Maharashtra
                 </p>
               </div>
@@ -645,7 +673,11 @@ export function Sidebar({
             </div>
             <div className="text-[11px] text-slate-400 truncate flex items-center gap-1 mt-0.5">
               <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
-              <span className="truncate">{user.facilityName}</span>
+              <span className="truncate">
+                {role === 'district_officer'
+                  ? `${user.district || 'Pune'} District Health Authority`
+                  : user.facilityName}
+              </span>
             </div>
           </div>
         )}
@@ -677,12 +709,12 @@ export function Sidebar({
                           isCollapsed ? 'justify-center p-2.5' : 'gap-2.5 px-2.5 py-2'
                         } rounded-xl text-xs font-medium transition-colors ${
                           item.id.includes('maha_aushadhi')
-                            ? 'text-rose-300 hover:text-white hover:bg-rose-950/40'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                            ? 'text-rose-300 hover:text-white hover:bg-rose-50 dark:hover:bg-rose-50 dark:hover:bg-rose-950/40'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900'
                         }`}
                         title={language === 'mr' ? item.labelMr : item.labelEn}
                       >
-                        <Icon className={`w-5 h-5 shrink-0 ${item.id.includes('maha_aushadhi') ? 'text-rose-400 animate-pulse' : 'text-slate-400 group-hover:text-slate-200'}`} />
+                        <Icon className={`w-5 h-5 shrink-0 ${item.id.includes('maha_aushadhi') ? 'text-rose-400 animate-pulse' : 'text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200'}`} />
                         {!isCollapsed && (
                           <span className="truncate flex-1">
                             {language === 'mr' ? item.labelMr : item.labelEn}
@@ -698,7 +730,7 @@ export function Sidebar({
                         )}
                         {/* Tooltip on collapsed desktop */}
                         {isCollapsed && (
-                          <div className="absolute left-full ml-3 px-2.5 py-1 bg-slate-900 text-white text-xs font-medium rounded-lg shadow-xl border border-slate-800 whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
+                          <div className="absolute left-full ml-3 px-2.5 py-1 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs font-medium rounded-lg shadow-xl border border-slate-200 dark:border-slate-800 whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
                             {language === 'mr' ? item.labelMr : item.labelEn}
                           </div>
                         )}
@@ -715,7 +747,7 @@ export function Sidebar({
                       } rounded-xl text-xs font-medium transition-colors text-left cursor-pointer ${
                         isActive
                           ? 'bg-blue-600 text-white shadow-xs'
-                          : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900'
                       }`}
                       title={language === 'mr' ? item.labelMr : item.labelEn}
                     >
@@ -723,7 +755,7 @@ export function Sidebar({
                         className={`w-5 h-5 shrink-0 transition-colors ${
                           isActive
                             ? 'text-white'
-                            : 'text-slate-400 group-hover:text-slate-200'
+                            : 'text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200'
                         }`}
                       />
                       {!isCollapsed && (
@@ -741,7 +773,7 @@ export function Sidebar({
                       )}
                       {/* Tooltip on collapsed desktop */}
                       {isCollapsed && (
-                        <div className="absolute left-full ml-3 px-2.5 py-1 bg-slate-900 text-white text-xs font-medium rounded-lg shadow-xl border border-slate-800 whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
+                        <div className="absolute left-full ml-3 px-2.5 py-1 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs font-medium rounded-lg shadow-xl border border-slate-200 dark:border-slate-800 whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
                           {language === 'mr' ? item.labelMr : item.labelEn}
                         </div>
                       )}
@@ -754,7 +786,7 @@ export function Sidebar({
         </div>
 
         {/* 3. BOTTOM CONTROLS & STATUS */}
-        <div className="p-3 border-t border-slate-850 bg-slate-950/80 shrink-0 space-y-2">
+        <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 shrink-0 space-y-2">
           {/* Online status indicator */}
           {!isCollapsed ? (
             <div className="flex items-center justify-between text-xs px-1 text-slate-400">
@@ -779,7 +811,7 @@ export function Sidebar({
 
               <button
                 onClick={toggleSimulatedOffline}
-                className="text-[10px] text-slate-400 hover:text-slate-200 underline"
+                className="text-[10px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 underline"
                 title="Toggle simulated offline mode for field testing"
               >
                 {isSimulatedOffline ? 'Sim: OFF' : 'Simulate'}
@@ -796,7 +828,7 @@ export function Sidebar({
             <div className={`flex items-center ${isCollapsed ? 'flex-col gap-1.5' : 'gap-1'}`}>
               <button
                 onClick={onToggleDarkMode}
-                className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition-colors cursor-pointer"
+                className="p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors cursor-pointer"
                 title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
               >
                 {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
@@ -804,7 +836,7 @@ export function Sidebar({
 
               <button
                 onClick={toggleLanguage}
-                className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition-colors flex items-center gap-1 cursor-pointer"
+                className="p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors flex items-center gap-1 cursor-pointer"
                 title="Toggle Marathi / English"
               >
                 <Languages className="w-4 h-4 text-blue-400" />

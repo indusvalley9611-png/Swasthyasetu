@@ -992,7 +992,7 @@ export function NationalAdminDashboard({
             <div className="p-4 rounded-xl bg-blue-50/40 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 space-y-3 animate-in fade-in">
               <div className="flex items-center justify-between">
                 <h4 className="font-black text-sm text-slate-900 dark:text-white">
-                  Maharashtra Sentinel Facility Drill-Down (Live ABDM Telemetry)
+                  Maharashtra Sentinel Facility Drill-Down (Simulated ABDM Telemetry)
                 </h4>
                 <span className="text-[11px] text-blue-600 font-bold">14 Facilities Reporting</span>
               </div>

@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
 import { useSync } from '@/context/SyncContext';
+import { filterPatientsForUser } from '@/lib/patientPrivacyService';
 import { Patient, Vitals, FollowUpTask } from '@/lib/types';
 import { INITIAL_FOLLOWUPS } from '@/lib/mockData';
 import {
@@ -63,8 +64,13 @@ export function AshaDashboard({
   const [hemoglobin, setHemoglobin] = useState<number>(11.5);
   const [chiefComplaints, setChiefComplaints] = useState<string>('');
 
-  // Filter patients
-  const filteredPatients = patients.filter((p) => {
+  // Derive scoped community patients for this ASHA worker
+  const communityPatients = useMemo(() => {
+    return filterPatientsForUser(user, patients).assignedPatients;
+  }, [user, patients]);
+
+  // Filter patients strictly within assigned community scope
+  const filteredPatients = communityPatients.filter((p) => {
     const q = searchQuery.toLowerCase();
     return (
       p.fullName.toLowerCase().includes(q) ||
@@ -74,8 +80,8 @@ export function AshaDashboard({
     );
   });
 
-  // High risk patients subset
-  const highRiskPatients = patients.filter(
+  // High risk patients subset strictly within assigned community scope
+  const highRiskPatients = communityPatients.filter(
     (p) => p.isHighRiskPregnancy || p.age <= 5 || (p.chronicConditions && p.chronicConditions.length > 0)
   );
 
@@ -229,7 +235,7 @@ export function AshaDashboard({
           <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">
             {language === 'mr' ? 'एकूण नोंदणीकृत रुग्ण' : 'Total Patients Registered'}
           </span>
-          <span className="text-2xl font-bold text-slate-900 dark:text-white">{patients.length}</span>
+          <span className="text-2xl font-bold text-slate-900 dark:text-white">{communityPatients.length}</span>
           <span className="text-[10px] text-emerald-700 dark:text-emerald-400 block mt-0.5">ABHA Integrated</span>
         </div>
 
@@ -238,7 +244,7 @@ export function AshaDashboard({
             {language === 'mr' ? 'अतिधोकादायक गरोदर माता (HRP)' : 'High Risk Pregnancies'}
           </span>
           <span className="text-2xl font-bold text-rose-900 dark:text-rose-200">
-            {patients.filter((p) => p.isHighRiskPregnancy).length}
+            {communityPatients.filter((p) => p.isHighRiskPregnancy).length}
           </span>
           <span className="text-[10px] text-rose-700 dark:text-rose-400 block mt-0.5">Priority Monitoring</span>
         </div>
@@ -248,7 +254,7 @@ export function AshaDashboard({
             {language === 'mr' ? 'सक्रिय रेफरल पाठवले' : 'Active Referrals Sent'}
           </span>
           <span className="text-2xl font-bold text-amber-900 dark:text-amber-200">
-            {patients.filter((p) => p.activeReferralId).length}
+            {communityPatients.filter((p) => p.activeReferralId).length}
           </span>
           <span className="text-[10px] text-amber-700 dark:text-amber-400 block mt-0.5">En route to PHC/RH</span>
         </div>
@@ -396,85 +402,70 @@ export function AshaDashboard({
                 ))}
               </div>
             ) : (
-              /* List of Patients */
-              <div className="space-y-3">
+            <div className="space-y-2">
               {filteredPatients.map((pat) => {
                 const isHrp = pat.isHighRiskPregnancy;
                 const hasReferral = pat.activeReferralId;
+                const hasChronicCondition = pat.chronicConditions && pat.chronicConditions.length > 0;
 
                 return (
                   <div
                     key={pat.id}
                     onClick={() => onOpenPatientTimeline(pat)}
-                    className={`p-4 rounded-xl border transition-all cursor-pointer hover:shadow-md ${
+                    className={`p-3.5 rounded-xl border transition-all cursor-pointer hover:shadow-sm flex items-center justify-between gap-3 ${
                       isHrp
-                        ? 'bg-rose-50/50 dark:bg-rose-900/20 border-rose-300 dark:border-rose-700 hover:border-rose-400'
+                        ? 'bg-rose-50/50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800 hover:border-rose-400'
                         : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 hover:border-teal-300 dark:hover:border-teal-700'
                     }`}
                   >
-                    <div className="flex flex-wrap justify-between items-start gap-2">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-slate-900 dark:text-white text-sm hover:text-teal-700 dark:hover:text-teal-400 transition-colors">{pat.fullName}</h4>
-                          {isHrp && (
-                            <span className="text-[10px] font-bold bg-rose-600 dark:bg-rose-500/20 text-white dark:text-rose-300 px-2 py-0.5 rounded-full uppercase">
-                              HRP Risk
-                            </span>
-                          )}
-                          {hasReferral && (
-                            <span className="text-[10px] font-bold bg-amber-500 dark:bg-amber-500/20 text-slate-950 dark:text-amber-300 px-2 py-0.5 rounded-full">
-                              Referral Active
-                            </span>
-                          )}
-                        </div>
+                    {/* Avatar */}
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${
+                      isHrp
+                        ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300'
+                        : 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300'
+                    }`}>
+                      {pat.fullName.charAt(0)}
+                    </div>
 
-                        <div className="text-xs text-slate-600 dark:text-slate-300">
-                          {pat.gender} • {pat.age} Yrs • Blood: <span className="font-semibold">{pat.bloodGroup}</span>
-                          {pat.isPregnant && (
-                            <span className="ml-2 font-bold text-rose-800 dark:text-rose-300">
-                              (Week {pat.gestationalWeeks} Pregnant)
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="text-[11px] font-mono text-blue-900 dark:text-blue-200">
-                          ABHA: {pat.abhaId} • Phone: {pat.phone} • {pat.village}
-                        </div>
+                    {/* Core identity — name, age/gender/village */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm text-slate-900 dark:text-white truncate">{pat.fullName}</span>
+                        {isHrp && (
+                          <span className="text-[10px] font-bold bg-rose-600 text-white px-1.5 py-0.5 rounded-full shrink-0">HRP</span>
+                        )}
+                        {hasReferral && (
+                          <span className="text-[10px] font-bold bg-amber-500 text-slate-950 px-1.5 py-0.5 rounded-full shrink-0">Referred</span>
+                        )}
+                        {hasChronicCondition && !isHrp && (
+                          <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 px-1.5 py-0.5 rounded-full shrink-0">Chronic</span>
+                        )}
                       </div>
-
-                      {/* Action buttons for ASHA */}
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setSelectedPatientForScreening(pat); }}
-                          className="px-3 py-1.5 text-xs font-bold bg-teal-700 hover:bg-teal-800 text-white rounded-lg shadow transition-colors flex items-center gap-1"
-                        >
-                          <Stethoscope className="w-3.5 h-3.5" />
-                          <span>{language === 'mr' ? 'तपासणी नोंदवा' : 'Screen Vitals'}</span>
-                        </button>
-
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onOpenReferral(pat); }}
-                          className="px-3 py-1.5 text-xs font-semibold bg-rose-700 hover:bg-rose-800 text-white rounded-lg shadow transition-colors flex items-center gap-1"
-                        >
-                          <Send className="w-3.5 h-3.5" />
-                          <span>{language === 'mr' ? 'रेफर करा' : 'Refer'}</span>
-                        </button>
-
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onOpenPatientTimeline(pat); }}
-                          className="px-2.5 py-1.5 text-xs font-medium bg-slate-100 dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-700 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg border border-slate-300 dark:border-slate-600 transition-colors"
-                        >
-                          {language === 'mr' ? 'इतिहास' : 'EHR'}
-                        </button>
-
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onOpenAbhaCard(pat); }}
-                          className="p-1.5 text-xs bg-slate-100 dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-700 dark:bg-slate-700 text-blue-800 dark:text-blue-300 rounded-lg border border-slate-300 dark:border-slate-600"
-                          title="View ABHA Card"
-                        >
-                          <CreditCard className="w-3.5 h-3.5" />
-                        </button>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        {pat.age}y · {pat.gender}
+                        {pat.isPregnant && <span className="ml-1 text-rose-700 dark:text-rose-300 font-semibold">· Wk {pat.gestationalWeeks}</span>}
+                        {' · '}{pat.village}
                       </div>
+                    </div>
+
+                    {/* Compact action row */}
+                    <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => setSelectedPatientForScreening(pat)}
+                        className="px-2.5 py-1.5 text-xs font-bold bg-teal-700 hover:bg-teal-800 text-white rounded-lg shadow transition-colors flex items-center gap-1"
+                        title="Record Vitals"
+                      >
+                        <Stethoscope className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">{language === 'mr' ? 'तपासणी' : 'Screen'}</span>
+                      </button>
+                      <button
+                        onClick={() => onOpenReferral(pat)}
+                        className="px-2.5 py-1.5 text-xs font-bold bg-rose-700 hover:bg-rose-800 text-white rounded-lg shadow transition-colors flex items-center gap-1"
+                        title="Refer Patient"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">{language === 'mr' ? 'रेफर' : 'Refer'}</span>
+                      </button>
                     </div>
                   </div>
                 );
@@ -666,7 +657,7 @@ export function AshaDashboard({
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {language === 'mr'
                   ? 'डाव्या बाजूच्या यादीतून कोणत्याही रुग्णास निवडून "तपासणी नोंदवा" बटनावर क्लिक करा.'
-                  : 'Select any patient from the list on the left and click "Screen Vitals" to record real-time observations.'}
+                  : 'Select any patient from the list on the left and click "Screen Vitals" to record Demo-simulated observations.'}
               </p>
             </div>
           )}

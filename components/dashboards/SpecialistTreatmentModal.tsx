@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Referral, Patient, DischargeSummary } from '@/lib/types';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
+import { useSync } from '@/context/SyncContext';
 import { canProcessDistrictReferral, recordAuditLog } from '@/lib/patientPrivacyService';
 import {
   Building2,
@@ -109,11 +110,49 @@ export function SpecialistTreatmentModal({ referral, patient, onClose, updateRef
     handleStatusChange('ESCALATED', { targetFacility: targetStateFacility });
   };
 
+  const { addFollowUpTask } = useSync();
+
   const handleDischarge = () => {
     handleStatusChange('COMPLETED', {
       dischargeSummary: dischargeData,
       counterReferredTo: dischargeData.followUpFacility
     });
+
+    if (user) {
+      addFollowUpTask({
+        id: `flw-task-ref-${referral.id}`,
+        patientId: patient.id,
+        patientName: patient.fullName,
+        patientPhone: patient.phone,
+        category: 'Post-Referral Check',
+        dueDate: dischargeData.followUpDate || new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        status: 'DUE',
+        // PRIVACY: notes contain ONLY the minimum task instruction for the community care worker.
+        // Clinical details (diagnosis, specialist notes, vitals, history) are intentionally
+        // excluded. Authorized workers must use patient authorization to access clinical records.
+        notes: `Patient discharged from ${user.facilityName}. Ensure community follow-up visit as directed. Contact PHC if symptoms recur.`,
+        assignedAshaName: 'Assigned Community Health Worker',
+        assignedFacilityId: referral.referringFacilityId,
+        sourceReferralId: referral.id,
+        createdByUserId: user.id,
+        createdAt: new Date().toISOString(),
+      });
+      
+      recordAuditLog({
+        userId: user.id,
+        userName: user.name,
+        userRole: user.role,
+        userFacility: user.facilityName,
+        administrativeLevel: user.administrativeLevel,
+        patientId: patient.id,
+        patientName: patient.fullName,
+        patientAbha: patient.abhaId,
+        action: 'CREATE_REFERRAL', // Using existing audit enum mapping
+        resource: `FollowUpTask for ${referral.referringFacility}`,
+        reason: 'Generated automated counter-referral post-discharge',
+        accessGranted: true,
+      });
+    }
   };
 
   return (

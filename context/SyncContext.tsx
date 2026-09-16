@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { Patient, Referral, Facility, DrugStockItem, OfflineSyncItem, MedicineRequest, ResourceAlert, StockTransfer } from '@/lib/types';
+import { Patient, Referral, Facility, DrugStockItem, OfflineSyncItem, MedicineRequest, ReplenishmentRequest, ReplenishmentRequestItem, CreateReplenishmentItemInput, ResourceAlert, StockTransfer, FollowUpTask } from '@/lib/types';
 import {
   initializeStorage,
   getStoredPatients,
@@ -18,11 +18,14 @@ import {
   saveStoredStockTransfers,
   getStoredResourceAlerts,
   saveStoredResourceAlerts,
+  getStoredFollowUps,
+  saveStoredFollowUps,
   getSyncQueue,
   addToSyncQueue,
   clearSyncQueue,
 } from '@/lib/idbStorage';
-import { getSafeTransferableQuantity } from '@/lib/resourceManagement';
+import { getSafeTransferableQuantity, findHierarchicalSupplySources } from '@/lib/resourceManagement';
+import { isValidCanonicalFacilityId, resolveCanonicalFacilityName, validateStockTransfer, validateReplenishmentRequest } from '@/lib/mockData';
 
 interface SyncContextType {
   isOnline: boolean;
@@ -45,16 +48,32 @@ interface SyncContextType {
   updateReferralStatus: (referralId: string, status: Referral['status'], updates?: Partial<Referral>) => void;
   updateBedOccupancy: (facilityId: string, field: 'occupiedBeds' | 'icuBedsOccupied' | 'ventilatorsOccupied' | 'oxygenBedsOccupied', delta: number) => void;
   updateDrugStock: (stockId: string, newStock: number) => void;
-  createMedicineRequest: (request: Omit<MedicineRequest, 'id' | 'createdAt' | 'status'>) => void;
+  createMedicineRequest: (request: { destinationFacilityId: string; destinationFacilityName: string; requestedByUserId: string; requestedByUserName: string; urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL'; notes?: string; items: CreateReplenishmentItemInput[] }) => void;
   createStockTransfer: (transfer: Omit<StockTransfer, 'id' | 'createdAt' | 'status'>) => StockTransfer | null;
+  createReplenishmentRequest: (
+    dest: { facilityId: string; facilityName: string },
+    user: { id: string; name: string },
+    items: CreateReplenishmentItemInput[],
+    urgency?: 'ROUTINE' | 'URGENT' | 'CRITICAL',
+    notes?: string
+  ) => ReplenishmentRequest | null;
+  linkTransferToRequestItem: (requestId: string, itemId: string, transfer: StockTransfer) => void;
+  allocateRequestSupplies: (
+    requestId: string,
+    userDistrict?: string,
+    districtUser?: { id: string; name: string } | null,
+    specificItemId?: string
+  ) => boolean;
   allocateStockTransferDonor: (
     transferId: string,
     sourceStock: DrugStockItem,
     donorFacility: Facility,
     districtUser?: { id: string; name: string } | null
   ) => boolean;
-  processStockTransfer: (transferId: string, action: 'APPROVE' | 'REJECT' | 'DISPATCH' | 'RECEIVE', rejectionReason?: string, consignmentMeta?: Partial<StockTransfer>) => boolean;
+  processStockTransfer: (transferId: string, action: 'APPROVE' | 'REJECT' | 'DISPATCH' | 'RECEIVE', rejectionReason?: string, consignmentMeta?: Partial<StockTransfer>) => Promise<boolean>;
   updateResourceAlertStatus: (alertId: string, status: ResourceAlert['status']) => void;
+  followUps: FollowUpTask[];
+  addFollowUpTask: (task: FollowUpTask) => void;
   toastMessage: string | null;
   clearToast: () => void;
 }
@@ -73,6 +92,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const [medicineRequests, setMedicineRequests] = useState<MedicineRequest[]>([]);
   const [stockTransfers, setStockTransfers] = useState<StockTransfer[]>([]);
   const [resourceAlerts, setResourceAlerts] = useState<ResourceAlert[]>([]);
+  const [followUps, setFollowUps] = useState<FollowUpTask[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Initialize storage on client mount
@@ -85,6 +105,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     setMedicineRequests(getStoredMedicineRequests());
     setStockTransfers(getStoredStockTransfers());
     setResourceAlerts(getStoredResourceAlerts());
+    setFollowUps(getStoredFollowUps());
     setSyncQueue(getSyncQueue());
 
     if (typeof window !== 'undefined') {
@@ -125,11 +146,72 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     // Simulate server latency for network transmission
     await new Promise((r) => setTimeout(r, 1200));
 
-    clearSyncQueue();
-    setSyncQueue([]);
+    let currentPatients = [...getStoredPatients()];
+    const remainingQueue: OfflineSyncItem[] = [];
+    let syncedCount = 0;
+
+    for (const item of queue) {
+      if (item.type === 'NEW_PATIENT') {
+        // Idempotency (pass 1): item was already flagged NEEDS_REVIEW in a prior sync — keep it
+        // as-is, do not re-evaluate, do not create a second patient.
+        // Read syncFlag from the raw payload (typed as `any` by OfflineSyncItem) before casting.
+        const rawSyncFlag: unknown = (item.payload as Record<string, unknown>).syncFlag;
+        if (rawSyncFlag === 'NEEDS_REVIEW_POTENTIAL_DUPLICATE') {
+          remainingQueue.push(item); // Preserve unchanged — no retryCount bump
+          continue;
+        }
+
+        const payloadPat = item.payload as Patient;
+
+        // Idempotency (pass 2): exact ID already present in canonical registry
+        const existingExact = currentPatients.find(p => p.id === payloadPat.id);
+        if (existingExact) {
+          syncedCount++;
+          continue; // Already integrated
+        }
+
+        // Deduplication: high-confidence identity check (Phone + Name + Gender) or non-DEMO ABHA
+        const duplicate = currentPatients.find(p =>
+          (p.phone === payloadPat.phone && p.fullName.toLowerCase() === payloadPat.fullName.toLowerCase() && p.gender === payloadPat.gender) ||
+          (p.abhaId === payloadPat.abhaId && !p.abhaId.includes('DEMO'))
+        );
+
+        if (duplicate) {
+          // STATUS STAYS 'PENDING' — the record is unresolved, not failed.
+          // It must remain recoverable for human identity review.
+          remainingQueue.push({
+            ...item,
+            status: 'PENDING',
+            payload: { ...payloadPat, syncFlag: 'NEEDS_REVIEW_POTENTIAL_DUPLICATE' }
+          });
+          console.warn(`[SYNC] Potential duplicate flagged for ${payloadPat.fullName}`);
+        } else {
+          // Safe to insert
+          currentPatients = [payloadPat, ...currentPatients];
+          syncedCount++;
+        }
+      } else {
+        // Other types of operations sync successfully in this mock
+        syncedCount++;
+      }
+    }
+
+    if (currentPatients.length !== patients.length) {
+      setPatients(currentPatients);
+      saveStoredPatients(currentPatients);
+    }
+
+    if (remainingQueue.length === 0) {
+      clearSyncQueue();
+      setSyncQueue([]);
+      showToast(`Successfully synced ${syncedCount} offline record(s) to State Cloud.`);
+    } else {
+      if (typeof window !== 'undefined') localStorage.setItem('swasthyasetu_sync_queue', JSON.stringify(remainingQueue));
+      setSyncQueue(remainingQueue);
+      showToast(`Synced ${syncedCount} records. ${remainingQueue.length} records flagged for review.`);
+    }
     setIsSyncing(false);
-    showToast(`Successfully synced ${queue.length} offline record(s) to State Cloud.`);
-  }, []);
+  }, [patients.length]);
 
   useEffect(() => {
     if (effectiveOnline && syncQueue.length > 0 && !isSyncing) {
@@ -152,15 +234,15 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     setPatients(updated);
     saveStoredPatients(updated);
 
+    // Always add to queue. If online, effect will pick it up and process it idempotently
+    const queued = addToSyncQueue({
+      type: 'NEW_PATIENT',
+      payload: newPatient,
+    });
+    setSyncQueue(prev => [...prev, queued]);
+    
     if (!effectiveOnline) {
-      const queued = addToSyncQueue({
-        type: 'NEW_PATIENT',
-        payload: newPatient,
-      });
-      setSyncQueue(prev => [...prev, queued]);
       showToast(`Patient registered locally in Offline Outbox (Queue: ${syncQueue.length + 1})`);
-    } else {
-      showToast(`Patient ${newPatient.fullName} registered & ABHA created on State Registry.`);
     }
   };
 
@@ -188,6 +270,13 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     } else {
       showToast(`Clinical encounter updated on ABDM EHR timeline.`);
     }
+  };
+
+  const addFollowUpTask = (task: FollowUpTask) => {
+    if (followUps.some(f => f.id === task.id)) return; // Idempotent check
+    const updated = [task, ...followUps];
+    setFollowUps(updated);
+    saveStoredFollowUps(updated);
   };
 
   const createReferral = (newRef: Referral) => {
@@ -245,9 +334,25 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const updateReferralStatus = (referralId: string, status: Referral['status'], updates?: Partial<Referral>) => {
+  const updateReferralStatus = async (referralId: string, status: Referral['status'], updates?: Partial<Referral>) => {
     const targetRef = referrals.find(r => r.id === referralId);
     if (!targetRef) return;
+
+    try {
+      const res = await fetch('/api/authorize-mutation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'UPDATE_REFERRAL', resource: { referralId, targetFacilityId: targetRef.targetFacilityId } })
+      });
+      const auth = await res.json();
+      if (!res.ok || !auth.allowed) {
+        showToast(auth.error || 'Unauthorized to modify this referral.');
+        return;
+      }
+    } catch (e) {
+      showToast('Network error during authorization.');
+      return;
+    }
     
     if (targetRef.status === 'CANCELLED' && status !== 'CANCELLED') {
       showToast('Admission unavailable: This referral has been cancelled by the referring facility.');
@@ -262,11 +367,11 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
     // Bed Management Logic
     if (status === 'ADMITTED' && targetRef.status !== 'ADMITTED') {
-      const facilityToUpdate = updates?.targetFacility || targetRef.targetFacility;
+      const facilityToUpdate = targetRef.targetFacilityId;
       const bedType = updates?.assignedBedType || 'occupiedBeds';
       updateBedOccupancy(facilityToUpdate, bedType, 1);
     } else if ((status === 'COMPLETED' || status === 'ESCALATED') && targetRef.status === 'ADMITTED') {
-      const facilityToUpdate = targetRef.targetFacility;
+      const facilityToUpdate = targetRef.targetFacilityId;
       const bedType = targetRef.assignedBedType || 'occupiedBeds';
       updateBedOccupancy(facilityToUpdate, bedType, -1);
     }
@@ -318,7 +423,26 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
 
 
-  const updateDrugStock = (stockId: string, newStock: number) => {
+  const updateDrugStock = async (stockId: string, newStock: number) => {
+    const targetStock = stocks.find(s => s.id === stockId);
+    if (!targetStock) return;
+    
+    try {
+      const res = await fetch('/api/authorize-mutation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'UPDATE_STOCK', resource: { facilityId: targetStock.facilityId } })
+      });
+      const auth = await res.json();
+      if (!res.ok || !auth.allowed) {
+        showToast(auth.error || 'Unauthorized to modify this stock inventory.');
+        return;
+      }
+    } catch (e) {
+      showToast('Network error during authorization.');
+      return;
+    }
+
     const updated = stocks.map(s => {
       if (s.id === stockId) {
         const nextStock = Math.max(0, newStock);
@@ -334,12 +458,29 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     showToast('Stock level updated successfully.');
   };
 
-  const createMedicineRequest = (request: Omit<MedicineRequest, 'id' | 'createdAt' | 'status'>) => {
+  // ── Utility: derive overall status from items ─────────────────────────────
+  const deriveOverallStatus = (items: ReplenishmentRequestItem[]): ReplenishmentRequest['overallStatus'] => {
+    if (items.length === 0) return 'PENDING';
+    const statuses = items.map(i => i.status);
+    if (statuses.every(s => s === 'COMPLETED')) return 'FULFILLED';
+    if (statuses.every(s => s === 'REJECTED')) return 'REJECTED';
+    if (statuses.some(s => s === 'COMPLETED')) return 'PARTIALLY_FULFILLED';
+    if (statuses.every(s => s === 'PENDING')) return 'PENDING';
+    return 'IN_PROGRESS';
+  };
+
+  const createMedicineRequest = (request: { destinationFacilityId: string; destinationFacilityName: string; requestedByUserId: string; requestedByUserName: string; urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL'; notes?: string; items: CreateReplenishmentItemInput[] }) => {
+    const ts = Date.now();
     const newRequest: MedicineRequest = {
       ...request,
-      id: `med-req-${Date.now()}`,
+      id: `REQ-2026-${String(ts).slice(-6)}`,
       createdAt: new Date().toISOString(),
-      status: 'PENDING',
+      overallStatus: 'PENDING',
+      items: request.items.map((item, idx) => ({
+        ...item,
+        id: `item-${ts}-${idx}`,
+        status: 'PENDING' as const,
+      })),
     };
     const updated = [newRequest, ...medicineRequests];
     setMedicineRequests(updated);
@@ -348,7 +489,202 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       const queued = addToSyncQueue({ type: 'MEDICINE_REQUEST_CREATED', payload: newRequest });
       setSyncQueue(prev => [...prev, queued]);
     }
-    showToast(`Demo request ${newRequest.id} created and routed to district supply coordination.`);
+    showToast(`Request ${newRequest.id} created with ${newRequest.items.length} medicine(s).`);
+  };
+
+  /**
+   * Create a parent replenishment request containing N medicine line items.
+   * Each item starts with PENDING status. Inventory is NOT touched.
+   * After creation, call createStockTransfer + linkTransferToRequestItem for each item.
+   */
+  const createReplenishmentRequest = (
+    dest: { facilityId: string; facilityName?: string },
+    user: { id: string; name: string },
+    items: CreateReplenishmentItemInput[],
+    urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL' = 'CRITICAL',
+    notes?: string
+  ): ReplenishmentRequest | null => {
+    if (!dest.facilityId || items.length === 0) {
+      showToast('Cannot create a request without a valid destination facility and at least one medicine item.');
+      return null;
+    }
+    const ts = Date.now();
+    const candidateRequest: Partial<ReplenishmentRequest> = {
+      id: `REQ-2026-${String(ts).slice(-6)}`,
+      destinationFacilityId: dest.facilityId,
+      requestedByUserId: user.id,
+      requestedByUserName: user.name,
+      createdAt: new Date().toISOString(),
+      overallStatus: 'PENDING',
+      urgency,
+      notes,
+      items: items.map((item, idx) => ({
+        ...item,
+        id: `item-${ts}-${idx}`,
+        status: 'PENDING' as const,
+      })),
+    };
+
+    const validation = validateReplenishmentRequest(candidateRequest);
+    if (!validation.isValid || !validation.sanitized) {
+      showToast(validation.error || 'Invalid replenishment request.');
+      return null;
+    }
+
+    const newRequest = validation.sanitized;
+    const updated = [newRequest, ...medicineRequests];
+    setMedicineRequests(updated);
+    saveStoredMedicineRequests(updated);
+    showToast(`Request ${newRequest.id} created — ${newRequest.items.length} medicine(s) pending supply search.`);
+    return newRequest;
+  };
+
+  /**
+   * Link a StockTransfer to a specific line item in a ReplenishmentRequest.
+   * Also updates the item's status, sourceFacilityId, and supplyTier from the transfer.
+   */
+  const linkTransferToRequestItem = (requestId: string, itemId: string, transfer: StockTransfer) => {
+    const updated = medicineRequests.map(req => {
+      if (req.id !== requestId) return req;
+      const updatedItems = req.items.map(item => {
+        if (item.id !== itemId) return item;
+        return {
+          ...item,
+          transferId: transfer.id,
+          status: transfer.status,
+          sourceFacilityId: transfer.sourceFacilityId,
+          sourceFacilityName: resolveCanonicalFacilityName(transfer.sourceFacilityId),
+          supplyTier: transfer.supplyTier,
+        };
+      });
+      return { ...req, items: updatedItems, overallStatus: deriveOverallStatus(updatedItems) };
+    });
+    setMedicineRequests(updated);
+    saveStoredMedicineRequests(updated);
+  };
+
+  /**
+   * Run hierarchical supply allocation for items in a ReplenishmentRequest.
+   * Allocates sources independently per medicine (PHC -> District -> State).
+   */
+  const allocateRequestSupplies = (
+    requestId: string,
+    userDistrict: string = 'Pune',
+    districtUser?: { id: string; name: string } | null,
+    specificItemId?: string
+  ): boolean => {
+    const req = medicineRequests.find(r => r.id === requestId);
+    if (!req) {
+      showToast('Replenishment request not found.');
+      return false;
+    }
+
+    const newlyCreatedTransfers: StockTransfer[] = [];
+    const updatedItems = req.items.map((item, idx) => {
+      if (specificItemId && item.id !== specificItemId) {
+        return item;
+      }
+      if (item.transferId && item.sourceFacilityId) {
+        return item;
+      }
+
+      const itemNameLower = item.medicineName.toLowerCase();
+      const matchingStock = stocks.find(
+        s => {
+          if (s.facilityId !== req.destinationFacilityId) return false;
+          const stockNameLower = s.drugName.toLowerCase();
+          return stockNameLower === itemNameLower ||
+                 stockNameLower.includes(itemNameLower) ||
+                 itemNameLower.includes(stockNameLower);
+        }
+      ) || {
+        id: item.stockId,
+        facilityId: req.destinationFacilityId,
+        facilityName: req.destinationFacilityName,
+        drugName: item.medicineName,
+        category: 'Critical Lifesaving' as const,
+        currentStock: item.currentStock,
+        bufferStock: item.bufferStock || item.requestedQuantity * 2,
+        unit: item.unit,
+        batchNumber: 'N/A',
+        expiryDate: 'N/A',
+        status: 'CRITICAL' as const,
+      };
+
+      const supplyHierarchy = findHierarchicalSupplySources(
+        matchingStock as any,
+        stocks,
+        [...stockTransfers, ...newlyCreatedTransfers],
+        facilities,
+        userDistrict
+      );
+
+      const bestCandidate = supplyHierarchy.recommendedCandidate;
+      if (bestCandidate) {
+        const canonicalSrcName = resolveCanonicalFacilityName(bestCandidate.stock.facilityId, bestCandidate.stock.facilityName);
+        const validation = validateStockTransfer({
+          id: `TRF-2026-${String(Date.now() + idx).slice(-4)}`,
+          medicineName: item.medicineName,
+          sourceStockId: bestCandidate.stock.id,
+          destinationStockId: item.stockId,
+          sourceFacilityId: bestCandidate.stock.facilityId,
+          sourceFacilityName: canonicalSrcName,
+          destinationFacilityId: req.destinationFacilityId,
+          destinationFacilityName: req.destinationFacilityName,
+          requestedQuantity: item.requestedQuantity,
+          urgency: item.urgency,
+          reason: item.reason,
+          isEmergency: item.urgency === 'CRITICAL' || req.urgency === 'CRITICAL',
+          donorAllocated: true,
+          allocatedByDistrictUserId: districtUser?.id,
+          allocatedByDistrictUserName: districtUser?.name,
+          allocatedAt: new Date().toISOString(),
+          supplyTier: bestCandidate.tier,
+          requestId: req.id,
+          requestItemId: item.id,
+          createdAt: new Date().toISOString(),
+          status: 'PENDING_SOURCE_APPROVAL',
+        });
+
+        if (validation.isValid && validation.sanitized) {
+          newlyCreatedTransfers.push(validation.sanitized);
+          return {
+            ...item,
+            status: 'PENDING_SOURCE_APPROVAL' as const,
+            sourceFacilityId: validation.sanitized.sourceFacilityId,
+            sourceFacilityName: validation.sanitized.sourceFacilityName,
+            supplyTier: validation.sanitized.supplyTier,
+            transferId: validation.sanitized.id,
+          };
+        }
+      }
+      return item;
+    });
+
+    if (newlyCreatedTransfers.length > 0) {
+      const updatedTransfers = [...newlyCreatedTransfers, ...stockTransfers];
+      setStockTransfers(updatedTransfers);
+      saveStoredStockTransfers(updatedTransfers);
+
+      const updatedRequests = medicineRequests.map(r => {
+        if (r.id === requestId) {
+          return {
+            ...r,
+            items: updatedItems,
+            overallStatus: deriveOverallStatus(updatedItems),
+          };
+        }
+        return r;
+      });
+      setMedicineRequests(updatedRequests);
+      saveStoredMedicineRequests(updatedRequests);
+
+      showToast(`Allocated supply sources for ${newlyCreatedTransfers.length} item(s) in request ${req.id}.`);
+      return true;
+    } else {
+      showToast(`No eligible surplus donors found across PHC, District, or State tiers for request ${req.id}.`);
+      return false;
+    }
   };
 
   const createStockTransfer = (transfer: Omit<StockTransfer, 'id' | 'createdAt' | 'status'>): StockTransfer | null => {
@@ -357,24 +693,32 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       return null;
     }
 
-    const isExplicitlyUnallocated = transfer.donorAllocated === false;
-
-    if (!isExplicitlyUnallocated) {
-      const source = stocks.find(item => item.id === transfer.sourceStockId);
-      const transferable = source ? getSafeTransferableQuantity(source, stockTransfers) : 0;
-      if (!source || transfer.requestedQuantity > transferable) {
-        showToast(`Transfer request rejected. The connected facility can offer up to ${transferable} surplus units while retaining its buffer.`);
-        return null;
-      }
-    }
-
-    const newTransfer: StockTransfer = {
+    // Generic Canonical Facility Validation Boundary
+    const validation = validateStockTransfer({
       ...transfer,
       id: `TRF-2026-${String(Date.now()).slice(-4)}`,
       createdAt: new Date().toISOString(),
       status: 'PENDING_SOURCE_APPROVAL',
       donorAllocated: transfer.donorAllocated ?? true,
-    };
+    });
+
+    if (!validation.isValid || !validation.sanitized) {
+      showToast(validation.error || 'Transfer rejected by canonical validation boundary.');
+      return null;
+    }
+
+    const newTransfer = validation.sanitized;
+    const isExplicitlyUnallocated = newTransfer.donorAllocated === false;
+
+    if (!isExplicitlyUnallocated) {
+      const source = stocks.find(item => item.id === newTransfer.sourceStockId);
+      const transferable = source ? getSafeTransferableQuantity(source, stockTransfers) : 0;
+      if (!source || newTransfer.requestedQuantity > transferable) {
+        showToast(`Transfer request rejected. The connected facility can offer up to ${transferable} surplus units while retaining its buffer.`);
+        return null;
+      }
+    }
+
     const updated = [newTransfer, ...stockTransfers];
     setStockTransfers(updated);
     saveStoredStockTransfers(updated);
@@ -401,6 +745,11 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
+    if (!isValidCanonicalFacilityId(donorFacility.id)) {
+      showToast(`Cannot allocate non-canonical facility ID: ${donorFacility.id}`);
+      return false;
+    }
+
     const otherTransfers = stockTransfers.filter(item => item.id !== transferId);
     const transferable = getSafeTransferableQuantity(sourceStock, otherTransfers);
     if (transfer.requestedQuantity > transferable) {
@@ -409,13 +758,14 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     }
 
     const now = new Date().toISOString();
+    const canonicalDonorName = resolveCanonicalFacilityName(donorFacility.id, donorFacility.name);
     const updated = stockTransfers.map(item => {
       if (item.id === transferId) {
         return {
           ...item,
           sourceStockId: sourceStock.id,
           sourceFacilityId: donorFacility.id,
-          sourceFacilityName: donorFacility.name,
+          sourceFacilityName: canonicalDonorName,
           donorAllocated: true,
           allocatedByDistrictUserId: districtUser?.id,
           allocatedByDistrictUserName: districtUser?.name,
@@ -427,50 +777,117 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
     setStockTransfers(updated);
     saveStoredStockTransfers(updated);
-    showToast(`Donor ${donorFacility.name} endorsed & allocated for ${transfer.id}.`);
+    showToast(`Donor ${canonicalDonorName} endorsed & allocated for ${transfer.id}.`);
     return true;
   };
 
-  const processStockTransfer = (transferId: string, action: 'APPROVE' | 'REJECT' | 'DISPATCH' | 'RECEIVE', rejectionReason?: string, consignmentMeta?: Partial<StockTransfer>) => {
+  const processStockTransfer = async (transferId: string, action: 'APPROVE' | 'REJECT' | 'DISPATCH' | 'RECEIVE', rejectionReason?: string, consignmentMeta?: Partial<StockTransfer>) => {
     const transfer = stockTransfers.find(item => item.id === transferId);
     if (!transfer) return false;
     const now = new Date().toISOString();
     const source = stocks.find(item => item.id === transfer.sourceStockId);
     const destination = stocks.find(item => item.id === transfer.destinationStockId);
 
+    // Hardened P2 authorization check before state mutation
+    try {
+      const authTarget = action === 'RECEIVE' ? transfer.destinationFacilityId : transfer.sourceFacilityId;
+      const res = await fetch('/api/authorize-mutation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'UPDATE_STOCK', resource: { facilityId: authTarget } })
+      });
+      if (res.status === 403 || res.status === 401) {
+        showToast('Unauthorized: You do not have permission to perform this transfer action.');
+        return false;
+      }
+    } catch (err) {
+      showToast('Network error during authorization.');
+      return false;
+    }
+
+    const syncParentRequest = (nextStatus: StockTransfer['status']) => {
+      setMedicineRequests(prevReqs => {
+        const updated = prevReqs.map(req => {
+          const isTargetReq = req.id === transfer.requestId || req.items?.some(i => i.transferId === transferId || (transfer.requestItemId && i.id === transfer.requestItemId));
+          if (!isTargetReq) return req;
+          const updatedItems = req.items.map(item => {
+            if (item.transferId === transferId || (transfer.requestItemId && item.id === transfer.requestItemId)) {
+              return {
+                ...item,
+                status: nextStatus,
+                transferId: transferId,
+                sourceFacilityId: transfer.sourceFacilityId,
+                sourceFacilityName: transfer.sourceFacilityName,
+                supplyTier: transfer.supplyTier,
+              };
+            }
+            return item;
+          });
+          return {
+            ...req,
+            items: updatedItems,
+            overallStatus: deriveOverallStatus(updatedItems),
+          };
+        });
+        saveStoredMedicineRequests(updated);
+        return updated;
+      });
+    };
+
     if (action === 'APPROVE') {
+      if (transfer.status !== 'PENDING_SOURCE_APPROVAL') {
+        showToast('Only pending transfers can be approved.');
+        return false;
+      }
       const availableAfterOtherReservations = source ? getSafeTransferableQuantity(source, stockTransfers.filter(item => item.id !== transferId)) : 0;
-      if (transfer.status !== 'PENDING_SOURCE_APPROVAL' || !source || transfer.requestedQuantity > availableAfterOtherReservations) {
+      if (!source || transfer.requestedQuantity > availableAfterOtherReservations) {
         showToast('Transfer cannot be approved because the source safety reserve is no longer available.');
         return false;
       }
       const updated = stockTransfers.map(item => item.id === transferId ? { ...item, ...consignmentMeta, status: 'APPROVED' as const, approvedAt: now } : item);
-      setStockTransfers(updated); saveStoredStockTransfers(updated); showToast(`${transferId} approved. Awaiting dispatch.`); return true;
+      setStockTransfers(updated); saveStoredStockTransfers(updated);
+      syncParentRequest('APPROVED');
+      showToast(`${transferId} approved. Awaiting dispatch.`);
+      return true;
     }
     if (action === 'REJECT') {
       if (transfer.status !== 'PENDING_SOURCE_APPROVAL' || !rejectionReason?.trim()) { showToast('A reason is required to reject a pending transfer.'); return false; }
       const updated = stockTransfers.map(item => item.id === transferId ? { ...item, ...consignmentMeta, status: 'REJECTED' as const, rejectionReason, } : item);
-      setStockTransfers(updated); saveStoredStockTransfers(updated); showToast(`${transferId} rejected by source facility.`); return true;
+      setStockTransfers(updated); saveStoredStockTransfers(updated);
+      syncParentRequest('REJECTED');
+      showToast(`${transferId} rejected by source facility.`);
+      return true;
     }
     if (action === 'DISPATCH') {
       if (transfer.status !== 'APPROVED') { showToast('Only an approved transfer can be dispatched.'); return false; }
       const updated = stockTransfers.map(item => item.id === transferId ? { ...item, ...consignmentMeta, status: 'DISPATCHED' as const, dispatchedAt: now } : item);
-      setStockTransfers(updated); saveStoredStockTransfers(updated); showToast(`${transferId} dispatched. Destination facility must confirm receipt.`); return true;
+      setStockTransfers(updated); saveStoredStockTransfers(updated);
+      syncParentRequest('DISPATCHED');
+      showToast(`${transferId} dispatched. Destination facility must confirm receipt.`);
+      return true;
     }
-    if (transfer.status !== 'DISPATCHED' || !source || !destination || source.currentStock - transfer.requestedQuantity < source.bufferStock) {
-      showToast('Transfer receipt could not be completed because its safety validation failed.');
-      return false;
+    if (action === 'RECEIVE') {
+      if (transfer.status !== 'DISPATCHED') {
+        showToast('Only a dispatched transfer can be received.');
+        return false;
+      }
+      if (!source || !destination || source.currentStock - transfer.requestedQuantity < source.bufferStock) {
+        showToast('Transfer receipt could not be completed because its safety validation failed.');
+        return false;
+      }
+      const updatedStocks = stocks.map(item => {
+        if (item.id === source.id) return { ...item, currentStock: item.currentStock - transfer.requestedQuantity, status: item.currentStock - transfer.requestedQuantity < item.bufferStock ? 'LOW' as const : 'OPTIMAL' as const };
+        if (item.id === destination.id) return { ...item, currentStock: item.currentStock + transfer.requestedQuantity, status: item.currentStock + transfer.requestedQuantity < item.bufferStock ? 'LOW' as const : 'OPTIMAL' as const };
+        return item;
+      });
+      const updatedTransfers = stockTransfers.map(item => item.id === transferId ? { ...item, ...consignmentMeta, status: 'COMPLETED' as const, receivedAt: now } : item);
+      setStocks(updatedStocks); saveStoredStocks(updatedStocks);
+      setStockTransfers(updatedTransfers); saveStoredStockTransfers(updatedTransfers);
+      syncParentRequest('COMPLETED');
+      showToast(`${transferId} received. Inventories and stock statuses have been updated.`);
+      return true;
     }
-    const updatedStocks = stocks.map(item => {
-      if (item.id === source.id) return { ...item, currentStock: item.currentStock - transfer.requestedQuantity, status: item.currentStock - transfer.requestedQuantity < item.bufferStock ? 'LOW' as const : 'OPTIMAL' as const };
-      if (item.id === destination.id) return { ...item, currentStock: item.currentStock + transfer.requestedQuantity, status: item.currentStock + transfer.requestedQuantity < item.bufferStock ? 'LOW' as const : 'OPTIMAL' as const };
-      return item;
-    });
-    const updatedTransfers = stockTransfers.map(item => item.id === transferId ? { ...item, ...consignmentMeta, status: 'COMPLETED' as const, receivedAt: now } : item);
-    setStocks(updatedStocks); saveStoredStocks(updatedStocks);
-    setStockTransfers(updatedTransfers); saveStoredStockTransfers(updatedTransfers);
-    showToast(`${transferId} received. Inventories and stock statuses have been updated.`);
-    return true;
+    return false;
   };
 
   const updateResourceAlertStatus = (alertId: string, status: ResourceAlert['status']) => {
@@ -495,6 +912,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         medicineRequests,
         stockTransfers,
         resourceAlerts,
+        followUps,
         toggleSimulatedOffline,
         triggerManualSync,
         addPatient,
@@ -505,9 +923,13 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         updateDrugStock,
         createMedicineRequest,
         createStockTransfer,
+        createReplenishmentRequest,
+        linkTransferToRequestItem,
+        allocateRequestSupplies,
         allocateStockTransferDonor,
         processStockTransfer,
         updateResourceAlertStatus,
+        addFollowUpTask,
         toastMessage,
         clearToast,
       }}

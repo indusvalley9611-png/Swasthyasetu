@@ -41,7 +41,7 @@ export function GlobalPatientSearchModal({
           <div className="flex justify-between items-center text-white">
             <h3 className="font-bold text-sm flex items-center gap-2">
               <ShieldCheck className="w-5 h-5 text-teal-400" />
-              <span>{language === 'mr' ? 'आयुष्मान भारत (ABDM) रुग्ण शोध' : 'ABDM Statewide Patient Registry Search'}</span>
+              <span>{language === 'mr' ? 'आयुष्मान भारत (ABDM) रुग्ण शोध' : 'Simulated Central Patient Registry Search (Mock)'}</span>
             </h3>
             <button
               onClick={onClose}

@@ -37,7 +37,14 @@ yarn-error.log*
 .vercel
 
 # typescript
+# typescript & build
 *.tsbuildinfo
 next-env.d.ts
 *.py
 *.txt
+
+# temporary & artifacts
+scratch/
+.pptx-build/
+.codex-finalizer/
+presentation-output/

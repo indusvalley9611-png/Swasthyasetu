@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
 import { useSync } from '@/context/SyncContext';
-import { Patient, ClinicalEncounter } from '@/lib/types';
+import { Patient, ClinicalEncounter, Referral } from '@/lib/types';
 import { generateRandomAbhaId } from '@/lib/idbStorage';
 import { canRegisterPatient, recordAuditLog } from '@/lib/patientPrivacyService';
 import {
@@ -36,7 +36,7 @@ interface NewPatientModalProps {
 export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
   const { language, t } = useLanguage();
   const { user } = useAuth();
-  const { patients, addPatient, addClinicalEncounter } = useSync();
+  const { patients, addPatient, addClinicalEncounter, createReferral } = useSync();
 
   const isPermitted = canRegisterPatient(user);
 
@@ -53,8 +53,8 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
     age: '',
     gender: 'Female' as 'Female' | 'Male' | 'Other',
     phone: '',
-    village: user?.village || 'Velhe',
-    taluka: user?.taluka || 'Velhe',
+    village: user?.village || '',
+    taluka: user?.taluka || '',
     district: user?.district || 'Pune',
     bloodGroup: 'B Positive',
     isPregnant: false,
@@ -122,6 +122,43 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
     };
 
     addClinicalEncounter(existingPat.id, walkInEncounter);
+
+    if (user.role === 'specialist') {
+      const walkInReferral: Referral = {
+        id: 'ref-' + Date.now(),
+        patientId: existingPat.id,
+        patientName: existingPat.fullName,
+        patientAge: existingPat.age,
+        patientGender: existingPat.gender,
+        patientAbha: existingPat.abhaId,
+        referringFacility: user.facilityName || 'Casualty OPD (Walk-in)',
+        referringFacilityId: user.facilityId,
+        referringUserId: user.id,
+        referringDoctorName: user.name,
+        targetFacility: user.facilityName || 'District Hospital Aundh, Pune',
+        targetFacilityId: user.facilityId,
+        specialtyRequired: 'Casualty / Emergency OPD',
+        referralReason: 'Direct District Hospital Casualty / Walk-in Presentation',
+        status: 'ADMITTED',
+        triagePriority: 'yellow',
+        triageScore: 5,
+        triageReasons: ['Direct walk-in presentation at district hospital casualty'],
+        vitalsAtReferral: {
+          systolicBp: 120,
+          diastolicBp: 80,
+          heartRate: 76,
+          spO2: 98,
+          respiratoryRate: 18,
+          temperature: 37,
+          consciousLevel: 'alert',
+          recordedAt: new Date().toISOString(),
+        },
+        tokenCode: 'WLK-' + Math.floor(1000 + Math.random() * 9000),
+        createdAt: new Date().toISOString(),
+        qrPayload: JSON.stringify({ patient: existingPat.abhaId, facility: user.facilityId, type: 'walk-in' }),
+      };
+      createReferral(walkInReferral);
+    }
 
     recordAuditLog({
       userId: user.id,
@@ -213,8 +250,8 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
 
     if (!user) return;
 
-    const abhaId = generateRandomAbhaId();
-    const abhaAddress = `${formData.fullName.toLowerCase().replace(/\s+/g, '.')}.${Math.floor(Math.random() * 100)}@abdm`;
+    const abhaId = `DEMO-${generateRandomAbhaId()}`;
+    const abhaAddress = `${formData.fullName.toLowerCase().replace(/\s+/g, '.')}.${Math.floor(Math.random() * 100)}@abdm.demo`;
     const newPatientId = 'pat-' + Date.now();
 
     // Determine entry type
@@ -234,7 +271,7 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
       id: 'enc-' + Date.now(),
       patientId: newPatientId,
       date: new Date().toISOString(),
-      facilityName: user.facilityName || 'Velhe Primary Health Centre (PHC)',
+      facilityName: user.facilityName || 'Primary Health Centre',
       facilityType,
       providerName: user.name,
       providerRole: user.roleTitleEn || 'Healthcare Provider',
@@ -298,6 +335,43 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
     };
 
     addPatient(newPatient);
+
+    if (user.role === 'specialist') {
+      const walkInReferral: Referral = {
+        id: 'ref-' + Date.now(),
+        patientId: newPatientId,
+        patientName: newPatient.fullName,
+        patientAge: newPatient.age,
+        patientGender: newPatient.gender,
+        patientAbha: newPatient.abhaId,
+        referringFacility: user.facilityName || 'District Hospital Aundh (Casualty Walk-in)',
+        referringFacilityId: user.facilityId,
+        referringUserId: user.id,
+        referringDoctorName: user.name,
+        targetFacility: user.facilityName || 'District Hospital Aundh, Pune',
+        targetFacilityId: user.facilityId,
+        specialtyRequired: 'Casualty / Emergency OPD',
+        referralReason: 'Direct District Hospital Casualty / Walk-in Admission',
+        status: 'ADMITTED',
+        triagePriority: 'yellow',
+        triageScore: 5,
+        triageReasons: ['Direct walk-in admission at district hospital casualty'],
+        vitalsAtReferral: {
+          systolicBp: 120,
+          diastolicBp: 80,
+          heartRate: 76,
+          spO2: 98,
+          respiratoryRate: 18,
+          temperature: 37,
+          consciousLevel: 'alert',
+          recordedAt: new Date().toISOString(),
+        },
+        tokenCode: 'WLK-' + Math.floor(1000 + Math.random() * 9000),
+        createdAt: new Date().toISOString(),
+        qrPayload: JSON.stringify({ patient: newPatient.abhaId, facility: user.facilityId, type: 'walk-in' }),
+      };
+      createReferral(walkInReferral);
+    }
 
     recordAuditLog({
       userId: user.id,
@@ -429,6 +503,9 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                 Search Existing Patient by ABHA ID, Mobile Number, or Name:
               </label>
+              <div className="text-[10px] text-slate-500 mb-2">
+                {!navigator.onLine ? "⚠️ OFFLINE: Currently searching only local device cache. Global duplicates may occur." : "Mock Mode: Searching local simulated central registry."}
+              </div>
               <div className="relative">
                 <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input

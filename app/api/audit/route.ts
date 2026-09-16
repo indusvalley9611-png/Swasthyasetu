@@ -1,49 +1,77 @@
 import { NextResponse } from 'next/server';
 import { getAuditLogs, recordAuditLog } from '@/lib/patientPrivacyService';
 import { INITIAL_AUDIT_LOGS } from '@/lib/mockData';
+import { sessionStore } from '@/lib/authStore';
+import { cookies } from 'next/headers';
+import { PRE_REGISTERED_STAFF } from '@/lib/staffRegistry';
+
+async function getAuthenticatedUser() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('swasthyasetu_session');
+  if (!token) return null;
+  const session = sessionStore.get(token.value);
+  if (!session) return null;
+  const user = Object.values(PRE_REGISTERED_STAFF).find(u => u.id === session.userId);
+  return user || null;
+}
 
 export async function GET(request: Request) {
   try {
-    const url = new URL(request.url);
-    const patientId = url.searchParams.get('patientId') || undefined;
-    const userId = url.searchParams.get('userId') || undefined;
-    const action = url.searchParams.get('action') || undefined;
-
-    let logs = getAuditLogs({ patientId, userId, action });
-
-    // Fallback to mock logs if storage is empty on server
-    if (logs.length === 0 && !patientId && !userId && !action) {
-      logs = INITIAL_AUDIT_LOGS;
+    const user = await getAuthenticatedUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'Authentication required.' }, { status: 401 });
     }
 
-    return NextResponse.json({
-      success: true,
-      count: logs.length,
-      logs,
-    });
+    // Role-based gating: only admins or district officers can view all logs.
+    const canViewAll = user.role === 'national_admin' || user.role === 'state_admin' || user.role === 'district_officer';
+    
+    const url = new URL(request.url);
+    const patientId = url.searchParams.get('patientId') || undefined;
+    // If not admin, they can only query their own logs
+    const queryUserId = canViewAll ? (url.searchParams.get('userId') || undefined) : user.id;
+    const action = url.searchParams.get('action') || undefined;
+
+    let logs = getAuditLogs({ patientId, userId: queryUserId, action });
+
+    if (logs.length === 0 && !patientId && !queryUserId && !action) {
+      logs = INITIAL_AUDIT_LOGS;
+      if (!canViewAll) {
+         logs = logs.filter(l => l.userId === user.id);
+      }
+    }
+
+    return NextResponse.json({ success: true, count: logs.length, logs });
   } catch (error: any) {
-    console.error('Error fetching audit logs:', error);
-    return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const entry = recordAuditLog(body);
+    const user = await getAuthenticatedUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'Authentication required.' }, { status: 401 });
+    }
 
-    return NextResponse.json({
-      success: true,
-      entry,
-    });
+    const body = await request.json();
+    
+    // Enforce that the user can only log actions for themselves
+    if (body.userId && body.userId !== user.id) {
+       return NextResponse.json({ success: false, error: 'Cannot forge audit logs for another user.' }, { status: 403 });
+    }
+
+    // Override the user details with the authenticated session
+    const secureBody = {
+      ...body,
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      userFacility: user.facilityName
+    };
+
+    const entry = recordAuditLog(secureBody);
+    return NextResponse.json({ success: true, entry });
   } catch (error: any) {
-    console.error('Error recording audit log:', error);
-    return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

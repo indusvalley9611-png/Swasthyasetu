@@ -51,11 +51,11 @@ export function AuditTrailModal({ onClose }: AuditTrailModalProps) {
   const filteredLogs = logs.filter((log) => {
     const q = searchQuery.toLowerCase();
     const matchesSearch =
-      log.patientName.toLowerCase().includes(q) ||
-      log.patientAbha.toLowerCase().includes(q) ||
-      log.userName.toLowerCase().includes(q) ||
-      log.userFacility.toLowerCase().includes(q) ||
-      log.resource.toLowerCase().includes(q) ||
+      (log.patientName && log.patientName.toLowerCase().includes(q)) ||
+      (log.patientAbha && log.patientAbha.toLowerCase().includes(q)) ||
+      (log.userName && log.userName.toLowerCase().includes(q)) ||
+      (log.userFacility && log.userFacility.toLowerCase().includes(q)) ||
+      (log.resource && log.resource.toLowerCase().includes(q)) ||
       (log.reason && log.reason.toLowerCase().includes(q));
 
     const matchesAction = filterAction === 'ALL' || log.action === filterAction;
@@ -169,13 +169,15 @@ export function AuditTrailModal({ onClose }: AuditTrailModalProps) {
                         </td>
                         <td className="p-3">
                           <div className="text-slate-700 dark:text-slate-300 font-medium truncate max-w-[160px]">{log.userFacility}</div>
-                          <span className="text-[9px] uppercase tracking-wider font-extrabold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                            {log.administrativeLevel}
-                          </span>
+                          {log.administrativeLevel && (
+                            <span className="text-[9px] uppercase tracking-wider font-extrabold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                              {log.administrativeLevel}
+                            </span>
+                          )}
                         </td>
                         <td className="p-3">
-                          <div className="font-bold text-slate-900 dark:text-white">{log.patientName}</div>
-                          <div className="font-mono text-[10px] text-slate-500 dark:text-slate-400">{log.patientAbha}</div>
+                          <div className="font-bold text-slate-900 dark:text-white">{log.patientName || 'Operational Resource'}</div>
+                          {log.patientAbha && <div className="font-mono text-[10px] text-slate-500 dark:text-slate-400">{log.patientAbha}</div>}
                         </td>
                         <td className="p-3 whitespace-nowrap">
                           {isDenied ? (

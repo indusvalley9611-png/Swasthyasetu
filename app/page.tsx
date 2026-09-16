@@ -11,6 +11,7 @@ import { Footer } from '@/components/layout/Footer';
 import { AshaDashboard } from '@/components/dashboards/AshaDashboard';
 import { PhcDoctorDashboard } from '@/components/dashboards/PhcDoctorDashboard';
 import { SpecialistDashboard } from '@/components/dashboards/SpecialistDashboard';
+import { DistrictCoordinationDashboard } from '@/components/dashboards/DistrictCoordinationDashboard';
 import { StateAdminDashboard } from '@/components/dashboards/StateAdminDashboard';
 import { NationalAdminDashboard } from '@/components/dashboards/NationalAdminDashboard';
 import WorkerWorkspace from '@/components/directory/WorkerWorkspace';
@@ -40,7 +41,7 @@ import {
 } from 'lucide-react';
 
 export default function Home() {
-  const { role, setRole } = useAuth();
+  const { role, isAuthenticated } = useAuth();
   const { language, toggleLanguage, t } = useLanguage();
   const { referrals } = useSync();
 
@@ -94,8 +95,8 @@ export default function Home() {
   const getDefaultNavItem = (r?: Role) => {
     if (r === 'state_admin' || r === 'national_admin' || r === 'district_officer') return 'overview';
     if (r === 'specialist') return 'incoming';
-    if (r === 'phc_doctor') return 'dashboard';
-    if (r === 'nurse') return 'dashboard';
+    if (r === 'phc_doctor') return 'directory';
+    if (r === 'nurse') return 'directory';
     if (r === 'pharmacist') return 'dashboard';
     if (r === 'asha') return 'directory';
     return 'directory';
@@ -127,25 +128,33 @@ export default function Home() {
       descMr: 'वैद्यकीय अधिकारी, परिचारिका व औषध निर्माण अधिकारी (वेल्हे व नसरापूर)',
     },
     {
-      id: 'specialist' as Role,
-      titleEn: '3. District Hospital Team',
-      titleMr: '३. जिल्हा रुग्णालय',
+      id: 'district_officer' as Role,
+      titleEn: '3. District Health Authority (DHO)',
+      titleMr: '३. जिल्हा आरोग्य अधिकारी व नियंत्रण कक्ष (DHO)',
       icon: Building2,
-      descEn: 'Specialists, DHO & Resource Coordinators across Pune & Nashik District Hospitals',
-      descMr: 'कॅज्युअल्टी ट्रायज तज्ज्ञ, जिल्हा आरोग्य अधिकारी व संसाधन समन्वयक (पुणे व नाशिक)',
+      descEn: 'District Health Officer (DHO) / Civil Surgeon, Resource Intelligence & District Overview',
+      descMr: 'जिल्हा आरोग्य अधिकारी, जिल्हा शल्यचिकित्सक व नियंत्रण कक्ष (पुणे व नाशिक)',
+    },
+    {
+      id: 'specialist' as Role,
+      titleEn: '4. District Hospital Specialist & Casualty',
+      titleMr: '४. जिल्हा रुग्णालय तज्ज्ञ व कॅज्युअल्टी ट्रायज',
+      icon: HeartPulse,
+      descEn: 'Chief Casualty Specialist, Bed Matrix & Inpatient Admissions (Aundh & Civil)',
+      descMr: 'कॅज्युअल्टी ट्रायज तज्ज्ञ, बेड मॅट्रिक्स व इनपेशंट विभाग (औंध व नाशिक)',
     },
     {
       id: 'state_admin' as Role,
-      titleEn: '4. State Health Authority',
-      titleMr: '४. राज्य आरोग्य प्राधिकरण (DHS)',
+      titleEn: '5. State Health Authority',
+      titleMr: '५. राज्य आरोग्य प्राधिकरण (DHS)',
       icon: BarChart3,
       descEn: 'Directorate of Health Services (DHS), Maharashtra State HQ, Mumbai',
       descMr: 'आरोग्य सेवा संचालनालय (DHS), महाराष्ट्र शासन, मुंबई',
     },
     {
       id: 'national_admin' as Role,
-      titleEn: '5. National Health Authority',
-      titleMr: '५. राष्ट्रीय आरोग्य प्राधिकरण (NHA)',
+      titleEn: '6. National Health Authority',
+      titleMr: '६. राष्ट्रीय आरोग्य प्राधिकरण (NHA)',
       icon: Globe,
       descEn: 'National Health Authority (NHA) & MoHFW Apex Mission Control, New Delhi',
       descMr: 'राष्ट्रीय आरोग्य प्राधिकरण (NHA) व आरोग्य मंत्रालय, नवी दिल्ली',
@@ -161,17 +170,10 @@ export default function Home() {
   ];
 
   if (!mounted) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
-        <div className="flex items-center gap-3">
-          <div className="w-3 h-3 rounded-full bg-teal-400 animate-ping" />
-          <span className="text-sm font-semibold tracking-wider text-slate-300">Loading SwasthyaSetu...</span>
-        </div>
-      </div>
-    );
+    return null;
   }
 
-  if (!role) {
+  if (!isAuthenticated || !role) {
     return (
       <div suppressHydrationWarning className="min-h-screen flex flex-col lg:flex-row bg-white dark:bg-slate-900 font-sans">
         {/* Left Side - Branding & Beautiful Background */}
@@ -319,7 +321,19 @@ export default function Home() {
         />
       )}
 
-      {(role === 'state_admin' || role === 'district_officer') && (
+      {role === 'district_officer' && (
+        <DistrictCoordinationDashboard
+          onOpenBedMatrix={() => setIsBedMatrixOpen(true)}
+          onOpenStockLedger={() => setIsDrugStockOpen(true)}
+          onOpenAuditLogs={() => setIsAuditTrailOpen(true)}
+          onOpenPatientTimeline={(patient) => setTimelinePatient(patient)}
+          onOpenReferralToken={(ref) => setReferralToken(ref)}
+          activeTab={activeNavItem as any}
+          onTabChange={(tab) => setActiveNavItem(tab)}
+        />
+      )}
+
+      {role === 'state_admin' && (
         <StateAdminDashboard
           onOpenBedMatrix={() => setIsBedMatrixOpen(true)}
           onOpenStockLedger={() => setIsDrugStockOpen(true)}

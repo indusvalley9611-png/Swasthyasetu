@@ -50,12 +50,8 @@ export function PharmacistDashboard() {
 
   // Filter transfers involving this facility
   const facilityTransfers = stockTransfers.filter((t) => {
-    if (!user?.facilityId && !user?.facilityName) return true;
-    const fac = (user?.facilityName || '').toLowerCase();
-    return (
-      t.sourceFacilityName.toLowerCase().includes(fac) ||
-      t.destinationFacilityName.toLowerCase().includes(fac)
-    );
+    if (!user?.facilityId) return true;
+    return t.sourceFacilityId === user.facilityId || t.destinationFacilityId === user.facilityId;
   });
 
   const criticalShortages = facilityStocks.filter((s) => s.currentStock < s.bufferStock);
@@ -338,7 +334,7 @@ export function PharmacistDashboard() {
                   </div>
 
                   <div className="flex items-center gap-2 self-start md:self-auto">
-                    {t.status === 'PENDING' && (
+                    {(t.status === 'PENDING' || t.status === 'PENDING_SOURCE_APPROVAL') && (t.sourceFacilityId === user?.facilityId || user?.role === 'district_officer') && (
                       <button
                         onClick={() => processStockTransfer(t.id, 'APPROVE')}
                         className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer"
@@ -346,7 +342,7 @@ export function PharmacistDashboard() {
                         Approve Transfer
                       </button>
                     )}
-                    {t.status === 'APPROVED' && (
+                    {t.status === 'APPROVED' && (t.sourceFacilityId === user?.facilityId || user?.role === 'district_officer') && (
                       <button
                         onClick={() => processStockTransfer(t.id, 'DISPATCH')}
                         className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer"
@@ -354,7 +350,7 @@ export function PharmacistDashboard() {
                         Dispatch via Ambulance
                       </button>
                     )}
-                    {t.status === 'DISPATCHED' && (
+                    {t.status === 'DISPATCHED' && (t.destinationFacilityId === user?.facilityId || user?.role === 'district_officer') && (
                       <button
                         onClick={() => processStockTransfer(t.id, 'RECEIVE')}
                         className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer"

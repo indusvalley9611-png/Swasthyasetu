@@ -40,13 +40,27 @@ export function canAccessPatientReport(
 
   // 2. Emergency "Break-Glass" Access Evaluation
   // Must be a recognized clinical role with a documented emergency reason
-  if (options?.isEmergency && options?.emergencyReason?.trim()) {
+  if (options?.isEmergency) {
+    const reason = options.emergencyReason?.trim();
+    if (!reason) {
+      return {
+        allowed: false,
+        reason: 'Emergency Break-Glass Access Denied: Mandatory non-empty reason required for emergency override.',
+        accessLevel: 'NONE',
+      };
+    }
     const isClinician = user.role === 'phc_doctor' || user.role === 'specialist' || user.role === 'nurse';
     if (isClinician) {
       return {
         allowed: true,
-        reason: `Emergency Break-Glass Access authorized: "${options.emergencyReason.trim()}" (Logged to state audit trail).`,
+        reason: `Emergency Break-Glass Access authorized: "${reason}" (Logged to audit trail). [DEMO SIMULATION - Not production ABDM integration]`,
         accessLevel: 'EMERGENCY_OVERRIDE',
+      };
+    } else {
+      return {
+        allowed: false,
+        reason: `Emergency Break-Glass Access Denied: Role '${user.role}' lacks clinical authority for emergency override.`,
+        accessLevel: 'NONE',
       };
     }
   }
@@ -74,7 +88,7 @@ export function canAccessPatientReport(
       const activeReferral = options.referrals.find(
         (r) =>
           r.patientId === patient.id &&
-          r.referringUserId === user.id &&
+          (r.referringUserId === user.id || (r.referringFacilityId && r.referringFacilityId === user.facilityId)) &&
           ['PENDING', 'ACCEPTED', 'ADMITTED'].includes(r.status)
       );
 
@@ -105,7 +119,9 @@ export function canAccessPatientReport(
     const isDirectWalkInAtFacility =
       (patient.registrationFacilityId && patient.registrationFacilityId === user.facilityId) ||
       (patient.assignedFacilityId && patient.assignedFacilityId === user.facilityId) ||
-      (patient.assignedFacilityName && user.facilityName && patient.assignedFacilityName.toLowerCase().includes(user.facilityName.toLowerCase()));
+      (patient.assignedDoctorId && patient.assignedDoctorId === user.id) ||
+      (patient.registeredByUserId && patient.registeredByUserId === user.id) ||
+      false;
 
     if (isDirectWalkInAtFacility) {
       return {
@@ -121,10 +137,8 @@ export function canAccessPatientReport(
         (r) =>
           r.patientId === patient.id &&
           ['PENDING', 'ACCEPTED', 'ADMITTED'].includes(r.status) &&
-          (r.targetFacility.toLowerCase().includes(user.facilityName.toLowerCase()) ||
-            user.facilityName.toLowerCase().includes(r.targetFacility.toLowerCase()) ||
-            (r.targetFacility.toLowerCase().includes('aundh') && user.facilityName.toLowerCase().includes('aundh')) ||
-            (r.targetFacility.toLowerCase().includes('nashik') && user.facilityName.toLowerCase().includes('nashik')))
+          ((r.targetFacilityId && r.targetFacilityId === user.facilityId) ||
+            false)
       );
 
       if (activeReferral) {
@@ -137,7 +151,7 @@ export function canAccessPatientReport(
     }
 
     // If admitted to this specialist's care
-    if (patient.activeCareOwner === 'DISTRICT' && user.facilityType === 'District Hospital') {
+    if (patient.activeCareOwner === 'DISTRICT' && user.facilityType === 'District Hospital' && (patient.assignedFacilityId === user.facilityId)) {
       return {
         allowed: true,
         reason: `Authorized specialist: Patient currently admitted under care at ${user.facilityName}.`,
@@ -155,8 +169,9 @@ export function canAccessPatientReport(
   // 5. Staff Nurse (Facility-level care duties)
   if (user.role === 'nurse') {
     const isSameFacility =
-      patient.assignedFacilityId === user.facilityId ||
-      patient.assignedFacilityName === user.facilityName;
+      (patient.assignedFacilityId && patient.assignedFacilityId === user.facilityId) ||
+      (patient.registrationFacilityId && patient.registrationFacilityId === user.facilityId) ||
+      false;
 
     if (isSameFacility) {
       return {
@@ -176,8 +191,9 @@ export function canAccessPatientReport(
   // 6. Pharmacist (Medicine-related dispensing access only)
   if (user.role === 'pharmacist') {
     const isSameFacility =
-      patient.assignedFacilityId === user.facilityId ||
-      patient.assignedFacilityName === user.facilityName;
+      (patient.assignedFacilityId && patient.assignedFacilityId === user.facilityId) ||
+      (patient.registrationFacilityId && patient.registrationFacilityId === user.facilityId) ||
+      false;
 
     if (isSameFacility) {
       return {
@@ -197,9 +213,10 @@ export function canAccessPatientReport(
   // 7. ASHA / Field Worker (Community health & screening)
   if (user.role === 'asha') {
     const isCommunityArea =
-      (user.village && patient.village && patient.village.toLowerCase() === user.village.toLowerCase()) ||
-      (user.facilityName && patient.village && patient.village.toLowerCase().includes(user.facilityName.split(' ')[0].toLowerCase())) ||
-      (patient.encounters && patient.encounters.some((e) => e.providerName?.toLowerCase().includes(user.name.toLowerCase())));
+      (patient.assignedFacilityId && patient.assignedFacilityId === user.facilityId) ||
+      (patient.registrationFacilityId && patient.registrationFacilityId === user.facilityId) ||
+      (user.villageId && patient.villageId && patient.villageId === user.villageId) ||
+      false;
 
     if (isCommunityArea) {
       return {
@@ -315,19 +332,18 @@ export function filterPatientsForUser(
       (p) =>
         p.assignedDoctorId === user.id ||
         (user.assignedPatientIds && user.assignedPatientIds.includes(p.id)) ||
-        p.registrationFacilityId === user.facilityId
+        (p.registrationFacilityId && p.registrationFacilityId === user.facilityId)
     );
     const facilityPatients = patients.filter(
       (p) =>
-        p.assignedFacilityId === user.facilityId ||
-        p.assignedFacilityName === user.facilityName ||
-        p.registrationFacilityId === user.facilityId
+        (p.assignedFacilityId && p.assignedFacilityId === user.facilityId) ||
+        (p.registrationFacilityId && p.registrationFacilityId === user.facilityId)
     );
     return {
       assignedPatients,
       facilityPatients,
       referralPatients: [],
-      allPatients: patients,
+      allPatients: Array.from(new Set([...assignedPatients, ...facilityPatients])),
     };
   }
 
@@ -337,19 +353,18 @@ export function filterPatientsForUser(
         .filter(
           (r) =>
             ['PENDING', 'ACCEPTED', 'ADMITTED'].includes(r.status) &&
-            (r.targetFacility.toLowerCase().includes(user.facilityName.toLowerCase()) ||
-              user.facilityName.toLowerCase().includes(r.targetFacility.toLowerCase()) ||
-              (r.targetFacility.toLowerCase().includes('aundh') && user.facilityName.toLowerCase().includes('aundh')) ||
-              (r.targetFacility.toLowerCase().includes('nashik') && user.facilityName.toLowerCase().includes('nashik')))
+            r.targetFacilityId === user.facilityId
         )
         .map((r) => r.patientId)
     );
 
     const facilityDirectPatients = patients.filter(
       (p) =>
-        p.registrationFacilityId === user.facilityId ||
-        p.assignedFacilityId === user.facilityId ||
-        p.assignedFacilityName === user.facilityName ||
+        (p.registrationFacilityId && p.registrationFacilityId === user.facilityId) ||
+        (p.assignedFacilityId && p.assignedFacilityId === user.facilityId) ||
+        (p.assignedFacilityName && user.facilityName && p.assignedFacilityName === user.facilityName) ||
+        (p.registeredByUserId && p.registeredByUserId === user.id) ||
+        (p.assignedDoctorId && p.assignedDoctorId === user.id) ||
         referralPatientIds.has(p.id)
     );
 
@@ -358,54 +373,61 @@ export function filterPatientsForUser(
       assignedPatients: facilityDirectPatients,
       facilityPatients: facilityDirectPatients,
       referralPatients,
-      allPatients: patients,
+      allPatients: facilityDirectPatients,
     };
   }
 
   if (user.role === 'asha') {
     const communityPatients = patients.filter(
       (p) =>
-        (user.village && p.village && p.village.toLowerCase() === user.village.toLowerCase()) ||
-        (user.facilityName && p.village && p.village.toLowerCase().includes(user.facilityName.split(' ')[0].toLowerCase())) ||
-        (p.encounters && p.encounters.some((e) => e.providerName?.toLowerCase().includes(user.name.toLowerCase())))
+        (p.assignedFacilityId && p.assignedFacilityId === user.facilityId) ||
+        (p.registrationFacilityId && p.registrationFacilityId === user.facilityId) ||
+        (user.villageId && p.villageId && p.villageId === user.villageId)
     );
     return {
       assignedPatients: communityPatients,
       facilityPatients: communityPatients,
       referralPatients: [],
-      allPatients: patients,
+      allPatients: communityPatients,
     };
   }
 
   if (user.role === 'nurse' || user.role === 'pharmacist') {
     const facilityPatients = patients.filter(
-      (p) => p.assignedFacilityId === user.facilityId || p.assignedFacilityName === user.facilityName
+      (p) =>
+        (p.assignedFacilityId && p.assignedFacilityId === user.facilityId) ||
+        (p.registrationFacilityId && p.registrationFacilityId === user.facilityId)
     );
     return {
       assignedPatients: facilityPatients,
       facilityPatients,
       referralPatients: [],
-      allPatients: patients,
+      allPatients: facilityPatients, // No longer leaking all global patients
     };
   }
 
-  if (user.role === 'district_officer') {
+  if (user.role === 'district_officer' || user.role === 'state_admin' || user.role === 'national_admin') {
+    // Only return metadata-level non-clinical aggregated access, or scoped district patients
+    // LIMITATION: 'districtId' does not exist in the data model. Using string matching as a fallback.
     const districtPatients = patients.filter(
-      (p) => p.district.toLowerCase() === user.district.toLowerCase()
+      (p) => p.district && user.district && p.district === user.district
     );
+    // National/State admin might need larger scope for dashboards, but individual PII records should be limited.
+    // For this prototype, we limit direct patient list exposure even for admins unless explicitly searched.
     return {
       assignedPatients: [],
-      facilityPatients: districtPatients,
+      facilityPatients: user.role === 'district_officer' ? districtPatients : [],
       referralPatients: [],
-      allPatients: patients,
+      allPatients: user.role === 'district_officer' ? districtPatients : [],
     };
   }
 
+  const defaultFacilityPatients = patients.filter((p) => p.assignedFacilityId === user.facilityId);
   return {
     assignedPatients: [],
-    facilityPatients: patients.filter((p) => p.assignedFacilityId === user.facilityId),
+    facilityPatients: defaultFacilityPatients,
     referralPatients: [],
-    allPatients: patients,
+    allPatients: defaultFacilityPatients,
   };
 }
 
@@ -497,14 +519,9 @@ export function canProcessDistrictReferral(
 
   // Specialist / Clinician role
   if (user.role === 'specialist') {
-    const userFac = (user.facilityName || '').toLowerCase();
-    const targetFac = (referral.targetFacility || '').toLowerCase();
-
     const isMatch =
-      (userFac && targetFac && (userFac.includes(targetFac) || targetFac.includes(userFac))) ||
-      (userFac.includes('aundh') && targetFac.includes('aundh')) ||
-      (userFac.includes('pune') && targetFac.includes('pune') && userFac.includes('district') && targetFac.includes('district')) ||
-      (userFac.includes('nashik') && targetFac.includes('nashik'));
+      (referral.targetFacilityId && referral.targetFacilityId === user.facilityId) ||
+      false;
 
     if (isMatch) {
       return {
@@ -522,7 +539,7 @@ export function canProcessDistrictReferral(
   }
 
   // Referring doctor can cancel or track their own referrals
-  if (user.role === 'phc_doctor' && referral.referringUserId === user.id) {
+  if (user.role === 'phc_doctor' && (referral.referringUserId === user.id || (referral.referringFacilityId && referral.referringFacilityId === user.facilityId))) {
     return {
       allowed: true,
       reason: 'Originating referring doctor.',

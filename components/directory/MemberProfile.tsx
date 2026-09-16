@@ -8,7 +8,7 @@ import { useSync } from '@/context/SyncContext';
 import { canAccessPatientReport, maskPatientForUnauthorizedView } from '@/lib/patientPrivacyService';
 import { 
   ArrowLeft, HeartPulse, Activity, BrainCircuit, ActivitySquare, AlertTriangle, 
-  MapPin, Phone, History, FileText, ClipboardList, User, ShieldCheck, Lock, UserCheck, Building2
+  MapPin, Phone, History, FileText, ClipboardList, User, ShieldCheck, Lock, UserCheck, Building2, Send
 } from 'lucide-react';
 
 interface MemberProfileProps {
@@ -34,13 +34,14 @@ export default function MemberProfile({ patient, role, onBack, onOpenAction }: M
   const maskedPatient = maskPatientForUnauthorizedView(patient, decision);
 
   return (
-    <div className="flex flex-col h-full animate-in fade-in duration-500 pb-20">
+    <div className="flex flex-col h-full animate-in fade-in duration-300 pb-24">
       
-      {/* Header & Core Identity */}
+      {/* 1. Header & Core Identity (Matching Image 2) */}
       <div className="flex items-center gap-4 mb-6">
         <button 
           onClick={onBack}
-          className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-slate-600 dark:text-slate-300"
+          className="w-10 h-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-slate-700 dark:text-slate-300 flex items-center justify-center shadow-xs cursor-pointer"
+          title="Back to Patients Directory"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
@@ -48,13 +49,13 @@ export default function MemberProfile({ patient, role, onBack, onOpenAction }: M
           <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-3">
             {patient.fullName}
             {patient.isHighRiskPregnancy && (
-              <span className="bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-300 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-800/50">
-                High Risk
+              <span className="bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 text-[10px] uppercase tracking-wider font-extrabold px-2.5 py-0.5 rounded-full border border-rose-200 dark:border-rose-800/50">
+                HIGH RISK
               </span>
             )}
           </h2>
           <div className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2">
-            {patient.gender} &bull; {patient.age} years &bull; <span className="font-mono text-slate-700 dark:text-slate-300">{patient.abhaId}</span>
+            <span>{patient.gender}</span> &bull; <span>{patient.age} years</span> &bull; <span className="font-mono text-slate-700 dark:text-slate-300">{patient.abhaId}</span>
           </div>
         </div>
       </div>
@@ -100,20 +101,20 @@ export default function MemberProfile({ patient, role, onBack, onOpenAction }: M
         </div>
       )}
 
-      {/* AI Health Assistant Banner */}
+      {/* Rule-based Health Assistant Banner */}
       <div className="mb-6 bg-gradient-to-r from-blue-50 dark:from-blue-900/20 to-indigo-50 dark:to-indigo-900/20 border border-blue-100 dark:border-blue-800/50 rounded-2xl p-4 flex gap-4">
         <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shrink-0 shadow-inner">
           <BrainCircuit className="w-5 h-5 text-white" />
         </div>
         <div>
           <h4 className="text-xs font-bold text-blue-900 dark:text-blue-300 uppercase tracking-widest mb-1 flex items-center gap-2">
-            AI Care Insight
+            Rule-based Care Insight
           </h4>
           <p className="text-sm font-medium text-slate-700 dark:text-slate-200 leading-relaxed">
             Patient exhibits consistently elevated blood pressure across the last 3 visits. Recommend scheduling an immediate follow-up evaluation and recording current vitals.
           </p>
           <p className="text-[10px] text-blue-600/70 dark:text-blue-400/70 mt-2 font-medium">
-            AI insights are generated based on historical data. Verify clinically before action.
+            Rule-based insights are generated based on historical data. Verify clinically before action.
           </p>
         </div>
       </div>
@@ -160,7 +161,7 @@ export default function MemberProfile({ patient, role, onBack, onOpenAction }: M
                 <div className="text-[10px] text-slate-500 uppercase font-semibold">Registered Facility</div>
                 <div className="font-medium text-slate-700 dark:text-slate-300 mt-0.5 flex items-center gap-1.5">
                   <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="truncate">{patient.assignedFacilityName || 'Velhe Primary Health Centre (PHC)'}</span>
+                  <span className="truncate">{patient.assignedFacilityName || 'Primary Health Centre'}</span>
                 </div>
               </div>
               <div className="pt-2 border-t border-slate-100 dark:border-slate-800">

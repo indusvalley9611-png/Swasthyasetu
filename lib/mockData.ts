@@ -1,4 +1,4 @@
-import { Patient, Facility, Referral, DrugStockItem, OutbreakData, MedicineRequest, ResourceAlert, StockTransfer, AuditLogEntry } from './types';
+import { Patient, Facility, Referral, DrugStockItem, OutbreakData, MedicineRequest, ReplenishmentRequest, ReplenishmentRequestItem, ResourceAlert, StockTransfer, AuditLogEntry } from './types';
 
 export const INITIAL_FACILITIES: Facility[] = [
   {
@@ -134,25 +134,7 @@ export const INITIAL_FACILITIES: Facility[] = [
     lat: 18.3314,
     lng: 73.7227,
   },
-  {
-    id: 'fac-phc-khedshivapur',
-    name: 'Khed Shivapur Primary Health Centre (PHC)',
-    type: 'PHC',
-    taluka: 'Haveli',
-    district: 'Pune',
-    phone: '+91-2114-244610',
-    totalBeds: 14,
-    occupiedBeds: 6,
-    icuBedsTotal: 0,
-    icuBedsOccupied: 0,
-    ventilatorsTotal: 0,
-    ventilatorsOccupied: 0,
-    oxygenBedsTotal: 5,
-    oxygenBedsOccupied: 1,
-    availableSpecialists: ['Medical Officer', 'Maternal Health'],
-    lat: 18.4109,
-    lng: 73.8552,
-  },
+
   {
     id: 'fac-dh-gadchiroli',
     name: 'General District Hospital, Gadchiroli',
@@ -249,9 +231,9 @@ export const INITIAL_FACILITIES: Facility[] = [
     lng: 73.6812,
   },
   {
-    id: 'fac-dhs-mumbai',
-    name: 'Directorate of Health Services (DHS), Mumbai',
-    type: 'Directorate of Health Services',
+    id: 'fac-state-reserve',
+    name: 'State Medical Reserve Depot, Maharashtra',
+    type: 'State Medical Reserve',
     taluka: 'Mumbai City',
     district: 'Mumbai',
     phone: '+91-22-22621006',
@@ -263,14 +245,14 @@ export const INITIAL_FACILITIES: Facility[] = [
     ventilatorsOccupied: 0,
     oxygenBedsTotal: 0,
     oxygenBedsOccupied: 0,
-    availableSpecialists: ['Director of Health Services', 'State Epidemiologist'],
+    availableSpecialists: ['State Medical Depot Officer', 'State Epidemiologist'],
     lat: 18.9401,
     lng: 72.8347,
   },
   {
     id: 'fac-nha-delhi',
-    name: 'National Health Authority (NHA), New Delhi',
-    type: 'National Health Authority',
+    name: 'National Medical Reserve Depot, New Delhi',
+    type: 'National Medical Reserve',
     taluka: 'New Delhi',
     district: 'New Delhi',
     phone: '+91-11-23456789',
@@ -282,11 +264,94 @@ export const INITIAL_FACILITIES: Facility[] = [
     ventilatorsOccupied: 0,
     oxygenBedsTotal: 0,
     oxygenBedsOccupied: 0,
-    availableSpecialists: ['Mission Director (NHA)', 'Joint Secretary (Health)'],
+    availableSpecialists: ['National Reserve Director (NHA)', 'Joint Secretary (Health)'],
     lat: 28.6139,
     lng: 77.2090,
   }
 ];
+
+export const CANONICAL_FACILITY_MAP = new Map<string, Facility>(INITIAL_FACILITIES.map(f => [f.id, f]));
+
+export function isValidCanonicalFacilityId(facilityId?: string | null): boolean {
+  if (!facilityId || typeof facilityId !== 'string') return false;
+  return CANONICAL_FACILITY_MAP.has(facilityId);
+}
+
+export function resolveCanonicalFacility(facilityId?: string | null): Facility | undefined {
+  if (!facilityId) return undefined;
+  return CANONICAL_FACILITY_MAP.get(facilityId);
+}
+
+/**
+ * Authoritative Canonical Name Resolution.
+ * Strictly resolves from the canonical facility map.
+ * Never allows arbitrary / non-canonical fallback names to masquerade as valid facilities.
+ */
+export function resolveCanonicalFacilityName(facilityId?: string | null, _unusedFallback?: string): string {
+  if (!facilityId) return '';
+  const fac = CANONICAL_FACILITY_MAP.get(facilityId);
+  return fac ? fac.name : 'Unknown / Non-Canonical Facility';
+}
+
+export interface ValidationResult<T> {
+  isValid: boolean;
+  sanitized?: T;
+  error?: string;
+}
+
+/**
+ * Authoritative Centralized Validation Boundary for MahaAushadhi StockTransfers.
+ * Rejects any transfer with non-canonical source or destination facility IDs.
+ */
+export function validateStockTransfer(transfer: Partial<StockTransfer>): ValidationResult<StockTransfer> {
+  if (!transfer) return { isValid: false, error: 'Transfer object is null or undefined.' };
+  if (!isValidCanonicalFacilityId(transfer.destinationFacilityId)) {
+    return { isValid: false, error: `Invalid or non-canonical destination facility ID: ${transfer.destinationFacilityId}` };
+  }
+  if (transfer.donorAllocated !== false && !isValidCanonicalFacilityId(transfer.sourceFacilityId)) {
+    return { isValid: false, error: `Invalid or non-canonical source facility ID: ${transfer.sourceFacilityId}` };
+  }
+
+  const canonicalDestName = resolveCanonicalFacilityName(transfer.destinationFacilityId);
+  const canonicalSrcName = transfer.sourceFacilityId ? resolveCanonicalFacilityName(transfer.sourceFacilityId) : '';
+
+  return {
+    isValid: true,
+    sanitized: {
+      ...(transfer as StockTransfer),
+      destinationFacilityName: canonicalDestName,
+      sourceFacilityName: canonicalSrcName,
+    }
+  };
+}
+
+/**
+ * Authoritative Centralized Validation Boundary for MahaAushadhi ReplenishmentRequests.
+ * Rejects any request with non-canonical destination or non-canonical item source facilities.
+ */
+export function validateReplenishmentRequest(req: Partial<ReplenishmentRequest>): ValidationResult<ReplenishmentRequest> {
+  if (!req) return { isValid: false, error: 'Request object is null or undefined.' };
+  if (!isValidCanonicalFacilityId(req.destinationFacilityId)) {
+    return { isValid: false, error: `Invalid or non-canonical destination facility ID: ${req.destinationFacilityId}` };
+  }
+
+  const canonicalDestName = resolveCanonicalFacilityName(req.destinationFacilityId);
+  const sanitizedItems = (req.items || [])
+    .filter((item: ReplenishmentRequestItem) => !item.sourceFacilityId || isValidCanonicalFacilityId(item.sourceFacilityId))
+    .map((item: ReplenishmentRequestItem) => ({
+      ...item,
+      sourceFacilityName: item.sourceFacilityId ? resolveCanonicalFacilityName(item.sourceFacilityId) : '',
+    }));
+
+  return {
+    isValid: true,
+    sanitized: {
+      ...(req as ReplenishmentRequest),
+      destinationFacilityName: canonicalDestName,
+      items: sanitizedItems,
+    }
+  };
+}
 
 export const INITIAL_PATIENTS: Patient[] = [
   {
@@ -395,6 +460,12 @@ export const INITIAL_PATIENTS: Patient[] = [
     assignedDoctorName: 'Dr. Rajesh Deshmukh',
     assignedFacilityId: 'fac-phc-velhe',
     assignedFacilityName: 'Velhe Primary Health Centre (PHC)',
+    registrationFacilityId: 'fac-phc-velhe',
+    registrationFacilityName: 'Velhe Primary Health Centre (PHC)',
+    registrationLevel: 'facility' as const,
+    registeredByUserId: 'user-phc-01',
+    registeredByUserName: 'Dr. Rajesh Deshmukh',
+    entryType: 'PHC_WALK_IN' as const,
   },
   {
     id: 'pat-002',
@@ -451,6 +522,12 @@ export const INITIAL_PATIENTS: Patient[] = [
     assignedDoctorName: 'Dr. Rajesh Deshmukh',
     assignedFacilityId: 'fac-phc-velhe',
     assignedFacilityName: 'Velhe Primary Health Centre (PHC)',
+    registrationFacilityId: 'fac-phc-velhe',
+    registrationFacilityName: 'Velhe Primary Health Centre (PHC)',
+    registrationLevel: 'facility' as const,
+    registeredByUserId: 'user-phc-01',
+    registeredByUserName: 'Dr. Rajesh Deshmukh',
+    entryType: 'PHC_WALK_IN' as const,
   },
   {
     id: 'pat-003',
@@ -527,6 +604,12 @@ export const INITIAL_PATIENTS: Patient[] = [
     assignedDoctorName: 'Dr. Suresh Patil',
     assignedFacilityId: 'fac-phc-nasrapur',
     assignedFacilityName: 'Nasrapur Primary Health Centre (PHC)',
+    registrationFacilityId: 'fac-phc-nasrapur',
+    registrationFacilityName: 'Nasrapur Primary Health Centre (PHC)',
+    registrationLevel: 'facility' as const,
+    registeredByUserId: 'user-phc-02',
+    registeredByUserName: 'Dr. Suresh Patil',
+    entryType: 'PHC_WALK_IN' as const,
   },
   {
     id: 'pat-004',
@@ -580,6 +663,12 @@ export const INITIAL_PATIENTS: Patient[] = [
     assignedDoctorName: 'Dr. Suresh Patil',
     assignedFacilityId: 'fac-phc-nasrapur',
     assignedFacilityName: 'Nasrapur Primary Health Centre (PHC)',
+    registrationFacilityId: 'fac-sc-khedshivapur',
+    registrationFacilityName: 'Khed Shivapur Sub-Centre (Nasrapur PHC)',
+    registrationLevel: 'field' as const,
+    registeredByUserId: 'user-asha-03',
+    registeredByUserName: 'Smt. Rekha Gaikwad',
+    entryType: 'COMMUNITY_ASHA' as const,
   },
   {
     id: 'pat-005',
@@ -631,6 +720,12 @@ export const INITIAL_PATIENTS: Patient[] = [
     assignedDoctorName: 'Dr. Suresh Patil',
     assignedFacilityId: 'fac-phc-nasrapur',
     assignedFacilityName: 'Nasrapur Primary Health Centre (PHC)',
+    registrationFacilityId: 'fac-sc-kasurdi',
+    registrationFacilityName: 'Kasurdi Sub-Centre (Nasrapur PHC)',
+    registrationLevel: 'field' as const,
+    registeredByUserId: 'user-asha-04',
+    registeredByUserName: 'Smt. Anita Kamble',
+    entryType: 'COMMUNITY_ASHA' as const,
   },
   {
     id: 'pat-006',
@@ -691,7 +786,11 @@ export const INITIAL_REFERRALS: Referral[] = [
     patientAge: 26,
     patientGender: 'Female',
     referringFacility: 'Velhe Primary Health Centre (PHC)',
+    referringFacilityId: 'fac-phc-velhe',
+    referringDoctorName: 'Dr. Rajesh Deshmukh (Reg: MMC-2014/08/3412)',
+    referringUserId: 'user-phc-01',
     targetFacility: 'District Hospital Aundh, Pune',
+    targetFacilityId: 'fac-dh-pune',
     specialtyRequired: 'Obstetrics & Gynaecology / NICU',
     referralReason: 'Severe Pre-eclampsia at 34 weeks, SBP 178 mmHg, Urine Albumin 3+, imminent eclampsia risk.',
     triagePriority: 'red',
@@ -712,8 +811,6 @@ export const INITIAL_REFERRALS: Referral[] = [
       consciousLevel: 'alert',
       recordedAt: '2026-09-02T11:15:00Z',
     },
-    referringDoctorName: 'Dr. Rajesh Deshmukh (Reg: MMC-2014/08/3412)',
-    referringUserId: 'user-phc-01',
     createdAt: '2026-09-04T13:10:00Z',
     status: 'PENDING',
     ambulanceDispatched: true,
@@ -738,7 +835,11 @@ export const INITIAL_REFERRALS: Referral[] = [
     patientAge: 62,
     patientGender: 'Male',
     referringFacility: 'Bhor Rural Hospital (RH)',
+    referringFacilityId: 'fac-rh-bhor',
+    referringDoctorName: 'Dr. Meera Gaikwad (Reg: MMC-2018/02/1129)',
+    referringUserId: 'user-rh-01',
     targetFacility: 'Sassoon General Hospital & BJMC, Pune',
+    targetFacilityId: 'fac-sassoon-pune',
     specialtyRequired: 'Cardiology (Cath Lab / Emergency PCI)',
     referralReason: 'Acute STEMI, Cardiogenic Shock (BP 88/56), severe retrosternal pain, SpO2 89%.',
     triagePriority: 'red',
@@ -759,8 +860,6 @@ export const INITIAL_REFERRALS: Referral[] = [
       consciousLevel: 'alert',
       recordedAt: '2026-09-04T13:40:00Z',
     },
-    referringDoctorName: 'Dr. Meera Gaikwad (Reg: MMC-2018/02/1129)',
-    referringUserId: 'user-rh-01',
     createdAt: '2026-09-04T13:45:00Z',
     status: 'ACCEPTED',
     ambulanceDispatched: true,
@@ -785,7 +884,11 @@ export const INITIAL_REFERRALS: Referral[] = [
     patientAge: 38,
     patientGender: 'Female',
     referringFacility: 'Nasrapur Primary Health Centre (PHC)',
+    referringFacilityId: 'fac-phc-nasrapur',
+    referringDoctorName: 'Dr. Suresh Patil',
+    referringUserId: 'user-phc-02',
     targetFacility: 'Bhor Rural Hospital (RH)',
+    targetFacilityId: 'fac-rh-bhor',
     specialtyRequired: 'General Medicine / Blood Bank Support',
     referralReason: 'Dengue NS1 positive with rapid platelet drop to 82,000, high continuous fever, petechiae.',
     triagePriority: 'yellow',
@@ -805,8 +908,6 @@ export const INITIAL_REFERRALS: Referral[] = [
       consciousLevel: 'alert',
       recordedAt: '2026-09-01T10:00:00Z',
     },
-    referringDoctorName: 'Dr. Suresh Patil',
-    referringUserId: 'user-phc-02',
     createdAt: '2026-09-04T11:20:00Z',
     status: 'ACCEPTED',
     ambulanceDispatched: false,
@@ -830,7 +931,11 @@ export const INITIAL_REFERRALS: Referral[] = [
     patientAge: 4,
     patientGender: 'Male',
     referringFacility: 'Ambavane Sub-Centre',
+    referringFacilityId: 'fac-sc-ambavane',
+    referringDoctorName: 'Smt. Vandana More (ASHA / Sub-Centre Incharge)',
+    referringUserId: 'user-asha-01',
     targetFacility: 'Bhor Rural Hospital (RH)',
+    targetFacilityId: 'fac-rh-bhor',
     specialtyRequired: 'Pediatrics',
     referralReason: 'Pediatric dehydration due to acute gastroenteritis, sunken eyes, drowsy sensorium.',
     triagePriority: 'red',
@@ -851,8 +956,6 @@ export const INITIAL_REFERRALS: Referral[] = [
       consciousLevel: 'voice',
       recordedAt: '2026-09-03T14:20:00Z',
     },
-    referringDoctorName: 'Smt. Vandana More (ASHA / Sub-Centre Incharge)',
-    referringUserId: 'user-asha-01',
     createdAt: '2026-09-04T14:10:00Z',
     status: 'PENDING',
     ambulanceDispatched: true,
@@ -876,7 +979,11 @@ export const INITIAL_REFERRALS: Referral[] = [
     patientAge: 45,
     patientGender: 'Male',
     referringFacility: 'Trimbak Rural Hospital',
+    referringFacilityId: 'fac-rh-trimbak',
+    referringDoctorName: 'Dr. Rameshwar Bhamre',
+    referringUserId: 'user-rh-trimbak',
     targetFacility: 'District Civil Hospital, Nashik',
+    targetFacilityId: 'fac-dh-nashik',
     specialtyRequired: 'General Surgery / Trauma Care',
     referralReason: 'Blunt abdominal trauma following vehicular collision, splenic laceration with hemoperitoneum.',
     triagePriority: 'red',
@@ -896,8 +1003,6 @@ export const INITIAL_REFERRALS: Referral[] = [
       consciousLevel: 'alert',
       recordedAt: '2026-09-04T15:00:00Z',
     },
-    referringDoctorName: 'Dr. Rameshwar Bhamre',
-    referringUserId: 'user-rh-trimbak',
     createdAt: '2026-09-04T15:05:00Z',
     status: 'PENDING',
     ambulanceDispatched: true,
@@ -918,10 +1023,14 @@ export const INITIAL_REFERRALS: Referral[] = [
     patientId: 'pat-007',
     patientName: 'Kiran Ramesh Shinde',
     patientAbha: '88-4411-9900-3322',
-    patientAge: 19,
+    patientAge: 18,
     patientGender: 'Male',
     referringFacility: 'District Hospital Aundh, Pune',
+    referringFacilityId: 'fac-dh-pune',
+    referringDoctorName: 'Dr. Ananya Kulkarni',
+    referringUserId: 'user-spec-01',
     targetFacility: 'Sassoon General Hospital & BJMC, Pune',
+    targetFacilityId: 'fac-sassoon-pune',
     specialtyRequired: 'Advanced Neurosurgery & Polytrauma ICU',
     referralReason: 'Severe traumatic brain injury (GCS 7/15), acute epidural hematoma with 8mm midline shift following high-speed RTA. District Hospital ICU at 95% capacity; emergency tertiary decompressive craniotomy required.',
     triagePriority: 'red',
@@ -942,8 +1051,6 @@ export const INITIAL_REFERRALS: Referral[] = [
       consciousLevel: 'pain',
       recordedAt: '2026-09-13T10:15:00Z',
     },
-    referringDoctorName: 'Dr. Vikram Kulkarni (Senior Surgeon, DH Aundh)',
-    referringUserId: 'user-specialist-pune',
     createdAt: '2026-09-13T10:30:00Z',
     status: 'ESCALATED',
     ambulanceDispatched: true,
@@ -966,7 +1073,9 @@ export const INITIAL_REFERRALS: Referral[] = [
     patientAge: 68,
     patientGender: 'Female',
     referringFacility: 'District Civil Hospital, Nashik',
+    referringFacilityId: 'fac-dh-nashik',
     targetFacility: 'Sassoon General Hospital & BJMC, Pune',
+    targetFacilityId: 'fac-sassoon-pune',
     specialtyRequired: 'Cardiology (Cath Lab / Structural Heart)',
     referralReason: 'Acute anterior wall STEMI complicated by severe cardiogenic shock and post-infarct ventricular septal rupture. Bedside 2D Echo shows 1.2cm defect. Emergency tertiary cardiothoracic intervention required.',
     triagePriority: 'red',
@@ -1011,7 +1120,9 @@ export const INITIAL_REFERRALS: Referral[] = [
     patientAge: 58,
     patientGender: 'Male',
     referringFacility: 'Sassoon General Hospital & BJMC, Pune',
+    referringFacilityId: 'fac-sassoon-pune',
     targetFacility: 'Velhe Primary Health Centre (PHC)',
+    targetFacilityId: 'fac-phc-velhe',
     specialtyRequired: 'Post-Surgical Convalescence & Community Follow-up',
     referralReason: 'Tertiary episode successfully resolved. Emergency open appendectomy for gangrenous appendicitis completed. Counter-referred down to Velhe PHC and Pasali Sub-Centre for home dressing and stitch removal.',
     triagePriority: 'green',
@@ -1210,19 +1321,7 @@ export const INITIAL_DRUG_STOCKS: DrugStockItem[] = [
     expiryDate: '2027-10-31',
     status: 'CRITICAL',
   },
-  {
-    id: 'stk-013',
-    facilityId: 'fac-phc-khedshivapur',
-    facilityName: 'Khed Shivapur Primary Health Centre (PHC)',
-    drugName: 'Adrenaline Injection IP (1 mg/ml)',
-    category: 'Critical Lifesaving',
-    currentStock: 45,
-    bufferStock: 30,
-    unit: 'Ampoules',
-    batchNumber: 'ADR-KSH-2026-045',
-    expiryDate: '2027-09-30',
-    status: 'OPTIMAL',
-  },
+
   {
     id: 'stk-014',
     facilityId: 'fac-phc-nasrapur',
@@ -1262,17 +1361,70 @@ export const INITIAL_DRUG_STOCKS: DrugStockItem[] = [
     expiryDate: '2027-12-31',
     status: 'OPTIMAL',
   },
+
   {
-    id: 'stk-017',
-    facilityId: 'fac-phc-khedshivapur',
-    facilityName: 'Khed Shivapur Primary Health Centre (PHC)',
+    id: 'stk-018',
+    facilityId: 'fac-state-reserve',
+    facilityName: 'State Medical Reserve Depot, Maharashtra',
+    drugName: 'Magnesium Sulphate 50% Inj',
+    category: 'Maternal Health',
+    currentStock: 500,
+    bufferStock: 100,
+    unit: 'Ampoules',
+    batchNumber: 'MGSO4-STATE-2026-09',
+    expiryDate: '2028-11-30',
+    status: 'OPTIMAL',
+  },
+  {
+    id: 'stk-019',
+    facilityId: 'fac-state-reserve',
+    facilityName: 'State Medical Reserve Depot, Maharashtra',
     drugName: 'Anti-Snake Venom (ASV Polyvalent Lyophilized)',
     category: 'Critical Lifesaving',
-    currentStock: 35,
-    bufferStock: 20,
+    currentStock: 850,
+    bufferStock: 200,
     unit: 'Vials (10ml)',
-    batchNumber: 'ASV-KSH-2026-031',
-    expiryDate: '2028-02-28',
+    batchNumber: 'ASV-STATE-2026-112',
+    expiryDate: '2028-12-31',
+    status: 'OPTIMAL',
+  },
+  {
+    id: 'stk-020',
+    facilityId: 'fac-state-reserve',
+    facilityName: 'State Medical Reserve Depot, Maharashtra',
+    drugName: 'Adrenaline Injection IP (1 mg/ml)',
+    category: 'Critical Lifesaving',
+    currentStock: 600,
+    bufferStock: 150,
+    unit: 'Ampoules',
+    batchNumber: 'ADR-STATE-2026-401',
+    expiryDate: '2028-10-31',
+    status: 'OPTIMAL',
+  },
+  {
+    id: 'stk-021',
+    facilityId: 'fac-nha-delhi',
+    facilityName: 'National Medical Reserve Depot, New Delhi',
+    drugName: 'Anti-Rabies Vaccine (ARV)',
+    category: 'Critical Lifesaving',
+    currentStock: 2000,
+    bufferStock: 500,
+    unit: 'Vials',
+    batchNumber: 'ARV-NAT-2026-901',
+    expiryDate: '2028-12-31',
+    status: 'OPTIMAL',
+  },
+  {
+    id: 'stk-022',
+    facilityId: 'fac-nha-delhi',
+    facilityName: 'National Medical Reserve Depot, New Delhi',
+    drugName: 'Anti-Snake Venom (ASV Polyvalent Lyophilized)',
+    category: 'Critical Lifesaving',
+    currentStock: 3000,
+    bufferStock: 500,
+    unit: 'Vials (10ml)',
+    batchNumber: 'ASV-NAT-2026-902',
+    expiryDate: '2028-12-31',
     status: 'OPTIMAL',
   }
 ];
