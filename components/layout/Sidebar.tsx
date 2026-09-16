@@ -771,11 +771,17 @@ export function Sidebar({
               <button
                 onClick={toggleLanguage}
                 className="group relative p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-800 transition-colors flex items-center gap-1 cursor-pointer"
-                title="Toggle Marathi / English"
+                title={language === 'mr' ? 'भाषा बदला (EN | मर)' : 'Switch Language (EN | मर)'}
               >
                 <Languages className="w-3.5 h-3.5 text-blue-500" />
-                {!isCollapsed && <span className="text-[10px] font-bold">{language === 'en' ? 'मराठी' : 'EN'}</span>}
-                {isCollapsed && <NavTooltip text={language === 'en' ? 'मराठी' : 'English'} />}
+                {!isCollapsed && (
+                  <span className="text-[10px] font-bold tracking-tight">
+                    <span className={language === 'en' ? 'text-blue-600 dark:text-blue-400 font-black' : 'text-slate-400'}>EN</span>
+                    <span className="text-slate-400 mx-0.5">|</span>
+                    <span className={language === 'mr' ? 'text-blue-600 dark:text-blue-400 font-black' : 'text-slate-400'}>मर</span>
+                  </span>
+                )}
+                {isCollapsed && <NavTooltip text={language === 'mr' ? 'भाषा: मराठी' : 'Language: English'} />}
               </button>
             </div>
           </div>
@@ -786,7 +792,7 @@ export function Sidebar({
               <button
                 onClick={logout}
                 className="group relative p-2 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer flex items-center justify-center"
-                title={language === 'mr' ? 'बाहेर पडा (Sign Out)' : 'Sign Out'}
+                title={language === 'mr' ? 'बाहेर पडा' : 'Sign Out'}
               >
                 <LogOut className="w-4 h-4" />
                 <NavTooltip text={language === 'mr' ? 'बाहेर पडा' : 'Sign Out'} />

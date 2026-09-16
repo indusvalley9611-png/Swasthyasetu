@@ -16,15 +16,35 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>('en');
 
   useEffect(() => {
-    const saved = localStorage.getItem('swasthyasetu_lang');
-    if (saved === 'en' || saved === 'mr') {
-      setLanguageState(saved);
+    try {
+      const saved = localStorage.getItem('swasthyasetu_lang');
+      if (saved === 'en' || saved === 'mr') {
+        setLanguageState(saved);
+        return;
+      }
+      // On first load, default to browser/device locale if detectable, else English
+      if (typeof navigator !== 'undefined') {
+        const browserLang = (navigator.language || (navigator.languages && navigator.languages[0]) || '').toLowerCase();
+        if (browserLang.startsWith('mr') || browserLang.includes('marathi')) {
+          setLanguageState('mr');
+          localStorage.setItem('swasthyasetu_lang', 'mr');
+          return;
+        }
+      }
+      setLanguageState('en');
+      localStorage.setItem('swasthyasetu_lang', 'en');
+    } catch {
+      // Fallback
     }
   }, []);
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
-    localStorage.setItem('swasthyasetu_lang', lang);
+    try {
+      localStorage.setItem('swasthyasetu_lang', lang);
+    } catch {
+      // ignore
+    }
   };
 
   const toggleLanguage = () => {
