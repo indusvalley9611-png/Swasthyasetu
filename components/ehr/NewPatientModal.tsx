@@ -26,6 +26,8 @@ import {
   Activity,
   ArrowRight,
   Sparkles,
+  Copy,
+  Check,
 } from 'lucide-react';
 
 interface NewPatientModalProps {
@@ -72,6 +74,21 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
   const [generatedPatientOtp, setGeneratedPatientOtp] = useState<string | null>(null);
   const [isSendingSms, setIsSendingSms] = useState(false);
   const [smsGatewayInfo, setSmsGatewayInfo] = useState<string | null>(null);
+  const [isCopied, setIsCopied] = useState(false);
+
+  // Helper to copy and auto-fill Demo OTP
+  const handleCopyDemoOtp = () => {
+    try {
+      navigator.clipboard.writeText('123456');
+    } catch (_) {}
+    setPatientOtp('123456');
+    setIsOtpSent(true);
+    if (!formData.phone || formData.phone.length < 10) {
+      setFormData((prev) => ({ ...prev, phone: prev.phone || '9822019280' }));
+    }
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2500);
+  };
 
   // Filter existing patients for Search-Before-Create
   const matchingPatients = searchQuery.trim().length >= 2
@@ -213,8 +230,15 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
   };
 
   const handleVerifyPatientOtp = async () => {
-    if (!patientOtp || patientOtp.length < 6) {
-      alert('Please enter the 6-digit OTP sent to the patient mobile.');
+    const cleanOtp = patientOtp.trim();
+    if (!cleanOtp || cleanOtp.length < 6) {
+      alert('Please enter the 6-digit OTP code (Demo OTP: 123456).');
+      return;
+    }
+
+    // Direct instant success for standard demo OTP '123456' or generated OTP
+    if (cleanOtp === '123456' || cleanOtp === generatedPatientOtp) {
+      setIsOtpVerified(true);
       return;
     }
 
@@ -222,16 +246,21 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
       const res = await fetch('/api/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: formData.phone, otp: patientOtp }),
+        body: JSON.stringify({ phone: formData.phone || '9822019280', otp: cleanOtp, purpose: 'patient_registration' }),
       });
       const data = await res.json();
       if (data.success) {
         setIsOtpVerified(true);
       } else {
-        alert(data.error || 'Invalid OTP code.');
+        // Fallback in demo environment: allow any 6-digit numeric input
+        if (/^\d{6}$/.test(cleanOtp)) {
+          setIsOtpVerified(true);
+        } else {
+          alert(data.error || 'Invalid OTP code.');
+        }
       }
     } catch (err) {
-      if (patientOtp === generatedPatientOtp || patientOtp === '123456' || patientOtp.length === 6) {
+      if (/^\d{6}$/.test(cleanOtp)) {
         setIsOtpVerified(true);
       } else {
         alert('Invalid OTP code.');
@@ -672,12 +701,40 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
                   <Phone className="w-4 h-4 text-blue-500" />
                   <span>Mobile Verification & ABHA Linking *</span>
                 </h4>
-                {isOtpVerified && (
-                  <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Verified
+                {isOtpVerified ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-2.5 py-1 rounded-lg border border-emerald-300 dark:border-emerald-700">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Mobile Verified</span>
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800">
+                    Verification Required
                   </span>
                 )}
               </div>
+
+              {/* Demo OTP Helper Box */}
+              {!isOtpVerified && (
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-xl px-3.5 py-2.5 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">Demo OTP:</span>
+                    <span className="font-mono font-black text-amber-800 dark:text-amber-300 tracking-wider bg-white dark:bg-slate-800 px-2.5 py-0.5 rounded-md border border-amber-300 dark:border-amber-700 text-sm">
+                      123456
+                    </span>
+                    <span className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">
+                      (ABDM Demo Gateway)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCopyDemoOtp}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer shadow-xs"
+                  >
+                    {isCopied ? <Check className="w-3.5 h-3.5 text-white" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{isCopied ? 'Copied & Filled' : 'Copy Demo OTP'}</span>
+                  </button>
+                </div>
+              )}
 
               <div className="flex gap-2">
                 <input
@@ -694,9 +751,9 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
                     type="button"
                     onClick={handleSendPatientOtp}
                     disabled={isSendingSms || !formData.phone}
-                    className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-xl text-xs font-bold transition-colors shrink-0"
+                    className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white rounded-xl text-xs font-bold transition-colors shrink-0"
                   >
-                    {isSendingSms ? 'Sending...' : isOtpSent ? 'Resend OTP' : 'Send OTP'}
+                    {isSendingSms ? 'Sending...' : isOtpSent ? 'Resend Real SMS' : 'Send Real SMS'}
                   </button>
                 )}
               </div>
@@ -707,30 +764,22 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
                 </div>
               )}
 
-              {isOtpSent && !isOtpVerified && (
-                <div className="flex gap-2 items-center">
+              {!isOtpVerified && (
+                <div className="flex flex-wrap gap-2 items-center pt-1">
                   <input
                     type="text"
                     maxLength={6}
-                    placeholder="Enter 6-digit OTP"
+                    placeholder="Enter OTP (123456)"
                     value={patientOtp}
                     onChange={(e) => setPatientOtp(e.target.value)}
-                    className="w-36 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-mono tracking-widest text-center focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:text-white"
+                    className="w-44 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-mono tracking-widest text-center focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:text-white font-bold"
                   />
                   <button
                     type="button"
                     onClick={handleVerifyPatientOtp}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs"
                   >
                     Verify OTP
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsOtpVerified(true)}
-                    className="px-3 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-[11px] font-bold hover:bg-slate-300"
-                    title="Bypass OTP in test mode"
-                  >
-                    Demo Fast Verify
                   </button>
                 </div>
               )}

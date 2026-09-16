@@ -38,13 +38,14 @@ export async function POST(req: NextRequest) {
 
     const userProfile = PRE_REGISTERED_STAFF[cleanPhone];
     if (!userProfile) {
-      return NextResponse.json(
-        { success: false, error: 'User profile not found in HPR registry.' },
-        { status: 401 }
-      );
+      // Valid OTP for patient registration / general phone verification
+      return NextResponse.json({
+        success: true,
+        message: 'Mobile number verified successfully via ABDM Gateway.',
+      });
     }
 
-    // Generate Session Token
+    // Generate Session Token for Staff
     const sessionToken = generateSessionToken();
     sessionStore.set(sessionToken, {
       userId: userProfile.id,
