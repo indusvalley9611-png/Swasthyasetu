@@ -295,7 +295,7 @@ export interface ReplenishmentRequestItem {
   sourceFacilityId?: string;
   /** Resolved dynamically from facilities[] — never hard-coded */
   sourceFacilityName?: string;
-  supplyTier?: 'PHC' | 'DISTRICT';
+  supplyTier?: 'PHC' | 'DISTRICT' | 'STATE' | 'NATIONAL';
   /** Links to a StockTransfer.id for this item */
   transferId?: string;
 }
@@ -381,7 +381,8 @@ export interface StockTransfer {
   allocatedByDistrictUserId?: string;
   allocatedByDistrictUserName?: string;
   allocatedAt?: string;
-  supplyTier?: 'PHC' | 'DISTRICT';
+  supplyTier?: 'PHC' | 'DISTRICT' | 'STATE' | 'NATIONAL';
+  supplierAvailableSurplus?: number;
   /** Links this transfer to a parent ReplenishmentRequest.id */
   requestId?: string;
   /** Links this transfer to a specific ReplenishmentRequestItem.id within the parent request */

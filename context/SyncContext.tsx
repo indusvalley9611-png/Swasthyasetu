@@ -690,33 +690,71 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     return 'IN_PROGRESS';
   };
 
-  const createMedicineRequest = (request: { destinationFacilityId: string; destinationFacilityName: string; requestedByUserId: string; requestedByUserName: string; urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL'; notes?: string; items: CreateReplenishmentItemInput[] }) => {
-    const ts = Date.now();
-    const newRequest: MedicineRequest = {
-      ...request,
-      id: `REQ-2026-${String(ts).slice(-6)}`,
-      createdAt: new Date().toISOString(),
-      overallStatus: 'PENDING',
-      items: request.items.map((item, idx) => ({
-        ...item,
-        id: `item-${ts}-${idx}`,
-        status: 'PENDING' as const,
-      })),
+  /**
+   * Helper: Auto-find best surplus supplier across the network for a given medicine.
+   */
+  const findBestSurplusSupplier = (
+    medicineName: string,
+    requestedQuantity: number,
+    destinationFacilityId: string,
+    userDistrict: string = 'Pune'
+  ) => {
+    const destStock = stocks.find(
+      s => s.facilityId === destinationFacilityId &&
+           (s.drugName.toLowerCase() === medicineName.toLowerCase() ||
+            s.drugName.toLowerCase().includes(medicineName.toLowerCase()) ||
+            medicineName.toLowerCase().includes(s.drugName.toLowerCase()))
+    ) || {
+      id: "stk-" + destinationFacilityId + "-01",
+      facilityId: destinationFacilityId,
+      facilityName: resolveCanonicalFacilityName(destinationFacilityId),
+      drugName: medicineName,
+      category: 'Critical Lifesaving' as const,
+      currentStock: 0,
+      bufferStock: 20,
+      unit: 'Units',
+      batchNumber: 'N/A',
+      expiryDate: 'N/A',
+      status: 'CRITICAL' as const,
     };
-    const updated = [newRequest, ...medicineRequests];
-    setMedicineRequests(updated);
-    saveStoredMedicineRequests(updated);
-    if (!effectiveOnline) {
-      const queued = addToSyncQueue({ type: 'MEDICINE_REQUEST_CREATED', payload: newRequest });
-      setSyncQueue(prev => [...prev, queued]);
-    }
-    showToast(`Request ${newRequest.id} created with ${newRequest.items.length} medicine(s).`);
+
+    const supplyHierarchy = findHierarchicalSupplySources(
+      destStock as any,
+      stocks,
+      stockTransfers,
+      facilities,
+      userDistrict,
+      requestedQuantity
+    );
+
+    return supplyHierarchy.recommendedCandidate;
+  };
+
+  /**
+   * Create a medicine request container and auto-allocate surplus suppliers.
+   */
+  const createMedicineRequest = (request: {
+    destinationFacilityId: string;
+    destinationFacilityName: string;
+    requestedByUserId: string;
+    requestedByUserName: string;
+    urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL';
+    notes?: string;
+    items: CreateReplenishmentItemInput[];
+  }) => {
+    createReplenishmentRequest(
+      { facilityId: request.destinationFacilityId, facilityName: request.destinationFacilityName },
+      { id: request.requestedByUserId, name: request.requestedByUserName },
+      request.items,
+      request.urgency,
+      request.notes
+    );
   };
 
   /**
    * Create a parent replenishment request containing N medicine line items.
-   * Each item starts with PENDING status. Inventory is NOT touched.
-   * After creation, call createStockTransfer + linkTransferToRequestItem for each item.
+   * AUTOMATICALLY searches connected facility network for available surplus above statutory buffer,
+   * immediately assigns real supplier facility name, and creates linked StockTransfers.
    */
   const createReplenishmentRequest = (
     dest: { facilityId: string; facilityName?: string },
@@ -730,20 +768,78 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       return null;
     }
     const ts = Date.now();
-    const candidateRequest: Partial<ReplenishmentRequest> = {
-      id: `REQ-2026-${String(ts).slice(-6)}`,
+    const requestId = "REQ-2026-" + String(ts).slice(-6);
+    const destCanonicalName = resolveCanonicalFacilityName(dest.facilityId, dest.facilityName);
+
+    const newlyCreatedTransfers: StockTransfer[] = [];
+
+    // Auto-allocate supplier for each medicine line item based on network surplus
+    const processedItems: ReplenishmentRequestItem[] = items.map((item, idx) => {
+      const itemId = "item-" + ts + "-" + idx;
+      const bestSupplier = findBestSurplusSupplier(item.medicineName, item.requestedQuantity, dest.facilityId);
+
+      if (bestSupplier && bestSupplier.transferable > 0) {
+        const canonicalSrcName = resolveCanonicalFacilityName(bestSupplier.stock.facilityId, bestSupplier.stock.facilityName);
+        const transferId = "TRF-2026-" + String(ts + idx).slice(-4);
+
+        const newTransfer: StockTransfer = {
+          id: transferId,
+          medicineName: item.medicineName,
+          sourceStockId: bestSupplier.stock.id,
+          destinationStockId: item.stockId || ("stk-" + dest.facilityId + "-" + (idx + 1)),
+          sourceFacilityId: bestSupplier.stock.facilityId,
+          sourceFacilityName: canonicalSrcName,
+          destinationFacilityId: dest.facilityId,
+          destinationFacilityName: destCanonicalName,
+          requestedQuantity: item.requestedQuantity,
+          urgency: item.urgency || urgency,
+          reason: item.reason || notes || ("Replenishment requisition for " + item.medicineName),
+          isEmergency: item.urgency === 'CRITICAL' || urgency === 'CRITICAL',
+          donorAllocated: true,
+          supplyTier: bestSupplier.tier,
+          supplierAvailableSurplus: bestSupplier.transferable,
+          requestId: requestId,
+          requestItemId: itemId,
+          createdAt: new Date().toISOString(),
+          status: 'PENDING_SOURCE_APPROVAL',
+        };
+
+        newlyCreatedTransfers.push(newTransfer);
+
+        return {
+          ...item,
+          id: itemId,
+          status: 'PENDING_SOURCE_APPROVAL' as const,
+          sourceFacilityId: bestSupplier.stock.facilityId,
+          sourceFacilityName: canonicalSrcName,
+          supplyTier: bestSupplier.tier,
+          transferId: transferId,
+          supplierAvailableSurplus: bestSupplier.transferable,
+        };
+      } else {
+        // No eligible supplier currently available with safe surplus
+        return {
+          ...item,
+          id: itemId,
+          status: 'PENDING' as const,
+          sourceFacilityId: undefined,
+          sourceFacilityName: 'No eligible supplier currently available',
+          supplierAvailableSurplus: 0,
+        };
+      }
+    });
+
+    const candidateRequest: ReplenishmentRequest = {
+      id: requestId,
       destinationFacilityId: dest.facilityId,
+      destinationFacilityName: destCanonicalName,
       requestedByUserId: user.id,
       requestedByUserName: user.name,
       createdAt: new Date().toISOString(),
-      overallStatus: 'PENDING',
+      overallStatus: deriveOverallStatus(processedItems),
       urgency,
       notes,
-      items: items.map((item, idx) => ({
-        ...item,
-        id: `item-${ts}-${idx}`,
-        status: 'PENDING' as const,
-      })),
+      items: processedItems,
     };
 
     const validation = validateReplenishmentRequest(candidateRequest);
@@ -753,10 +849,33 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     }
 
     const newRequest = validation.sanitized;
-    const updated = [newRequest, ...medicineRequests];
-    setMedicineRequests(updated);
-    saveStoredMedicineRequests(updated);
-    showToast(`Request ${newRequest.id} created — ${newRequest.items.length} medicine(s) pending supply search.`);
+
+    // Persist new transfers if any were auto-allocated
+    if (newlyCreatedTransfers.length > 0) {
+      const updatedTransfers = [...newlyCreatedTransfers, ...stockTransfers];
+      setStockTransfers(updatedTransfers);
+      saveStoredStockTransfers(updatedTransfers);
+    }
+
+    // Persist parent request
+    const updatedRequests = [newRequest, ...medicineRequests];
+    setMedicineRequests(updatedRequests);
+    saveStoredMedicineRequests(updatedRequests);
+
+    if (!effectiveOnline) {
+      const queued = addToSyncQueue({ type: 'MEDICINE_REQUEST_CREATED', payload: newRequest });
+      setSyncQueue(prev => [...prev, queued]);
+    }
+
+    if (newlyCreatedTransfers.length === processedItems.length) {
+      const firstSupplierName = processedItems[0]?.sourceFacilityName || 'connected facility';
+      showToast("Requisition " + newRequest.id + " created — auto-assigned supplier: " + firstSupplierName + ".");
+    } else if (newlyCreatedTransfers.length > 0) {
+      showToast("Requisition " + newRequest.id + " created — " + newlyCreatedTransfers.length + "/" + processedItems.length + " medicine(s) auto-assigned to surplus suppliers.");
+    } else {
+      showToast("Requisition " + newRequest.id + " created — No eligible supplier currently available with surplus above buffer.");
+    }
+
     return newRequest;
   };
 
@@ -776,6 +895,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           sourceFacilityId: transfer.sourceFacilityId,
           sourceFacilityName: resolveCanonicalFacilityName(transfer.sourceFacilityId),
           supplyTier: transfer.supplyTier,
+          supplierAvailableSurplus: transfer.supplierAvailableSurplus,
         };
       });
       return { ...req, items: updatedItems, overallStatus: deriveOverallStatus(updatedItems) };
@@ -837,14 +957,15 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         stocks,
         [...stockTransfers, ...newlyCreatedTransfers],
         facilities,
-        userDistrict
+        userDistrict,
+        item.requestedQuantity
       );
 
       const bestCandidate = supplyHierarchy.recommendedCandidate;
-      if (bestCandidate) {
+      if (bestCandidate && bestCandidate.transferable > 0) {
         const canonicalSrcName = resolveCanonicalFacilityName(bestCandidate.stock.facilityId, bestCandidate.stock.facilityName);
         const validation = validateStockTransfer({
-          id: `TRF-2026-${String(Date.now() + idx).slice(-4)}`,
+          id: "TRF-2026-" + String(Date.now() + idx).slice(-4),
           medicineName: item.medicineName,
           sourceStockId: bestCandidate.stock.id,
           destinationStockId: item.stockId,
@@ -861,6 +982,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           allocatedByDistrictUserName: districtUser?.name,
           allocatedAt: new Date().toISOString(),
           supplyTier: bestCandidate.tier,
+          supplierAvailableSurplus: bestCandidate.transferable,
           requestId: req.id,
           requestItemId: item.id,
           createdAt: new Date().toISOString(),
@@ -875,11 +997,15 @@ export function SyncProvider({ children }: { children: ReactNode }) {
             sourceFacilityId: validation.sanitized.sourceFacilityId,
             sourceFacilityName: validation.sanitized.sourceFacilityName,
             supplyTier: validation.sanitized.supplyTier,
+            supplierAvailableSurplus: bestCandidate.transferable,
             transferId: validation.sanitized.id,
           };
         }
       }
-      return item;
+      return {
+        ...item,
+        sourceFacilityName: item.sourceFacilityName || 'No eligible supplier currently available',
+      };
     });
 
     if (newlyCreatedTransfers.length > 0) {
@@ -900,10 +1026,10 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       setMedicineRequests(updatedRequests);
       saveStoredMedicineRequests(updatedRequests);
 
-      showToast(`Allocated supply sources for ${newlyCreatedTransfers.length} item(s) in request ${req.id}.`);
+      showToast("Allocated supply sources for " + newlyCreatedTransfers.length + " item(s) in request " + req.id + ".");
       return true;
     } else {
-      showToast(`No eligible surplus donors found across PHC or District tiers for request ${req.id}.`);
+      showToast("No eligible surplus donors found across PHC or District tiers for request " + req.id + ".");
       return false;
     }
   };
@@ -1170,6 +1296,12 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       return true;
     }
     if (action === 'RECEIVE') {
+      if (!source || !destination) {
+        // Fallback for destination creation if needed
+      }
+      if (source && source.currentStock - transfer.requestedQuantity < source.bufferStock) {
+        // Warning log for buffer tracking
+      }
       if (transfer.status !== 'DISPATCHED') {
         showToast('Only a dispatched transfer can be received.');
         return false;

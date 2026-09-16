@@ -227,7 +227,7 @@ function TransferTable({ title, transfers, workspaceId, userRole, facilities, on
   ); 
 }
 
-function SupplyForm({ destination, stocks, facilities, transfers, userDistrict, workspaceName, onClose, onRequestRefill, onSubmit }: { destination: DrugStockItem; stocks: DrugStockItem[]; facilities: import('@/lib/types').Facility[]; transfers: StockTransfer[]; userDistrict: string; workspaceName: string; onClose: () => void; onRequestRefill: () => void; onSubmit: (source: DrugStockItem, quantity: number, urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL', reason: string, tier: 'PHC' | 'DISTRICT') => void }) { 
+function SupplyForm({ destination, stocks, facilities, transfers, userDistrict, workspaceName, onClose, onRequestRefill, onSubmit }: { destination: DrugStockItem; stocks: DrugStockItem[]; facilities: import('@/lib/types').Facility[]; transfers: StockTransfer[]; userDistrict: string; workspaceName: string; onClose: () => void; onRequestRefill: () => void; onSubmit: (source: DrugStockItem, quantity: number, urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL', reason: string, tier: 'PHC' | 'DISTRICT' | 'STATE' | 'NATIONAL') => void }) { 
   const result = findHierarchicalSupplySources(destination, stocks, transfers, facilities, userDistrict);
   
   const allCandidates = [

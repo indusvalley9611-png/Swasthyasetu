@@ -27,9 +27,12 @@ export function getMedicineStatus(stock: DrugStockItem): ResourceStatus {
 }
 
 export function getSafeTransferableQuantity(stock: DrugStockItem, transfers: StockTransfer[] = []): number {
-  return Math.max(0, stock.currentStock - stock.bufferStock);
+  const pendingOutgoing = (transfers || [])
+    .filter(t => t.sourceStockId === stock.id && (t.status === 'PENDING_SOURCE_APPROVAL' || t.status === 'PENDING' || t.status === 'APPROVED' || t.status === 'DISPATCHED'))
+    .reduce((sum, t) => sum + (t.requestedQuantity || 0), 0);
+  const rawSurplus = Math.max(0, stock.currentStock - stock.bufferStock);
+  return Math.max(0, rawSurplus - pendingOutgoing);
 }
-
 
 export function isExpiringSoon(expiryDate: string, now = new Date(), windowDays = EXPIRY_WINDOW_DAYS): boolean {
   if (expiryDate === 'N/A') return false;
@@ -49,7 +52,7 @@ export function getDistanceKm(origin: Facility, destination: Facility): number |
 }
 
 export interface SupplyCandidate {
-  tier: 'PHC' | 'DISTRICT';
+  tier: 'PHC' | 'DISTRICT' | 'STATE' | 'NATIONAL';
   tierLabel: string;
   badgeColor: string;
   stock: DrugStockItem;
@@ -63,9 +66,12 @@ export interface HierarchicalSupplyResult {
   recommendedCandidate: SupplyCandidate | null;
   phcCandidates: SupplyCandidate[];
   districtCandidates: SupplyCandidate[];
+  stateCandidates?: SupplyCandidate[];
   phcAvailableUnits: number;
   districtAvailableUnits: number;
+  stateAvailableUnits?: number;
   escalatedToDistrict: boolean;
+  escalatedToState?: boolean;
 }
 
 export function findHierarchicalSupplySources(
@@ -73,12 +79,13 @@ export function findHierarchicalSupplySources(
   stocks: DrugStockItem[],
   transfers: StockTransfer[],
   facilities: Facility[],
-  userDistrict = 'Pune'
+  userDistrict = 'Pune',
+  requestedQuantity: number = 1
 ): HierarchicalSupplyResult {
   const destFacility = resolveCanonicalFacility(destination.facilityId) || facilities.find(f => f.id === destination.facilityId && isValidCanonicalFacilityId(f.id));
 
   // Matching drug stocks excluding destination itself — strictly valid canonical facilities only
-  // Use case-insensitive fuzzy matching: either name contains the other (handles user-typed vs canonical names)
+  // Use case-insensitive fuzzy matching: either name contains the other
   const destDrugLower = destination.drugName.toLowerCase();
   const matchingStocks = stocks.filter(
     s => {
@@ -93,6 +100,7 @@ export function findHierarchicalSupplySources(
 
   const phcCandidates: SupplyCandidate[] = [];
   const districtCandidates: SupplyCandidate[] = [];
+  const stateCandidates: SupplyCandidate[] = [];
 
   matchingStocks.forEach(stock => {
     const facility = resolveCanonicalFacility(stock.facilityId) || facilities.find(f => f.id === stock.facilityId);
@@ -128,38 +136,79 @@ export function findHierarchicalSupplySources(
         isAvailable: transferable > 0,
       });
     }
+    // 3. Level 3: State Medical Reserve Depot / Tertiary Centres
+    else if (facility && ((facility.type as string) === 'State Medical Reserve' || stock.facilityId === 'fac-state-reserve' || (facility.type as string) === 'Tertiary Hospital')) {
+      stateCandidates.push({
+        tier: 'STATE',
+        tierLabel: 'State Reserve',
+        badgeColor: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-300',
+        stock,
+        facility,
+        distanceKm,
+        transferable,
+        isAvailable: transferable > 0,
+      });
+    }
   });
 
-  // Sort available candidates by proximity or quantity
+  // Sort available candidates by proximity and surplus quantity
   phcCandidates.sort((a, b) => {
     if (a.distanceKm !== null && b.distanceKm !== null) return a.distanceKm - b.distanceKm;
     return b.transferable - a.transferable;
   });
   districtCandidates.sort((a, b) => b.transferable - a.transferable);
+  stateCandidates.sort((a, b) => b.transferable - a.transferable);
 
   const phcAvailableUnits = phcCandidates.reduce((sum, c) => sum + c.transferable, 0);
   const districtAvailableUnits = districtCandidates.reduce((sum, c) => sum + c.transferable, 0);
+  const stateAvailableUnits = stateCandidates.reduce((sum, c) => sum + c.transferable, 0);
 
-  // Hierarchy prioritization logic: PHC Priority 1 -> District Priority 2
+  // Smart Hierarchy Prioritization:
+  // 1. Prefer PHC that can fulfill requested quantity safely without buffer breach
+  // 2. If PHC has insufficient surplus for requested amount, escalate to District Hospital
+  // 3. If District has insufficient surplus, escalate to State Reserve
+  // 4. Otherwise, pick best available candidate with positive surplus
   let recommendedCandidate: SupplyCandidate | null = null;
   let escalatedToDistrict = false;
+  let escalatedToState = false;
+
+  const phcCanFulfill = phcCandidates.find(c => c.isAvailable && c.transferable >= requestedQuantity);
+  const distCanFulfill = districtCandidates.find(c => c.isAvailable && c.transferable >= requestedQuantity);
+  const stateCanFulfill = stateCandidates.find(c => c.isAvailable && c.transferable >= requestedQuantity);
 
   const bestPhc = phcCandidates.find(c => c.isAvailable);
   const bestDistrict = districtCandidates.find(c => c.isAvailable);
+  const bestState = stateCandidates.find(c => c.isAvailable);
 
-  if (bestPhc && bestPhc.transferable > 0) {
+  if (phcCanFulfill) {
+    recommendedCandidate = phcCanFulfill;
+  } else if (distCanFulfill) {
+    recommendedCandidate = distCanFulfill;
+    escalatedToDistrict = true;
+  } else if (stateCanFulfill) {
+    recommendedCandidate = stateCanFulfill;
+    escalatedToDistrict = true;
+    escalatedToState = true;
+  } else if (bestPhc && bestPhc.transferable > 0) {
     recommendedCandidate = bestPhc;
   } else if (bestDistrict && bestDistrict.transferable > 0) {
     recommendedCandidate = bestDistrict;
     escalatedToDistrict = true;
+  } else if (bestState && bestState.transferable > 0) {
+    recommendedCandidate = bestState;
+    escalatedToDistrict = true;
+    escalatedToState = true;
   }
 
   return {
     recommendedCandidate,
     phcCandidates,
     districtCandidates,
+    stateCandidates,
     phcAvailableUnits,
     districtAvailableUnits,
+    stateAvailableUnits,
     escalatedToDistrict,
+    escalatedToState,
   };
 }

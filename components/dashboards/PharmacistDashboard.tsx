@@ -422,24 +422,64 @@ export function PharmacistDashboard() {
     }
   };
 
-  // Handle Creating New Dynamic Requisition from this Facility
+  // Handle Creating New Dynamic Requisition from this Facility with Auto-Supplier Discovery
   const handleCreateRequisition = () => {
     const drugName = reqDrugName.trim();
     if (!drugName) return;
     const qty = parseInt(reqQuantity, 10);
     if (isNaN(qty) || qty <= 0) return;
-    const targetSourceId = reqSourceFacilityId || eligibleDonorFacilities[0]?.id || 'fac-dh-pune';
 
-    const sourceStock = stocks.find(
+    let targetSourceId = reqSourceFacilityId;
+    let sourceStock = stocks.find(
       s => s.facilityId === targetSourceId &&
-      (s.drugName.toLowerCase() === drugName.toLowerCase() || s.drugName.toLowerCase().includes(drugName.toLowerCase()))
+      (s.drugName.toLowerCase() === drugName.toLowerCase() || s.drugName.toLowerCase().includes(drugName.toLowerCase()) || drugName.toLowerCase().includes(s.drugName.toLowerCase()))
     );
+    let sourceName = targetSourceId ? resolveCanonicalFacilityName(targetSourceId) : '';
+    let surplusUnits = sourceStock ? getSafeTransferableQuantity(sourceStock, stockTransfers) : 0;
+
+    // If no manual source chosen, auto-search connected network for available surplus above statutory buffer
+    if (!targetSourceId) {
+      const destStock = facilityStocks.find(s => s.drugName.toLowerCase() === drugName.toLowerCase()) || {
+        id: `stk-${currentFacilityId}-01`,
+        facilityId: currentFacilityId,
+        facilityName: currentFacilityName,
+        drugName: drugName,
+        category: 'Critical Lifesaving' as const,
+        currentStock: 0,
+        bufferStock: 20,
+        unit: 'Units',
+        batchNumber: 'N/A',
+        expiryDate: 'N/A',
+        status: 'CRITICAL' as const,
+      };
+
+      const supplyHierarchy = findHierarchicalSupplySources(
+        destStock as any,
+        stocks,
+        stockTransfers,
+        facilities,
+        userDistrict,
+        qty
+      );
+
+      const bestCandidate = supplyHierarchy.recommendedCandidate;
+      if (bestCandidate && bestCandidate.transferable > 0) {
+        targetSourceId = bestCandidate.stock.facilityId;
+        sourceStock = bestCandidate.stock;
+        sourceName = resolveCanonicalFacilityName(bestCandidate.stock.facilityId, bestCandidate.stock.facilityName);
+        surplusUnits = bestCandidate.transferable;
+      }
+    }
+
+    if (!targetSourceId || !sourceStock) {
+      alert('No eligible supplier currently available in connected network with surplus above statutory buffer.');
+      return;
+    }
 
     const destStock = facilityStocks.find(s => s.drugName.toLowerCase() === drugName.toLowerCase());
-    const sourceName = resolveCanonicalFacilityName(targetSourceId);
 
     createStockTransfer({
-      sourceStockId: sourceStock?.id || `stk-${targetSourceId}-01`,
+      sourceStockId: sourceStock.id,
       destinationStockId: destStock?.id || `stk-${currentFacilityId}-01`,
       sourceFacilityId: targetSourceId,
       sourceFacilityName: sourceName,
@@ -450,6 +490,7 @@ export function PharmacistDashboard() {
       urgency: reqUrgency,
       reason: reqReason || `Replenishment requisition for ${drugName} formulary buffer restoration.`,
       donorAllocated: true,
+      supplierAvailableSurplus: surplusUnits,
       isEmergency: reqUrgency === 'CRITICAL',
       transportMode: reqUrgency === 'CRITICAL' ? '108_AMBULANCE' : 'DISTRICT_MEDICAL_COURIER',
     });
@@ -1062,7 +1103,7 @@ export function PharmacistDashboard() {
                         <td className="px-4 py-2.5">
                           <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                             <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span>{req.sourceFacilityName || 'Unallocated Donor'}</span>
+                            <span>{req.sourceFacilityName || 'No eligible supplier currently available'}</span>
                           </div>
                           {req.rejectionReason && (
                             <div className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold mt-0.5">

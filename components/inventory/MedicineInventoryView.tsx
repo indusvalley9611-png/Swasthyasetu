@@ -428,7 +428,7 @@ function SupplyModal({
   workspaceName: string;
   onClose: () => void;
   onRequestRefill: () => void;
-  onSubmit: (source: DrugStockItem, quantity: number, urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL', reason: string, tier: 'PHC' | 'DISTRICT') => void;
+  onSubmit: (source: DrugStockItem, quantity: number, urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL', reason: string, tier: 'PHC' | 'DISTRICT' | 'STATE' | 'NATIONAL') => void;
 }) {
   const result = findHierarchicalSupplySources(destination, stocks, transfers, facilities, userDistrict);
   const allCandidates = [...result.phcCandidates, ...result.districtCandidates];
