@@ -137,7 +137,7 @@ export function DistrictTrackingCenter({
 
     // From medicineRequests items not already in stockTransfers
     (medicineRequests || []).forEach((req) => {
-      (req.items || []).forEach((item) => {
+      (req.items || []).forEach((item: ReplenishmentRequestItem) => {
         // Only include if not duplicate of a transfer
         if (item.transferId && items.some((it) => it.id === item.transferId)) {
           return;

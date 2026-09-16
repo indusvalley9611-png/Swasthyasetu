@@ -1,7 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { Patient, Referral, Facility, DrugStockItem, OfflineSyncItem, MedicineRequest, ReplenishmentRequest, ReplenishmentRequestItem, CreateReplenishmentItemInput, ResourceAlert, StockTransfer, FollowUpTask } from '@/lib/types';
+import { Patient, Referral, Facility, DrugStockItem, OfflineSyncItem, MedicineRequest, ReplenishmentRequest, ReplenishmentRequestItem, CreateReplenishmentItemInput, ResourceAlert, StockTransfer, FollowUpTask, HospitalBedSlot, EmergencyWalkIn, FacilityDischargeRecord, HospitalDepartment } from '@/lib/types';
+
 import {
   initializeStorage,
   getStoredPatients,
@@ -20,6 +21,12 @@ import {
   saveStoredResourceAlerts,
   getStoredFollowUps,
   saveStoredFollowUps,
+  getStoredBedSlots,
+  saveStoredBedSlots,
+  getStoredWalkIns,
+  saveStoredWalkIns,
+  getStoredDischarges,
+  saveStoredDischarges,
   getSyncQueue,
   addToSyncQueue,
   clearSyncQueue,
@@ -47,6 +54,32 @@ interface SyncContextType {
   createReferral: (referral: Referral) => void;
   updateReferralStatus: (referralId: string, status: Referral['status'], updates?: Partial<Referral>) => void;
   updateBedOccupancy: (facilityId: string, field: 'occupiedBeds' | 'icuBedsOccupied' | 'ventilatorsOccupied' | 'oxygenBedsOccupied', delta: number) => void;
+  bedSlots: HospitalBedSlot[];
+  walkIns: EmergencyWalkIn[];
+  dischargeRecords: FacilityDischargeRecord[];
+  admitPatientToBed: (params: {
+    bedId: string;
+    department: HospitalDepartment;
+    patientName: string;
+    patientAge?: number;
+    patientGender?: string;
+    patientAbha?: string;
+    triagePriority?: 'red' | 'yellow' | 'green';
+    chiefComplaint?: string;
+    specialtyRequired?: string;
+    attendingDoctor: string;
+    admissionNotes?: string;
+    referralId?: string;
+    walkInId?: string;
+    targetFacilityId?: string;
+  }) => void;
+  dischargePatientFromBed: (params: {
+    bedSlot: HospitalBedSlot;
+    dischargeData: Omit<FacilityDischargeRecord, 'id' | 'dischargedAt'>;
+    dischargingDoctorName: string;
+    dischargingDoctorId?: string;
+  }) => void;
+  addWalkIn: (walkIn: EmergencyWalkIn) => void;
   updateDrugStock: (stockId: string, newStock: number) => void;
   createMedicineRequest: (request: { destinationFacilityId: string; destinationFacilityName: string; requestedByUserId: string; requestedByUserName: string; urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL'; notes?: string; items: CreateReplenishmentItemInput[] }) => void;
   createStockTransfer: (transfer: Omit<StockTransfer, 'id' | 'createdAt' | 'status'>) => StockTransfer | null;
@@ -99,6 +132,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const [stockTransfers, setStockTransfers] = useState<StockTransfer[]>([]);
   const [resourceAlerts, setResourceAlerts] = useState<ResourceAlert[]>([]);
   const [followUps, setFollowUps] = useState<FollowUpTask[]>([]);
+  const [bedSlots, setBedSlots] = useState<HospitalBedSlot[]>([]);
+  const [walkIns, setWalkIns] = useState<EmergencyWalkIn[]>([]);
+  const [dischargeRecords, setDischargeRecords] = useState<FacilityDischargeRecord[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Initialize storage on client mount
@@ -112,6 +148,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     setStockTransfers(getStoredStockTransfers());
     setResourceAlerts(getStoredResourceAlerts());
     setFollowUps(getStoredFollowUps());
+    setBedSlots(getStoredBedSlots());
+    setWalkIns(getStoredWalkIns());
+    setDischargeRecords(getStoredDischarges());
     setSyncQueue(getSyncQueue());
 
     if (typeof window !== 'undefined') {
@@ -321,26 +360,205 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateBedOccupancy = (
-    facilityId: string,
+    const updateBedOccupancy = (
+    facilityIdentifier: string,
     field: 'occupiedBeds' | 'icuBedsOccupied' | 'ventilatorsOccupied' | 'oxygenBedsOccupied',
     delta: number
   ) => {
+    if (!facilityIdentifier) return;
     setFacilities(prevFacilities => {
       const updated = prevFacilities.map(f => {
-        if (f.name === facilityId || f.id === facilityId) {
-          const current = f[field];
-          const max = field === 'occupiedBeds' ? f.totalBeds :
-                      field === 'icuBedsOccupied' ? f.icuBedsTotal :
-                      field === 'ventilatorsOccupied' ? f.ventilatorsTotal : f.oxygenBedsTotal;
-          const nextVal = Math.max(0, Math.min(max, current + delta));
-          return { ...f, [field]: nextVal };
+        const idLower = (f.id || '').toLowerCase();
+        const nameLower = (f.name || '').toLowerCase();
+        const targetLower = facilityIdentifier.toLowerCase();
+
+        const isMatch =
+          idLower === targetLower ||
+          nameLower === targetLower ||
+          (targetLower.includes('aundh') && nameLower.includes('aundh')) ||
+          (targetLower.includes('velhe') && nameLower.includes('velhe')) ||
+          (targetLower.includes('bhor') && nameLower.includes('bhor')) ||
+          (targetLower.includes('sassoon') && nameLower.includes('sassoon')) ||
+          (targetLower.includes('nasrapur') && nameLower.includes('nasrapur')) ||
+          (targetLower.includes('kasurdi') && nameLower.includes('kasurdi')) ||
+          (targetLower.includes('pune') && targetLower.includes('district') && idLower === 'fac-dh-pune');
+
+        if (isMatch) {
+          const currentField = f[field] || 0;
+          const maxField =
+            field === 'occupiedBeds' ? f.totalBeds :
+            field === 'icuBedsOccupied' ? f.icuBedsTotal :
+            field === 'ventilatorsOccupied' ? f.ventilatorsTotal : f.oxygenBedsTotal;
+
+          const nextFieldVal = Math.max(0, Math.min(maxField, currentField + delta));
+
+          // Calculate total occupied beds consistently
+          let nextTotalOccupied = f.occupiedBeds || 0;
+          if (field === 'occupiedBeds') {
+            nextTotalOccupied = nextFieldVal;
+          } else if (delta > 0) {
+            nextTotalOccupied = Math.min(f.totalBeds, nextTotalOccupied + 1);
+          } else if (delta < 0) {
+            nextTotalOccupied = Math.max(0, nextTotalOccupied - 1);
+          }
+
+          return {
+            ...f,
+            [field]: nextFieldVal,
+            occupiedBeds: nextTotalOccupied,
+          };
         }
         return f;
       });
       saveStoredFacilities(updated);
       return updated;
     });
+  };
+
+
+  const addWalkIn = (walkIn: EmergencyWalkIn) => {
+    const updated = [walkIn, ...walkIns];
+    setWalkIns(updated);
+    saveStoredWalkIns(updated);
+  };
+
+  const admitPatientToBed = ({
+    bedId,
+    department,
+    patientName,
+    patientAge,
+    patientGender,
+    patientAbha,
+    triagePriority,
+    chiefComplaint,
+    specialtyRequired,
+    attendingDoctor,
+    admissionNotes,
+    referralId,
+    walkInId,
+    targetFacilityId = 'fac-dh-pune',
+  }: {
+    bedId: string;
+    department: HospitalDepartment;
+    patientName: string;
+    patientAge?: number;
+    patientGender?: string;
+    patientAbha?: string;
+    triagePriority?: 'red' | 'yellow' | 'green';
+    chiefComplaint?: string;
+    specialtyRequired?: string;
+    attendingDoctor: string;
+    admissionNotes?: string;
+    referralId?: string;
+    walkInId?: string;
+    targetFacilityId?: string;
+  }) => {
+    const now = new Date().toISOString();
+
+    // 1. Update Bed Slot in shared persistent state
+    const updatedBedSlots = bedSlots.map((b) =>
+      b.bedId === bedId
+        ? {
+            ...b,
+            status: 'OCCUPIED' as const,
+            patientName,
+            patientAbha,
+            triagePriority,
+            assignedAt: now,
+            attendingSpecialist: attendingDoctor,
+            specialtyRequired,
+            referralId,
+          }
+        : b
+    );
+    setBedSlots(updatedBedSlots);
+    saveStoredBedSlots(updatedBedSlots);
+
+    // 2. Consume Bed Resource on the corresponding Facility (Available -1, Occupied +1)
+    const bedField = department === 'ICU' ? 'icuBedsOccupied' : 'occupiedBeds';
+    updateBedOccupancy(targetFacilityId, bedField, 1);
+
+    // 3. If Referral-based, update canonical referral lifecycle
+    if (referralId) {
+      updateReferralStatus(referralId, 'ADMITTED', {
+        assignedBed: bedId,
+        assignedBedType: bedField,
+        targetFacilityId,
+      });
+    }
+
+    // 4. If Walk-In based, update walk-in status
+    if (walkInId) {
+      const updatedWalkIns = walkIns.map((w) =>
+        w.id === walkInId
+          ? { ...w, status: 'ADMITTED' as const, assignedDoctorName: attendingDoctor, assignedBedId: bedId }
+          : w
+      );
+      setWalkIns(updatedWalkIns);
+      saveStoredWalkIns(updatedWalkIns);
+    }
+
+    showToast(`${patientName} successfully admitted to Bed ${bedId} (${department}). Facility capacity updated.`);
+  };
+
+  const dischargePatientFromBed = ({
+    bedSlot,
+    dischargeData,
+    dischargingDoctorName,
+    dischargingDoctorId,
+  }: {
+    bedSlot: HospitalBedSlot;
+    dischargeData: Omit<FacilityDischargeRecord, 'id' | 'dischargedAt'>;
+    dischargingDoctorName: string;
+    dischargingDoctorId?: string;
+  }) => {
+    const now = new Date().toISOString();
+    const newDischargeRecord: FacilityDischargeRecord = {
+      id: `dis-${Date.now()}`,
+      ...dischargeData,
+      dischargedAt: now,
+    };
+
+    // 1. Append to shared discharge records
+    const updatedDischarges = [newDischargeRecord, ...dischargeRecords];
+    setDischargeRecords(updatedDischarges);
+    saveStoredDischarges(updatedDischarges);
+
+    // 2. Free up the Bed Slot (Available)
+    const updatedBedSlots = bedSlots.map((b) =>
+      b.bedId === bedSlot.bedId
+        ? {
+            ...b,
+            status: 'AVAILABLE' as const,
+            patientId: undefined,
+            patientName: undefined,
+            patientAbha: undefined,
+            triagePriority: undefined,
+            assignedAt: undefined,
+            attendingSpecialist: undefined,
+            specialtyRequired: undefined,
+            referralId: undefined,
+          }
+        : b
+    );
+    setBedSlots(updatedBedSlots);
+    saveStoredBedSlots(updatedBedSlots);
+
+    // 3. Restore Bed Resource on the corresponding Facility (Occupied -1, Available +1)
+    const targetFacilityId = bedSlot.wardName?.toLowerCase().includes('aundh') || bedSlot.department
+      ? 'fac-dh-pune'
+      : 'fac-dh-pune';
+    const bedField = bedSlot.department === 'ICU' ? 'icuBedsOccupied' : 'occupiedBeds';
+    updateBedOccupancy(targetFacilityId, bedField, -1);
+
+    // 4. Update Referral status to COMPLETED / COUNTER_REFERRED if linked
+    if (bedSlot.referralId) {
+      updateReferralStatus(bedSlot.referralId, 'COMPLETED', {
+        counterReferredTo: dischargeData.referBackFacilityName,
+      });
+    }
+
+    showToast(`Patient discharged from Bed ${bedSlot.bedNumber}. 1 bed freed in hospital capacity.`);
   };
 
   const updateReferralStatus = async (referralId: string, status: Referral['status'], updates?: Partial<Referral>) => {
@@ -1028,6 +1246,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         stockTransfers,
         resourceAlerts,
         followUps,
+        bedSlots,
+        walkIns,
+        dischargeRecords,
         toggleSimulatedOffline,
         triggerManualSync,
         addPatient,
@@ -1046,6 +1267,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         processStockTransfer,
         updateResourceAlertStatus,
         addFollowUpTask,
+        admitPatientToBed,
+        dischargePatientFromBed,
+        addWalkIn,
         toastMessage,
         clearToast,
       }}

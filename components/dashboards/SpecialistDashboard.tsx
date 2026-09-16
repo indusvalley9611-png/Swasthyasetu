@@ -87,7 +87,7 @@ export function SpecialistDashboard({
 }: SpecialistDashboardProps) {
   const { language } = useLanguage();
   const { user } = useAuth();
-  const { referrals, patients, stocks, updateReferralStatus } = useSync();
+  const { referrals, patients, stocks, updateReferralStatus, bedSlots, walkIns, dischargeRecords, admitPatientToBed, dischargePatientFromBed, facilities } = useSync();
 
   // Active navigation tab
   const [internalTab, setInternalTab] = useState<SpecialistTab>(externalTab || 'intake');
@@ -102,10 +102,7 @@ export function SpecialistDashboard({
   const currentHospitalId = user?.facilityId || 'fac-dh-pune';
 
   // State Management for Hospital-Level Resources
-  const [bedSlots, setBedSlots] = useState<HospitalBedSlot[]>(INITIAL_HOSPITAL_BED_SLOTS);
   const [specialistsOnDuty, setSpecialistsOnDuty] = useState<SpecialistOnDuty[]>(INITIAL_SPECIALISTS_ON_DUTY);
-  const [walkIns, setWalkIns] = useState<EmergencyWalkIn[]>(INITIAL_EMERGENCY_WALKINS);
-  const [dischargeRecords, setDischargeRecords] = useState<FacilityDischargeRecord[]>(INITIAL_FACILITY_DISCHARGE_RECORDS);
   const [bloodStock, setBloodStock] = useState<HospitalBloodStock[]>(INITIAL_HOSPITAL_BLOOD_STOCK);
   const [tamperBlocks, setTamperBlocks] = useState<TamperEvidentAuditBlock[]>(() => {
     return INITIAL_TAMPER_AUDIT_BLOCKS.filter(
@@ -246,45 +243,23 @@ export function SpecialistDashboard({
   }) => {
     if (!admissionTarget) return;
 
-    // 1. Update Bed Slot in Real Time
-    setBedSlots((prev) =>
-      prev.map((b) =>
-        b.bedId === bedId
-          ? {
-              ...b,
-              status: 'OCCUPIED',
-              patientName: admissionTarget.patientName,
-              patientAbha: admissionTarget.patientAbha,
-              triagePriority: admissionTarget.triagePriority,
-              assignedAt: new Date().toISOString(),
-              attendingSpecialist: attendingDoctor,
-              specialtyRequired: admissionTarget.specialtyRequired,
-              referralId: admissionTarget.referralId,
-            }
-          : b
-      )
-    );
+    admitPatientToBed({
+      bedId,
+      department,
+      patientName: admissionTarget.patientName,
+      patientAge: admissionTarget.patientAge,
+      patientGender: admissionTarget.patientGender,
+      patientAbha: admissionTarget.patientAbha,
+      triagePriority: admissionTarget.triagePriority,
+      chiefComplaint: admissionTarget.chiefComplaint,
+      specialtyRequired: admissionTarget.specialtyRequired,
+      attendingDoctor,
+      admissionNotes,
+      referralId: admissionTarget.referralId,
+      walkInId: admissionTarget.walkInId,
+      targetFacilityId: currentHospitalId,
+    });
 
-    // 2. If Referral, update status to ADMITTED
-    if (admissionTarget.referralId) {
-      updateReferralStatus(admissionTarget.referralId, 'ADMITTED', {
-        assignedBed: bedId,
-        assignedBedType: department === 'ICU' ? 'icuBedsOccupied' : 'occupiedBeds',
-      });
-    }
-
-    // 3. If Walk-In, update walk-in status
-    if (admissionTarget.walkInId) {
-      setWalkIns((prev) =>
-        prev.map((w) =>
-          w.id === admissionTarget.walkInId
-            ? { ...w, status: 'ADMITTED', assignedDoctorName: attendingDoctor, assignedBedId: bedId }
-            : w
-        )
-      );
-    }
-
-    // 4. Log to Cryptographic SHA-256 Audit Chain
     recordHospitalTamperAudit(
       'INPATIENT_BED_ASSIGNMENT',
       `Bed #${bedId} (${department}) -> Patient ${admissionTarget.patientName}`,
@@ -309,43 +284,13 @@ export function SpecialistDashboard({
   ) => {
     if (!dischargeTargetBed) return;
 
-    const newRecord: FacilityDischargeRecord = {
-      id: `dis-${Date.now()}`,
-      ...dischargeData,
-      dischargedAt: new Date().toISOString(),
-    };
+    dischargePatientFromBed({
+      bedSlot: dischargeTargetBed,
+      dischargeData,
+      dischargingDoctorName: user?.name || 'Dr. Ananya Kulkarni',
+      dischargingDoctorId: user?.id || 'user-spec-01',
+    });
 
-    // 1. Append Discharge Record (Care Continuity)
-    setDischargeRecords((prev) => [newRecord, ...prev]);
-
-    // 2. Free up the Bed Slot in Real Time
-    setBedSlots((prev) =>
-      prev.map((b) =>
-        b.bedId === dischargeTargetBed.bedId
-          ? {
-              ...b,
-              status: 'AVAILABLE',
-              patientId: undefined,
-              patientName: undefined,
-              patientAbha: undefined,
-              triagePriority: undefined,
-              assignedAt: undefined,
-              attendingSpecialist: undefined,
-              specialtyRequired: undefined,
-              referralId: undefined,
-            }
-          : b
-      )
-    );
-
-    // 3. Update Referral Status to COMPLETED / COUNTER_REFERRED
-    if (dischargeTargetBed.referralId) {
-      updateReferralStatus(dischargeTargetBed.referralId, 'COMPLETED', {
-        counterReferredTo: dischargeData.referBackFacilityName,
-      });
-    }
-
-    // 4. Log to Cryptographic SHA-256 Audit Chain
     recordHospitalTamperAudit(
       'PATIENT_DISCHARGE_REFER_BACK',
       `Patient ${dischargeTargetBed.patientName} from Bed ${dischargeTargetBed.bedNumber}`,

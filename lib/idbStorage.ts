@@ -1,4 +1,5 @@
-import { Patient, Referral, OfflineSyncItem, DrugStockItem, Facility, MedicineRequest, ReplenishmentRequest, ResourceAlert, StockTransfer, AuditLogEntry, FollowUpTask } from './types';
+import { Patient, Referral, OfflineSyncItem, DrugStockItem, Facility, MedicineRequest, ReplenishmentRequest, ResourceAlert, StockTransfer, AuditLogEntry, FollowUpTask, HospitalBedSlot, EmergencyWalkIn, FacilityDischargeRecord } from './types';
+import { INITIAL_HOSPITAL_BED_SLOTS, INITIAL_EMERGENCY_WALKINS, INITIAL_FACILITY_DISCHARGE_RECORDS } from './specialistData';
 import {
   INITIAL_PATIENTS,
   INITIAL_REFERRALS,
@@ -28,6 +29,9 @@ const STOCK_TRANSFERS_KEY = 'swasthyasetu_stock_transfers';
 const RESOURCE_ALERTS_KEY = 'swasthyasetu_resource_alerts';
 const AUDIT_LOGS_KEY = 'swasthyasetu_audit_logs';
 const FOLLOW_UPS_KEY = 'swasthyasetu_follow_ups';
+const BED_SLOTS_KEY = 'swasthyasetu_bed_slots';
+const WALKINS_KEY = 'swasthyasetu_walkins';
+const DISCHARGES_KEY = 'swasthyasetu_discharges';
 
 // Initialize local database with initial seed if empty & enforce generic canonical validation
 export function initializeStorage() {
@@ -257,6 +261,16 @@ export const getStoredAuditLogs = () => getStoredValue<AuditLogEntry[]>(AUDIT_LO
 export const saveStoredAuditLogs = (items: AuditLogEntry[]) => { if (typeof window !== 'undefined') localStorage.setItem(AUDIT_LOGS_KEY, JSON.stringify(items)); };
 export const getStoredFollowUps = () => getStoredValue<FollowUpTask[]>(FOLLOW_UPS_KEY, INITIAL_FOLLOWUPS);
 export const saveStoredFollowUps = (items: FollowUpTask[]) => { if (typeof window !== 'undefined') localStorage.setItem(FOLLOW_UPS_KEY, JSON.stringify(items)); };
+
+
+export const getStoredBedSlots = (): HospitalBedSlot[] => getStoredValue<HospitalBedSlot[]>(BED_SLOTS_KEY, INITIAL_HOSPITAL_BED_SLOTS);
+export const saveStoredBedSlots = (items: HospitalBedSlot[]) => { if (typeof window !== 'undefined') localStorage.setItem(BED_SLOTS_KEY, JSON.stringify(items)); };
+
+export const getStoredWalkIns = (): EmergencyWalkIn[] => getStoredValue<EmergencyWalkIn[]>(WALKINS_KEY, INITIAL_EMERGENCY_WALKINS);
+export const saveStoredWalkIns = (items: EmergencyWalkIn[]) => { if (typeof window !== 'undefined') localStorage.setItem(WALKINS_KEY, JSON.stringify(items)); };
+
+export const getStoredDischarges = (): FacilityDischargeRecord[] => getStoredValue<FacilityDischargeRecord[]>(DISCHARGES_KEY, INITIAL_FACILITY_DISCHARGE_RECORDS);
+export const saveStoredDischarges = (items: FacilityDischargeRecord[]) => { if (typeof window !== 'undefined') localStorage.setItem(DISCHARGES_KEY, JSON.stringify(items)); };
 
 export function getSyncQueue(): OfflineSyncItem[] {
   if (typeof window === 'undefined') return [];
