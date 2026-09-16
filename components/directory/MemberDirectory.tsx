@@ -182,67 +182,52 @@ export default function MemberDirectory({
   });
 
   return (
-    <div className="flex flex-col h-full animate-in fade-in duration-500">
-      {/* Directory Header Banner */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs mb-6 flex flex-col md:flex-row justify-between md:items-center gap-4 relative overflow-hidden">
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 via-white to-green-600 opacity-80" />
+    <div className="flex flex-col h-full animate-in fade-in duration-300">
+      {/* 1. Refined Directory Header (Compact, no bloated blue card) */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 shadow-2xs mb-3 flex flex-col sm:flex-row justify-between sm:items-center gap-2 relative overflow-hidden">
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-orange-500 via-white to-green-600 opacity-80" />
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+            <h1 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">
               {language === 'mr' ? 'रुग्ण निर्देशिका' : 'Patient Directory'}
             </h1>
-            <span className="text-[10px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-              {user?.administrativeLevel === 'facility'
-                ? 'Facility Level'
-                : 'District Level'}
+            <span className="text-[10px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+              {user?.administrativeLevel === 'district' || user?.role === 'district_officer'
+                ? 'District Level'
+                : user?.administrativeLevel === 'field' || user?.role === 'asha'
+                ? 'Field Level'
+                : 'Facility Level'}
             </span>
           </div>
-          <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2">
-            <span>{workerLocation}</span> &bull;{' '}
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
+            <span className="text-slate-700 dark:text-slate-300 font-semibold">{workerLocation}</span>
+            <span className="text-slate-300 dark:text-slate-600">&bull;</span>
             <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
               ABDM Least-Privilege Data Access
             </span>
           </p>
         </div>
 
-        <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700">
-          <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold border border-blue-200 dark:border-blue-800/50">
-            {workerName.charAt(0)}
-          </div>
-          <div>
-            <div className="text-sm font-bold text-slate-800 dark:text-slate-100">{workerName}</div>
-            <div className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-widest">
-              {workerRoleName}
-            </div>
-          </div>
-          <div className="w-px h-8 bg-slate-200 dark:bg-slate-700 mx-2"></div>
-          <div className="text-right">
-            <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              Active Session
-            </div>
-            <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
-              HFR: {user?.hfrCode || 'ABDM-VERIFIED'}
-            </div>
-          </div>
+        {/* Compact Officer / Session Context */}
+        <div className="flex items-center gap-2 text-xs self-start sm:self-auto text-slate-500 dark:text-slate-400">
+          <span className="font-semibold text-slate-800 dark:text-slate-200">{workerName}</span>
+          <span className="text-slate-300 dark:text-slate-600">&bull;</span>
+          <span className="text-blue-600 dark:text-blue-400 font-medium text-[11px]">{workerRoleName}</span>
         </div>
       </div>
 
-      {/* Scope Selector Tabs (My Assigned Patients vs All Patients vs Referred List) */}
-      <div className="flex items-center gap-3 mb-4">
+      {/* 2. Modern Segmented Control for Scope Selector Tabs */}
+      <div className="bg-slate-100/90 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/60 flex items-center gap-1 mb-3 w-full sm:w-fit overflow-x-auto">
         <button
           onClick={() => setScopeTab('ASSIGNED')}
-          className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 border ${
+          className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
             scopeTab === 'ASSIGNED'
-              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs border border-slate-200/80 dark:border-slate-700'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
           }`}
         >
-          <UserCheck className="w-4 h-4" />
-          <span>
+          <UserCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+          <span className="whitespace-nowrap">
             {user?.role === 'phc_doctor'
               ? 'Under My Care'
               : user?.role === 'specialist'
@@ -250,10 +235,10 @@ export default function MemberDirectory({
               : 'My Assigned Area'}
           </span>
           <span
-            className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+            className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
               scopeTab === 'ASSIGNED'
-                ? 'bg-white/20 text-white'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300'
+                : 'bg-slate-200/80 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
             }`}
           >
             {assignedPatientsCount}
@@ -262,19 +247,25 @@ export default function MemberDirectory({
 
         <button
           onClick={() => setScopeTab('ALL')}
-          className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 border ${
+          className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
             scopeTab === 'ALL'
-              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs border border-slate-200/80 dark:border-slate-700'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
           }`}
         >
-          <Building2 className="w-4 h-4" />
-          <span>{isAdmin ? 'All Network Patients' : user?.role === 'asha' ? 'Catchment Area Patients' : 'Facility Care Roster'}</span>
+          <Building2 className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
+          <span className="whitespace-nowrap">
+            {isAdmin
+              ? 'All Network Patients'
+              : user?.role === 'asha'
+              ? 'Catchment Area Patients'
+              : 'Facility Care Roster'}
+          </span>
           <span
-            className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+            className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
               scopeTab === 'ALL'
-                ? 'bg-white/20 text-white'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'
+                : 'bg-slate-200/80 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
             }`}
           >
             {allNonReferredCount}
@@ -283,21 +274,21 @@ export default function MemberDirectory({
 
         <button
           onClick={() => setScopeTab('REFERRED')}
-          className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 border ${
+          className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
             scopeTab === 'REFERRED'
-              ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
-              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+              ? 'bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-300 shadow-xs border border-slate-200/80 dark:border-slate-700'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
           }`}
         >
-          <ArrowUpRight className="w-4 h-4" />
-          <span>Referred List</span>
+          <ArrowUpRight className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+          <span className="whitespace-nowrap">Referred List</span>
           <span
-            className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+            className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
               scopeTab === 'REFERRED'
-                ? 'bg-white/20 text-white'
+                ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200'
                 : referredPatients.length > 0
-                  ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                : 'bg-slate-200/80 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
             }`}
           >
             {referredPatients.length}
@@ -305,27 +296,27 @@ export default function MemberDirectory({
         </button>
       </div>
 
-      {/* Search & Filter Bar */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs mb-6 flex flex-col md:flex-row gap-4">
+      {/* 3. Compact Search & Filter Bar */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2 sm:p-2.5 shadow-2xs mb-3 flex flex-col sm:flex-row gap-2 sm:gap-2.5 items-stretch sm:items-center">
         <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
             placeholder={
               scopeTab === 'REFERRED'
-                ? 'Search referred patients by Name, ABHA, Phone, Target Hospital, Reason...'
+                ? 'Search referred patients by Name, ABHA, Phone, Destination, Reason...'
                 : 'Search by Name, ABHA Number, Phone, Assigned Doctor...'
             }
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-11 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-all"
+            className="w-full pl-9 pr-3 py-1.5 h-9 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-all"
           />
         </div>
-        <div className="flex gap-3 items-center">
+        <div className="flex gap-2 items-center shrink-0">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+            className="h-9 px-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500 cursor-pointer"
           >
             <option value="ALL">All Clinical Statuses</option>
             <option value="HIGH_RISK">High Risk / HRP</option>
@@ -336,39 +327,39 @@ export default function MemberDirectory({
             <button
               type="button"
               onClick={onOpenNewPatient}
-              className="inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-colors shrink-0 cursor-pointer"
+              className="h-9 inline-flex items-center gap-1.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors shrink-0 cursor-pointer"
               title="Register Direct Patient / ABDM Search"
             >
-              <UserPlus className="w-4 h-4" />
+              <UserPlus className="w-3.5 h-3.5" />
               <span>+ Register Patient</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Member List Table */}
-      <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden flex flex-col">
+      {/* 4. Refined Patient Table */}
+      <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs overflow-hidden flex flex-col">
         <div className="overflow-x-auto flex-1">
           <table className="w-full text-left border-collapse">
             <thead>
               {scopeTab === 'REFERRED' ? (
-                <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
-                  <th className="px-6 py-4">Patient Member</th>
-                  <th className="px-6 py-4">Demographics & ABHA</th>
-                  <th className="px-6 py-4">Destination Hospital</th>
-                  <th className="px-6 py-4">Referral Reason</th>
-                  <th className="px-6 py-4">Urgency</th>
-                  <th className="px-6 py-4">Referral Date & Status</th>
-                  <th className="px-6 py-4 text-right">Action</th>
+                <tr className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
+                  <th className="px-4 py-2.5 sm:py-3">Patient Member</th>
+                  <th className="px-4 py-2.5 sm:py-3">Demographics & ABHA</th>
+                  <th className="px-4 py-2.5 sm:py-3">Destination Hospital</th>
+                  <th className="px-4 py-2.5 sm:py-3">Referral Reason</th>
+                  <th className="px-4 py-2.5 sm:py-3">Urgency</th>
+                  <th className="px-4 py-2.5 sm:py-3">Referral Date & Status</th>
+                  <th className="px-4 py-2.5 sm:py-3 text-right">Action</th>
                 </tr>
               ) : (
-                <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
-                  <th className="px-6 py-4">Patient Member</th>
-                  <th className="px-6 py-4">Demographics</th>
-                  <th className="px-6 py-4">ABHA ID & Contact</th>
-                  <th className="px-6 py-4">Care Relationship & Access</th>
-                  <th className="px-6 py-4">Clinical Status</th>
-                  <th className="px-6 py-4 text-right">Action</th>
+                <tr className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
+                  <th className="px-4 py-2.5 sm:py-3">Patient Member</th>
+                  <th className="px-4 py-2.5 sm:py-3">Demographics</th>
+                  <th className="px-4 py-2.5 sm:py-3">ABHA ID & Contact</th>
+                  <th className="px-4 py-2.5 sm:py-3">Care Relationship & Access</th>
+                  <th className="px-4 py-2.5 sm:py-3">Clinical Status</th>
+                  <th className="px-4 py-2.5 sm:py-3 text-right">Action</th>
                 </tr>
               )}
             </thead>
@@ -381,10 +372,10 @@ export default function MemberDirectory({
                   if (scopeTab === 'REFERRED') {
                     const priorityClass =
                       activeReferral?.triagePriority === 'red'
-                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                        ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-800'
                         : activeReferral?.triagePriority === 'yellow'
-                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-                        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
+                        ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                        : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
 
                     const priorityLabel =
                       activeReferral?.triagePriority === 'red'
@@ -395,15 +386,15 @@ export default function MemberDirectory({
 
                     const statusClass =
                       activeReferral?.status === 'ADMITTED'
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
                         : activeReferral?.status === 'ACCEPTED'
-                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300 dark:border-blue-700'
+                        ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300 dark:border-blue-700'
                         : activeReferral?.status === 'ESCALATED'
-                        ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300 dark:border-purple-700'
-                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-700';
+                        ? 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300 dark:border-purple-700'
+                        : 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-700';
 
                     const formattedDate = activeReferral?.createdAt
-                      ? new Date(activeReferral.createdAt).toLocaleString(language === 'mr' ? 'mr-IN' : 'en-IN', {
+                        ? new Date(activeReferral.createdAt).toLocaleString(language === 'mr' ? 'mr-IN' : 'en-IN', {
                           day: '2-digit',
                           month: 'short',
                           year: 'numeric',
@@ -419,25 +410,25 @@ export default function MemberDirectory({
                         className="hover:bg-amber-50/40 dark:hover:bg-amber-950/10 cursor-pointer transition-colors group"
                       >
                         {/* Patient Name & Location */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 group-hover:bg-amber-200">
+                        <td className="px-4 py-2.5 sm:py-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 group-hover:bg-amber-200 shrink-0">
                               {pat.fullName.charAt(0)}
                             </div>
-                            <div>
-                              <div className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-amber-700 dark:group-hover:text-amber-400 transition-colors">
+                            <div className="min-w-0">
+                              <div className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm group-hover:text-amber-700 dark:group-hover:text-amber-400 transition-colors truncate">
                                 {pat.fullName}
                               </div>
-                              <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
-                                <MapPin className="w-3 h-3" /> {pat.village}, {pat.taluka}
+                              <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5 truncate">
+                                <MapPin className="w-3 h-3 shrink-0" /> {pat.village}, {pat.taluka}
                               </div>
                             </div>
                           </div>
                         </td>
 
                         {/* Demographics & ABHA */}
-                        <td className="px-6 py-4">
-                          <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                        <td className="px-4 py-2.5 sm:py-3">
+                          <div className="text-xs font-medium text-slate-700 dark:text-slate-200">
                             {pat.age} yrs &bull; {pat.gender}
                           </div>
                           <div className="font-mono text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
@@ -446,20 +437,20 @@ export default function MemberDirectory({
                         </td>
 
                         {/* Referral Destination */}
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-2.5 sm:py-3">
                           <div className="font-bold text-slate-900 dark:text-white text-xs flex items-center gap-1.5">
                             <Building2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                             <span className="truncate max-w-[180px]">
                               {activeReferral?.targetFacility || 'District Hospital'}
                             </span>
                           </div>
-                          <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                          <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 font-mono">
                             Ref #{activeReferral?.tokenCode || activeReferral?.id}
                           </div>
                         </td>
 
                         {/* Referral Reason & Specialty */}
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-2.5 sm:py-3">
                           <div className="font-medium text-slate-800 dark:text-slate-200 text-xs max-w-[200px] truncate">
                             {activeReferral?.referralReason || 'Specialist Evaluation'}
                           </div>
@@ -469,33 +460,33 @@ export default function MemberDirectory({
                         </td>
 
                         {/* Urgency Priority */}
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${priorityClass}`}>
+                        <td className="px-4 py-2.5 sm:py-3">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold border ${priorityClass}`}>
                             <span className="w-1.5 h-1.5 rounded-full bg-current" />
                             {priorityLabel}
                           </span>
                         </td>
 
                         {/* Referral Date & Status */}
-                        <td className="px-6 py-4">
-                          <div className="flex flex-col gap-1 items-start">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${statusClass}`}>
+                        <td className="px-4 py-2.5 sm:py-3">
+                          <div className="flex flex-col gap-0.5 items-start">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${statusClass}`}>
                               <Activity className="w-3 h-3" /> {activeReferral?.status || 'PENDING'}
                             </span>
                             <div className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1 mt-0.5">
-                              <Clock3 className="w-3 h-3" /> {formattedDate}
+                              <Clock3 className="w-3 h-3 shrink-0" /> {formattedDate}
                             </div>
                           </div>
                         </td>
 
                         {/* Action Button */}
-                        <td className="px-6 py-4 text-right">
+                        <td className="px-4 py-2.5 sm:py-3 text-right">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               onSelectMember(pat);
                             }}
-                            className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all border bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100 flex items-center gap-1 ml-auto"
+                            className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all border bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100 flex items-center gap-1 ml-auto cursor-pointer"
                           >
                             <span>Open Referral</span>
                             <ArrowUpRight className="w-3 h-3" />
@@ -510,13 +501,13 @@ export default function MemberDirectory({
                     <tr
                       key={pat.id}
                       onClick={() => onSelectMember(pat)}
-                      className="hover:bg-blue-50/50 dark:hover:bg-blue-900/10 cursor-pointer transition-colors group"
+                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 cursor-pointer transition-colors group"
                     >
                       {/* Patient Name & Location */}
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
+                      <td className="px-4 py-2.5 sm:py-3">
+                        <div className="flex items-center gap-2.5">
                           <div
-                            className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-colors ${
+                            className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-colors shrink-0 ${
                               isAssigned
                                 ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 group-hover:bg-blue-200'
                                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 group-hover:bg-slate-200'
@@ -524,41 +515,41 @@ export default function MemberDirectory({
                           >
                             {pat.fullName.charAt(0)}
                           </div>
-                          <div>
-                            <div className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-blue-700 dark:group-hover:text-blue-400 transition-colors">
+                          <div className="min-w-0">
+                            <div className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
                               {pat.fullName}
                             </div>
-                            <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
-                              <MapPin className="w-3 h-3" /> {pat.village}, {pat.taluka}
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5 truncate">
+                              <MapPin className="w-3 h-3 shrink-0" /> {pat.village}, {pat.taluka}
                             </div>
                           </div>
                         </div>
                       </td>
 
                       {/* Demographics */}
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-slate-700 dark:text-slate-200">{pat.gender}</div>
+                      <td className="px-4 py-2.5 sm:py-3">
+                        <div className="text-xs font-medium text-slate-700 dark:text-slate-200">{pat.gender}</div>
                         <div className="text-[11px] text-slate-500 dark:text-slate-400">
                           {pat.age} yrs &bull; Blood: {pat.bloodGroup}
                         </div>
                       </td>
 
                       {/* ABHA ID */}
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-2.5 sm:py-3">
                         <div className="font-mono text-xs font-bold text-slate-700 dark:text-slate-200">
                           {pat.abhaId}
                         </div>
                         <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
-                          <Phone className="w-3 h-3" /> {pat.phone}
+                          <Phone className="w-3 h-3 shrink-0" /> {pat.phone}
                         </div>
                       </td>
 
                       {/* Care Relationship & Access Status Badge */}
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-1 items-start">
+                      <td className="px-4 py-2.5 sm:py-3">
+                        <div className="flex flex-col gap-0.5 items-start">
                           {isAssigned ? (
-                            <span className="inline-flex items-center gap-1 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full text-[10px] font-bold border border-emerald-300 dark:border-emerald-700">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-md text-[10px] font-bold border border-emerald-300/80 dark:border-emerald-700/60">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                               {user?.role === 'phc_doctor'
                                 ? 'Under Your Care'
                                 : user?.role === 'specialist'
@@ -566,14 +557,14 @@ export default function MemberDirectory({
                                 : 'Assigned Member'}
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-full text-[10px] font-medium border border-slate-200 dark:border-slate-700">
+                            <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-md text-[10px] font-medium border border-slate-200 dark:border-slate-700">
                               <Lock className="w-3 h-3 text-slate-400" />
                               Protected &bull;{' '}
                               {pat.assignedDoctorName ? pat.assignedDoctorName.split(' ')[1] || pat.assignedDoctorName : 'Other MO'}
                             </span>
                           )}
                           <div className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1">
-                            <Building2 className="w-3 h-3" />
+                            <Building2 className="w-3 h-3 shrink-0" />
                             <span className="truncate max-w-[150px]">
                               {pat.assignedFacilityName || 'Primary Health Centre'}
                             </span>
@@ -582,28 +573,28 @@ export default function MemberDirectory({
                       </td>
 
                       {/* Clinical Status Badges */}
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-1.5 items-start">
+                      <td className="px-4 py-2.5 sm:py-3">
+                        <div className="flex flex-col gap-1 items-start">
                           {activeReferral && (
-                            <span className="inline-flex items-center gap-1 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full text-[10px] font-bold border border-amber-200 dark:border-amber-800/50">
+                            <span className="inline-flex items-center gap-1 bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-md text-[10px] font-bold border border-amber-200 dark:border-amber-800/60">
                               <Activity className="w-3 h-3" /> REFERRAL ACTIVE
                             </span>
                           )}
                           {pat.isHighRiskPregnancy && (
-                            <span className="inline-flex items-center gap-1 bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-300 px-2 py-0.5 rounded-full text-[10px] font-bold border border-rose-200 dark:border-rose-800/50">
+                            <span className="inline-flex items-center gap-1 bg-rose-50 dark:bg-rose-900/30 text-rose-800 dark:text-rose-300 px-2 py-0.5 rounded-md text-[10px] font-bold border border-rose-200 dark:border-rose-800/60">
                               <AlertTriangle className="w-3 h-3" /> HRP RISK
                             </span>
                           )}
                           {!activeReferral && !pat.isHighRiskPregnancy && (
-                            <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full text-[10px] font-bold border border-slate-200 dark:border-slate-700">
-                              <CheckCircle2 className="w-3 h-3" /> STABLE
+                            <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-md text-[10px] font-bold border border-slate-200 dark:border-slate-700">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-500" /> STABLE
                             </span>
                           )}
                         </div>
                       </td>
 
                       {/* Action Buttons */}
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-4 py-2.5 sm:py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
                           {/* Dedicated Direct Referral Action for PHC & Field Workers */}
                           {activeReferral ? (
@@ -613,7 +604,7 @@ export default function MemberDirectory({
                                 if (onOpenReferralToken) onOpenReferralToken(activeReferral);
                                 else onSelectMember(pat);
                               }}
-                              className="px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 flex items-center gap-1 cursor-pointer shrink-0"
+                              className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 flex items-center gap-1 cursor-pointer shrink-0"
                               title="Active referral in progress - click to view token"
                             >
                               <Activity className="w-3.5 h-3.5 text-amber-600" />
@@ -626,7 +617,7 @@ export default function MemberDirectory({
                                 if (onOpenReferral) onOpenReferral(pat);
                                 else onSelectMember(pat);
                               }}
-                              className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0 hover:scale-102"
+                              className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0"
                               title="Refer patient to District Hospital"
                             >
                               <Send className="w-3.5 h-3.5" />
@@ -639,7 +630,7 @@ export default function MemberDirectory({
                               e.stopPropagation();
                               onSelectMember(pat);
                             }}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
                               isAssigned
                                 ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-100'
                                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
@@ -654,12 +645,12 @@ export default function MemberDirectory({
                 })
               ) : (
                 <tr>
-                  <td colSpan={scopeTab === 'REFERRED' ? 7 : 6} className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+                  <td colSpan={scopeTab === 'REFERRED' ? 7 : 6} className="px-4 py-10 text-center text-slate-500 dark:text-slate-400">
                     <div className="max-w-md mx-auto space-y-2">
-                      <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-400">
-                        <User className="w-6 h-6" />
+                      <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-400">
+                        <User className="w-5 h-5" />
                       </div>
-                      <div className="font-bold text-slate-700 dark:text-slate-200 text-sm">
+                      <div className="font-bold text-slate-700 dark:text-slate-200 text-xs sm:text-sm">
                         {scopeTab === 'REFERRED'
                           ? 'No active referrals found'
                           : 'No members found in this view'}

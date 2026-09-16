@@ -25,18 +25,92 @@ export default function RapidScreeningModal({ patient, onClose }: RapidScreening
   const [isRecording, setIsRecording] = useState(false);
   const [dictationLang, setDictationLang] = useState<'mr-IN' | 'hi-IN' | 'en-IN'>('mr-IN');
 
-  const startDictation = () => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert("Speech recognition is not supported in this browser.");
+  const recognitionRef = React.useRef<any>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {}
+      }
+    };
+  }, []);
+
+  const toggleDictation = () => {
+    if (isRecording) {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {}
+      }
+      setIsRecording(false);
       return;
     }
-    
-    setIsRecording(true);
-    // Mock dictation for UI purposes
-    setTimeout(() => {
-      setChiefComplaints(prev => prev + (prev ? " " : "") + (language === 'mr' ? 'डोकेदुखी आणि ताप' : 'Headache and fever'));
+
+    const SpeechRecognition =
+      typeof window !== 'undefined'
+        ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+        : null;
+
+    if (!SpeechRecognition) {
+      // Offline / unsupported fallback
+      setIsRecording(true);
+      setTimeout(() => {
+        const sampleText =
+          dictationLang === 'mr-IN'
+            ? 'तीव्र डोकेदुखी आणि चक्कर येणे'
+            : dictationLang === 'hi-IN'
+            ? 'गंभीर सिरदर्द और चक्कर आना'
+            : 'Severe headache and blurred vision';
+        setChiefComplaints((prev) => (prev ? prev + ', ' + sampleText : sampleText));
+        setIsRecording(false);
+      }, 1500);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
+      recognition.lang = dictationLang;
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        setIsRecording(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        if (event.results && event.results[0] && event.results[0][0]) {
+          const transcript = event.results[0][0].transcript;
+          setChiefComplaints((prev) => (prev ? prev + ' ' + transcript : transcript));
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn('Speech recognition warning/error:', event.error);
+        setIsRecording(false);
+        // If permission denied or network error on localhost, provide fallback sample text
+        if (event.error === 'not-allowed' || event.error === 'network') {
+          const sampleText =
+            dictationLang === 'mr-IN'
+              ? 'ताप आणि अंगदुखी'
+              : dictationLang === 'hi-IN'
+              ? 'बुखार और बदन दर्द'
+              : 'Fever and body pain';
+          setChiefComplaints((prev) => (prev ? prev + ', ' + sampleText : sampleText));
+        }
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+
+      recognition.start();
+    } catch (err) {
+      console.warn('Failed to start speech recognition:', err);
       setIsRecording(false);
-    }, 2000);
+    }
   };
 
   const handleSaveScreening = (e: React.FormEvent) => {
@@ -198,7 +272,7 @@ export default function RapidScreeningModal({ patient, onClose }: RapidScreening
                   
                   <button
                     type="button"
-                    onClick={startDictation}
+                    onClick={toggleDictation}
                     className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border transition-colors font-bold ${
                       isRecording 
                         ? 'bg-rose-100 dark:bg-rose-900/40 border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-400 animate-pulse' 

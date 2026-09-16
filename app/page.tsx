@@ -7,7 +7,6 @@ import { useSync } from '@/context/SyncContext';
 import { Role, Patient, Referral } from '@/lib/types';
 import { Header } from '@/components/layout/Header';
 import { AppShell } from '@/components/layout/AppShell';
-import { Footer } from '@/components/layout/Footer';
 import { AshaDashboard } from '@/components/dashboards/AshaDashboard';
 import { PhcDoctorDashboard } from '@/components/dashboards/PhcDoctorDashboard';
 import { SpecialistDashboard } from '@/components/dashboards/SpecialistDashboard';
@@ -24,6 +23,7 @@ import { GlobalPatientSearchModal } from '@/components/ehr/GlobalPatientSearchMo
 import { StaffLoginModal } from '@/components/auth/StaffLoginModal';
 import { PatientDownloadModal } from '@/components/auth/PatientDownloadModal';
 import { AuditTrailModal } from '@/components/compliance/AuditTrailModal';
+import { EmergencyHelpModal } from '@/components/emergency/EmergencyHelpModal';
 import {
   Users, User,
   Stethoscope,
@@ -31,9 +31,18 @@ import {
   HeartPulse,
   Activity,
   Languages,
-    Moon,
-    Sun,
+  Moon,
+  Sun,
   Pill,
+  Shield,
+  Phone,
+  Network,
+  ArrowRight,
+  AlertTriangle,
+  MapPin,
+  Zap,
+  GitBranch,
+  ChevronRight,
 } from 'lucide-react';
 
 export default function Home() {
@@ -51,6 +60,7 @@ export default function Home() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isAuditTrailOpen, setIsAuditTrailOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isEmergencyOpen, setIsEmergencyOpen] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -106,47 +116,50 @@ export default function Home() {
     }
   }, [role]);
 
-  const rolesNavigation = [
+  // Workspace cards for the redesigned landing screen
+  const workspaceCards = [
     {
       id: 'asha' as Role,
-      titleEn: '1. ASHA / Sub-Centre',
-      titleMr: '१. आशा सेविका / उपकेंद्र',
+      label: 'FIELD & SUB-CENTRE',
+      role: 'ASHA / Field Worker',
       icon: Users,
-      descEn: 'Mobile Vitals, Screening & Maternal Health across 2 PHC Catchment Areas',
-      descMr: 'जलद शारीरिक तपासणी, समुदाय सर्व्हे व HRP माता निरीक्षण',
+      color: 'teal',
     },
     {
       id: 'phc_doctor' as Role,
-      titleEn: '2. PHC Medical Officer & Staff',
-      titleMr: '२. प्राथमिक आरोग्य केंद्र (PHC)',
+      label: 'PRIMARY CARE',
+      role: 'PHC Medical Officer & Staff',
       icon: Stethoscope,
-      descEn: 'Medical Officers, Staff Nurse & Pharmacist across Velhe & Nasrapur PHCs',
-      descMr: 'वैद्यकीय अधिकारी, परिचारिका व औषध निर्माण अधिकारी (वेल्हे व नसरापूर)',
+      color: 'blue',
     },
     {
       id: 'district_officer' as Role,
-      titleEn: '3. District Health Authority (DHO)',
-      titleMr: '३. जिल्हा आरोग्य अधिकारी व नियंत्रण कक्ष (DHO)',
+      label: 'DISTRICT HEALTH',
+      role: 'DHO / District Coordinators',
       icon: Building2,
-      descEn: 'District Health Officer (DHO) / Civil Surgeon, Resource Intelligence & District Overview',
-      descMr: 'जिल्हा आरोग्य अधिकारी, जिल्हा शल्यचिकित्सक व नियंत्रण कक्ष (पुणे व नाशिक)',
+      color: 'indigo',
     },
     {
       id: 'specialist' as Role,
-      titleEn: '4. District Hospital Specialist & Casualty',
-      titleMr: '४. जिल्हा रुग्णालय तज्ज्ञ व कॅज्युअल्टी ट्रायज',
+      label: 'DISTRICT HOSPITAL',
+      role: 'Specialists / Casualty',
       icon: HeartPulse,
-      descEn: 'Chief Casualty Specialist, Bed Matrix & Inpatient Admissions (Aundh & Civil)',
-      descMr: 'कॅज्युअल्टी ट्रायज तज्ज्ञ, बेड मॅट्रिक्स व इनपेशंट विभाग (औंध व नाशिक)',
+      color: 'violet',
     },
-    {
-      id: 'patient' as any,
-      titleEn: 'Citizen Patient Access',
-      titleMr: 'नागरिक / रुग्ण प्रवेश',
-      icon: User,
-      descEn: 'Download your official EHR record via ABHA OTP.',
-      descMr: 'आभा द्वारे तुमचा अधिकृत आरोग्य अहवाल डाउनलोड करा.',
-    },
+  ];
+
+  const networkTiers = [
+    { label: 'SUB-CENTRE', sub: 'Community Health' },
+    { label: 'PHC', sub: 'Primary Care' },
+    { label: 'DISTRICT HOSPITAL', sub: 'Specialist Care' },
+    { label: 'DISTRICT HEALTH SYSTEM', sub: 'Coordination' },
+  ];
+
+  const capabilities = [
+    { icon: Network, label: 'Connected Care' },
+    { icon: GitBranch, label: 'Smart Referrals' },
+    { icon: Shield, label: 'Resource Coordination' },
+    { icon: Zap, label: 'Emergency Access' },
   ];
 
   if (!mounted) {
@@ -155,109 +168,210 @@ export default function Home() {
 
   if (!isAuthenticated || !role) {
     return (
-      <div suppressHydrationWarning className="min-h-screen flex flex-col lg:flex-row bg-white dark:bg-slate-900 font-sans">
-        {/* Left Side - Branding & Beautiful Background */}
-        <div suppressHydrationWarning className="lg:w-5/12 text-white flex flex-col justify-between p-8 lg:p-12 relative overflow-hidden bg-slate-900">
-          {/* Stunning Background Image with Overlay */}
-          <div 
-            className="absolute inset-0 z-0 opacity-40 bg-cover bg-center mix-blend-luminosity"
-            style={{ backgroundImage: 'url("https://images.unsplash.com/photo-1576091160550-2173ff9e5ee5?q=80&w=2070&auto=format&fit=crop")' }}
-          ></div>
-          <div className="absolute inset-0 z-0 bg-gradient-to-t from-slate-950 via-slate-900/80 to-blue-900/40"></div>
-          
-          <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-8">
-              <div className="w-12 h-12 bg-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-teal-500/30">
-                <HeartPulse className="w-8 h-8 text-white" />
+      <div suppressHydrationWarning className="min-h-screen flex flex-col lg:flex-row bg-white dark:bg-slate-950 font-sans">
+
+        {/* ── LEFT SIDE ─ Product Introduction ── */}
+        <div suppressHydrationWarning className="lg:w-[38%] shrink-0 text-white flex flex-col justify-between p-8 lg:py-10 lg:px-10 relative overflow-hidden bg-slate-900">
+          {/* Subtle background texture */}
+          <div className="absolute inset-0 z-0 opacity-[0.06]" style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          }}></div>
+          <div className="absolute inset-0 z-0 bg-gradient-to-b from-slate-900 via-slate-900/95 to-slate-950"></div>
+
+          <div className="relative z-10 flex flex-col h-full">
+            {/* Brand */}
+            <div className="flex items-center gap-2.5 mb-8">
+              <div className="w-9 h-9 bg-teal-500 rounded-lg flex items-center justify-center">
+                <HeartPulse className="w-5 h-5 text-white" />
               </div>
-              <h1 className="text-3xl font-black tracking-tight text-white drop-shadow-md">
+              <h1 className="text-xl font-extrabold tracking-tight">
                 Swasthya<span className="text-teal-400">Setu</span>
               </h1>
             </div>
-            
-            <h2 className="text-4xl sm:text-5xl font-extrabold leading-tight mb-6 drop-shadow-md">
-              {language === 'mr' ? 'सार्वजनिक आरोग्य सेवा महाराष्ट्र शासन' : 'Public Healthcare Network of Maharashtra'}
-            </h2>
-            <p className="text-slate-200 text-lg sm:text-xl font-medium mb-10 max-w-md drop-shadow">
-              {language === 'mr' ? 'ABDM-प्रमाणित एकात्मिक इलेक्ट्रॉनिक आरोग्य रेकॉर्ड (EHR) आणि संदर्भ व्यवस्थापन प्रणाली.' : 'ABDM-compliant Integrated Electronic Health Records (EHR) & Smart Referral Management System.'}
-            </p>
-          </div>
 
-          <div className="relative z-10 mt-8 flex items-center justify-between text-sm font-semibold text-slate-300">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              v2.4.0 (Offline Ready)
-            </div>
-            <div>Government of Maharashtra</div>
-          </div>
-        </div>
-
-        {/* Right Side - Role Selection */}
-        <div className="lg:w-7/12 bg-slate-50 dark:bg-slate-900 flex flex-col justify-center p-6 sm:p-12 lg:p-16 xl:p-24 relative transition-colors duration-300">
-          
-          {/* Language & Theme Switcher at Top Right */}
-            <div className="absolute top-6 right-6 sm:top-8 sm:right-8 flex gap-3 z-50">
-              <button
-                onClick={toggleDarkMode}
-                className="inline-flex items-center justify-center bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 w-10 h-10 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm transition-all"
-              >
-                {isDarkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-slate-600 dark:text-slate-400" />}
-              </button>
-              <button
-                onClick={toggleLanguage}
-                className="inline-flex items-center gap-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3.5 py-2 rounded-full text-sm font-semibold border border-slate-200 dark:border-slate-700 shadow-sm transition-all"
-              >
-                <Languages className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                <span>{language === 'en' ? 'मराठी' : 'English'}</span>
-              </button>
-            </div>
-
-          <div className="max-w-2xl w-full mx-auto mt-12 sm:mt-0">
-            <div className="mb-10 text-center lg:text-left">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-4">
-                {language === 'mr' ? 'प्रणालीमध्ये प्रवेश करा' : 'Sign in to Portal'}
+            {/* Tagline */}
+            <div className="mb-8">
+              <h2 className="text-2xl lg:text-[1.7rem] font-bold leading-snug mb-2 text-white/95">
+                Connected Public Healthcare<br />for Rural Communities
               </h2>
-              <p className="text-slate-500 dark:text-slate-400 text-lg">
-                {language === 'mr' ? 'कृपया सुरू ठेवण्यासाठी तुमची भूमिका निवडा:' : 'Select your authorized healthcare tier to continue:'}
+              <p className="text-sm text-slate-400 font-medium">
+                Government of Maharashtra · ABDM Compliant
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6">
-              {rolesNavigation.map((r) => {
-                const Icon = r.icon;
+            {/* Network Visualization */}
+            <div className="mb-8">
+              <div className="space-y-0">
+                {networkTiers.map((tier, i) => (
+                  <div key={tier.label}>
+                    <div className="flex items-center gap-3 py-2">
+                      <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                        i === 0 ? 'bg-teal-400' : i === 1 ? 'bg-blue-400' : i === 2 ? 'bg-indigo-400' : 'bg-violet-400'
+                      }`} />
+                      <div>
+                        <p className="text-sm font-bold text-white/90 tracking-wide">{tier.label}</p>
+                        <p className="text-xs text-slate-500">{tier.sub}</p>
+                      </div>
+                    </div>
+                    {i < networkTiers.length - 1 && (
+                      <div className="ml-[4.5px] h-3 border-l-2 border-dashed border-slate-700" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Capabilities */}
+            <div className="grid grid-cols-2 gap-2 mb-8">
+              {capabilities.map((cap) => {
+                const CIcon = cap.icon;
+                return (
+                  <div key={cap.label} className="flex items-center gap-2 py-1.5">
+                    <CIcon className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                    <span className="text-xs font-semibold text-slate-300">{cap.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Bottom bar */}
+            <div className="mt-auto pt-4 flex items-center justify-between text-xs text-slate-500 border-t border-slate-800">
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="font-medium">v2.4 · Offline Ready</span>
+              </div>
+              <span className="font-medium">SIH 2026</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── RIGHT SIDE ─ Sign In + Emergency ── */}
+        <div className="flex-1 bg-slate-50 dark:bg-slate-950 flex flex-col relative transition-colors duration-300">
+
+          {/* Language & Theme Switcher */}
+          <div className="absolute top-5 right-5 sm:top-6 sm:right-8 flex gap-2 z-50">
+            <button
+              onClick={toggleDarkMode}
+              className="inline-flex items-center justify-center bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 transition-all"
+            >
+              {isDarkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4" />}
+            </button>
+            <button
+              onClick={toggleLanguage}
+              className="inline-flex items-center gap-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 px-3 py-2 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700 transition-all"
+            >
+              <Languages className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+              <span>{language === 'en' ? 'मराठी' : 'English'}</span>
+            </button>
+          </div>
+
+          {/* Main content area — full width of right panel */}
+          <div className="flex-1 flex flex-col px-6 sm:px-10 lg:px-12 xl:px-16 pt-14 lg:pt-16 pb-8">
+
+            {/* Header */}
+            <div className="mb-7">
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">
+                {language === 'mr' ? 'पोर्टलमध्ये साइन इन करा' : 'Sign in to Portal'}
+              </h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {language === 'mr' ? 'तुमचे आरोग्य कार्यक्षेत्र निवडा' : 'Select your healthcare workspace to continue'}
+              </p>
+            </div>
+
+            {/* Workspace Cards — Clean 2×2 Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-3.5">
+              {workspaceCards.map((card) => {
+                const WIcon = card.icon;
+                const colorMap: Record<string, { bg: string; border: string; iconBg: string; hoverBorder: string; labelColor: string }> = {
+                  teal:   { bg: 'bg-teal-50 dark:bg-teal-950/30',   border: 'border-teal-100 dark:border-teal-900/50',   iconBg: 'bg-teal-500',   hoverBorder: 'hover:border-teal-400 dark:hover:border-teal-500',   labelColor: 'text-teal-700 dark:text-teal-300' },
+                  blue:   { bg: 'bg-blue-50 dark:bg-blue-950/30',   border: 'border-blue-100 dark:border-blue-900/50',   iconBg: 'bg-blue-600',   hoverBorder: 'hover:border-blue-400 dark:hover:border-blue-500',   labelColor: 'text-blue-700 dark:text-blue-300' },
+                  indigo: { bg: 'bg-indigo-50 dark:bg-indigo-950/30', border: 'border-indigo-100 dark:border-indigo-900/50', iconBg: 'bg-indigo-600', hoverBorder: 'hover:border-indigo-400 dark:hover:border-indigo-500', labelColor: 'text-indigo-700 dark:text-indigo-300' },
+                  violet: { bg: 'bg-violet-50 dark:bg-violet-950/30', border: 'border-violet-100 dark:border-violet-900/50', iconBg: 'bg-violet-600', hoverBorder: 'hover:border-violet-400 dark:hover:border-violet-500', labelColor: 'text-violet-700 dark:text-violet-300' },
+                };
+                const c = colorMap[card.color];
                 return (
                   <button
-                    key={r.id}
+                    key={card.id}
                     onClick={() => {
-                      setSelectedLoginRole(r.id);
+                      setSelectedLoginRole(card.id);
                       setIsLoginModalOpen(true);
                     }}
-                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-blue-600 dark:hover:border-blue-400 rounded-2xl p-5 sm:p-6 text-left transition-all duration-300 shadow-sm hover:shadow-xl flex flex-col gap-4 group"
+                    className={`${c.bg} border ${c.border} ${c.hoverBorder} rounded-xl p-5 text-left transition-all duration-200 hover:shadow-md group flex flex-col justify-between h-full min-h-[140px]`}
                   >
-                    <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl group-hover:bg-blue-600 dark:group-hover:bg-blue-600 transition-colors w-fit border border-slate-100 dark:border-slate-800 group-hover:border-blue-500">
-                      <Icon className="w-7 h-7 text-blue-900 dark:text-blue-200 dark:text-blue-400 group-hover:text-white" />
+                    <div className="flex items-start justify-between w-full mb-3">
+                      <div className={`${c.iconBg} w-10 h-10 rounded-lg flex items-center justify-center shrink-0`}>
+                        <WIcon className="w-5 h-5 text-white" />
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-slate-300 dark:text-slate-600 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors mt-1 shrink-0" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1 group-hover:text-blue-900 dark:hover:text-blue-200 dark:group-hover:text-white transition-colors">
-                        {language === 'mr' ? r.titleMr : r.titleEn}
-                      </h3>
-                      <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                        {language === 'mr' ? r.descMr : r.descEn}
+                      <p className={`text-[11px] font-bold tracking-widest uppercase mb-1 ${c.labelColor}`}>
+                        {card.label}
                       </p>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 leading-snug">
+                        {card.role}
+                      </p>
+                    </div>
+                    <div className="mt-3 flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500 font-medium group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors">
+                      Sign in <ChevronRight className="w-3 h-3" />
                     </div>
                   </button>
                 );
               })}
             </div>
-            
-            <div className="mt-12 text-center lg:text-left">
-              <p className="text-xs text-slate-400">
-                Unauthorized access is strictly prohibited. Activity is logged and monitored.
-              </p>
+
+            {/* Bottom row: Citizen Access + Emergency side by side */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
+
+              {/* Citizen Access */}
+              <button
+                onClick={() => {
+                  setSelectedLoginRole('patient' as any);
+                  setIsLoginModalOpen(true);
+                }}
+                className="flex items-center justify-between px-4 py-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-all text-left group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                    <User className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Citizen Patient Access</p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500">Download EHR record via ABHA OTP</p>
+                  </div>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 transition-colors shrink-0" />
+              </button>
+
+              {/* Emergency Help */}
+              <div className="rounded-xl border-2 border-red-200 dark:border-red-900/60 bg-red-50/60 dark:bg-red-950/20 px-4 py-3.5 flex items-center gap-3">
+                <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-4 h-4 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-red-800 dark:text-red-300 mb-0.5">🚨 EMERGENCY HELP</p>
+                  <p className="text-[11px] text-red-700/70 dark:text-red-400/70 leading-snug">
+                    Patients &amp; families · Hindi, Marathi or English
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsEmergencyOpen(true)}
+                  className="shrink-0 inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+                >
+                  <Phone className="w-3 h-3" />
+                  GET HELP
+                </button>
+              </div>
             </div>
+
+            {/* Legal notice */}
+            <p className="mt-5 text-[11px] text-slate-400 dark:text-slate-600">
+              Authorized personnel only. All access is logged and audited per IT Act 2000 &amp; DISHA guidelines.
+            </p>
           </div>
         </div>
 
+        {/* Auth Modals — unchanged logic */}
         {isLoginModalOpen && selectedLoginRole !== 'patient' && (
           <StaffLoginModal 
             onClose={() => {
@@ -269,6 +383,9 @@ export default function Home() {
         )}
         {isLoginModalOpen && selectedLoginRole === 'patient' && (
           <PatientDownloadModal onClose={() => setIsLoginModalOpen(false)} />
+        )}
+        {isEmergencyOpen && (
+          <EmergencyHelpModal onClose={() => setIsEmergencyOpen(false)} />
         )}
       </div>
     );
@@ -397,10 +514,6 @@ export default function Home() {
       {isAuditTrailOpen && (
         <AuditTrailModal onClose={() => setIsAuditTrailOpen(false)} />
       )}
-
-      <div className="mt-12">
-        <Footer />
-      </div>
     </AppShell>
   );
 }

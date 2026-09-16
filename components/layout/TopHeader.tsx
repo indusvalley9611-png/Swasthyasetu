@@ -40,30 +40,30 @@ export function TopHeader({
   const [notificationOpen, setNotificationOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-30 h-12 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-2xs">
-      <div className="h-full px-4 sm:px-6 flex items-center justify-between gap-3">
+    <header className="sticky top-0 z-30 h-13 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-2xs">
+      <div className="h-full px-3.5 sm:px-5 flex items-center justify-between gap-3">
         
         {/* Left: Hamburger & Dynamic Context Breadcrumbs */}
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0">
           <button
             onClick={onToggleSidebar}
             className="p-1.5 -ml-1 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             title="Toggle sidebar navigation"
             aria-label="Toggle sidebar navigation"
           >
-            <Menu className="w-5 h-5" />
+            <Menu className="w-4.5 h-4.5" />
           </button>
 
           {/* Breadcrumbs Navigation */}
           <nav aria-label="Breadcrumb" className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 truncate">
             {breadcrumbs.map((crumb, idx) => (
               <React.Fragment key={idx}>
-                {idx > 0 && <span className="text-slate-300 dark:text-slate-600">/</span>}
+                {idx > 0 && <ChevronRight className="w-3 h-3 text-slate-300 dark:text-slate-600 shrink-0" />}
                 <span
                   className={`truncate ${
                     idx === breadcrumbs.length - 1
-                      ? 'font-bold text-slate-900 dark:text-slate-100'
-                      : 'font-medium text-slate-500 dark:text-slate-400'
+                      ? 'font-bold text-slate-900 dark:text-slate-100 bg-slate-100/80 dark:bg-slate-800/70 px-2 py-0.5 rounded-md text-[11px]'
+                      : 'font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors'
                   }`}
                 >
                   {crumb.label}
@@ -82,35 +82,35 @@ export function TopHeader({
         <div className="hidden md:flex flex-1 max-w-xs mx-4">
           <button
             onClick={onOpenSearch}
-            className="w-full flex items-center justify-between px-2.5 py-1 bg-slate-100 dark:bg-slate-800/60 hover:bg-slate-200/70 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-lg border border-slate-200 dark:border-slate-700/60 text-xs transition-colors"
+            className="w-full flex items-center justify-between px-2.5 py-1 bg-slate-100/80 dark:bg-slate-800/60 hover:bg-slate-200/70 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-lg border border-slate-200 dark:border-slate-700/60 text-xs transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-2">
               <Search className="w-3.5 h-3.5 text-slate-400" />
-              <span className="text-[11px] text-slate-400">Search ABHA...</span>
+              <span className="text-[11px] text-slate-400">Search ABHA / Patient ID...</span>
             </div>
-            <kbd className="text-[9px] font-mono bg-white dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-400 dark:text-slate-300 border border-slate-200 dark:border-slate-600">
+            <kbd className="text-[9px] font-mono bg-white dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-400 dark:text-slate-300 border border-slate-200 dark:border-slate-600 shadow-2xs">
               Ctrl+K
             </kbd>
           </button>
         </div>
 
         {/* Right: Online Status, Notifications, User Pill */}
-        <div className="flex items-center gap-3 shrink-0 text-xs">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0 text-xs">
           
           {/* Mobile search icon */}
           <button
             onClick={onOpenSearch}
-            className="md:hidden p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="md:hidden p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
             title="Search ABHA"
           >
             <Search className="w-4 h-4" />
           </button>
 
           {/* Online status indicator */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
             {effectiveOnline ? (
               <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-500/20"></span>
                 <span className="hidden sm:inline">Online</span>
               </span>
             ) : (
@@ -124,7 +124,7 @@ export function TopHeader({
               <button
                 onClick={() => triggerManualSync()}
                 disabled={isSyncing}
-                className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-200"
+                className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-200 cursor-pointer"
                 title="Sync queued changes"
               >
                 <RefreshCw className={`w-2.5 h-2.5 ${isSyncing ? 'animate-spin' : ''}`} />

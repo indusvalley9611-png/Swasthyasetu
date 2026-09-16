@@ -580,24 +580,24 @@ export function Sidebar({
         />
       )}
 
-      {/* Unified 220–240px Left Sidebar (Collapses to 76px) */}
+      {/* Unified Compact Left Sidebar (216px expanded, collapses to 68px) */}
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 flex flex-col bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-100 border-r border-slate-200 dark:border-slate-800 shadow-2xl transition-all duration-300 ease-in-out ${
-          isMobileOpen ? 'translate-x-0 w-[230px]' : '-translate-x-full lg:translate-x-0'
-        } ${isCollapsed ? 'lg:w-[76px]' : 'lg:w-[230px]'}`}
+        className={`fixed top-0 bottom-0 left-0 z-50 flex flex-col bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-100 border-r border-slate-200 dark:border-slate-800 shadow-xl transition-all duration-200 ease-in-out ${
+          isMobileOpen ? 'translate-x-0 w-[216px]' : '-translate-x-full lg:translate-x-0'
+        } ${isCollapsed ? 'lg:w-[68px]' : 'lg:w-[216px]'}`}
       >
-        {/* Top Government of Maharashtra Tricolor Bar */}
+        {/* Top Government of Maharashtra Tricolor Accent Line */}
         <div className="h-1 bg-gradient-to-r from-orange-500 via-white to-green-600 shrink-0" />
 
-        {/* 1. BRAND HEADER (Desktop collapse is exclusively controlled by top header hamburger) */}
+        {/* 1. BRAND HEADER */}
         <div
-          className={`h-14 px-3.5 flex items-center ${
+          className={`h-13 px-3 flex items-center ${
             isCollapsed ? 'justify-center' : 'justify-between'
-          } border-b border-slate-200 dark:border-slate-800 shrink-0`}
+          } border-b border-slate-200 dark:border-slate-800/80 shrink-0`}
         >
           <div className="flex items-center gap-2.5 overflow-hidden">
             <div
-              className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-md shadow-blue-500/20 shrink-0"
+              className="w-7.5 h-7.5 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-md shadow-blue-500/20 shrink-0"
               title="SwasthyaSetu — Government of Maharashtra"
             >
               <HeartPulse className="w-4 h-4 text-white" />
@@ -606,23 +606,23 @@ export function Sidebar({
               <div className="overflow-hidden leading-tight">
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm font-black tracking-tight text-slate-900 dark:text-white">
-                    Swasthya<span className="text-blue-400">Setu</span>
+                    Swasthya<span className="text-blue-500">Setu</span>
                   </span>
-                  <span className="text-[9px] uppercase tracking-wider font-extrabold px-1.5 py-0.2 rounded bg-blue-900/60 text-blue-300">
+                  <span className="text-[9px] uppercase tracking-wider font-extrabold px-1.5 py-0.2 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                     MH
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate mt-0.5">
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">
                   Govt. of Maharashtra
                 </p>
               </div>
             )}
           </div>
 
-          {/* Mobile Close Button (Visible only on mobile drawer, never on desktop) */}
+          {/* Mobile Close Button */}
           <button
             onClick={onCloseMobile}
-            className="lg:hidden p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+            className="lg:hidden p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             title="Close navigation drawer"
           >
             <X className="w-4 h-4" />
@@ -631,19 +631,19 @@ export function Sidebar({
 
         {/* Officer Context Card (Hidden when collapsed) */}
         {user && user.id !== 'guest-unauthenticated' && !isCollapsed && (
-          <div className="px-3.5 py-2.5 border-b border-slate-850 bg-slate-900/40 shrink-0">
-            <div className="flex items-center justify-between text-[10px] uppercase font-mono tracking-wider text-slate-400">
+          <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/60 dark:bg-slate-900/40 shrink-0">
+            <div className="flex items-center justify-between text-[9px] uppercase font-mono tracking-wider text-slate-500 dark:text-slate-400 font-bold">
               <span>{roleTheme.levelLabel}</span>
               <span className={`w-1.5 h-1.5 rounded-full ${roleTheme.dotBg}`} />
             </div>
-            <div className="text-xs font-bold text-white truncate mt-0.5">
+            <div className="text-xs font-bold text-slate-900 dark:text-white truncate mt-0.5">
               {user.name}
             </div>
-            <div className="text-[11px] text-slate-400 truncate flex items-center gap-1 mt-0.5">
+            <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate flex items-center gap-1 mt-0.5">
               <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
               <span className="truncate">
                 {role === 'district_officer'
-                  ? `${user.district || 'Pune'} District Health Authority`
+                  ? `${user.district || 'Pune'} District Health`
                   : user.facilityName}
               </span>
             </div>
@@ -651,18 +651,18 @@ export function Sidebar({
         )}
 
         {/* 2. DYNAMIC NAVIGATION CATEGORIES */}
-        <div className={`flex-1 overflow-y-auto ${isCollapsed ? 'px-2' : 'px-2.5'} py-3 space-y-4 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent`}>
+        <div className={`flex-1 overflow-y-auto ${isCollapsed ? 'px-1.5' : 'px-2'} py-2.5 space-y-3 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800 scrollbar-track-transparent`}>
           {navGroups.map((group, gIdx) => (
-            <div key={gIdx} className="space-y-1">
+            <div key={gIdx} className="space-y-0.5">
               {!isCollapsed ? (
-                <div className="px-2 text-[10px] uppercase tracking-wider font-extrabold text-slate-400 mb-1">
+                <div className="px-2 text-[9px] uppercase tracking-wider font-extrabold text-slate-400 dark:text-slate-500 mb-1">
                   {language === 'mr' ? group.titleMr : group.titleEn}
                 </div>
               ) : (
-                <div className="h-px bg-slate-850 my-2 mx-1" />
+                <div className="h-px bg-slate-200 dark:bg-slate-800 my-1.5 mx-1" />
               )}
 
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   const isActive = activeNavItem === item.id;
@@ -673,18 +673,18 @@ export function Sidebar({
                         key={item.id}
                         href={item.href}
                         onClick={onCloseMobile}
-                        className={`group relative flex items-center ${
-                          isCollapsed ? 'justify-center p-2.5' : 'gap-2.5 px-2.5 py-2'
-                        } rounded-xl text-xs font-medium transition-colors ${
+                        className={`group relative flex items-center min-h-[38px] ${
+                          isCollapsed ? 'justify-center p-2' : 'gap-2.5 px-2.5 py-1.5'
+                        } rounded-lg text-xs font-medium transition-colors ${
                           item.id.includes('maha_aushadhi')
-                            ? 'text-rose-300 hover:text-white hover:bg-rose-50 dark:hover:bg-rose-50 dark:hover:bg-rose-950/40'
+                            ? 'text-rose-600 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40'
                             : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900'
                         }`}
                         title={language === 'mr' ? item.labelMr : item.labelEn}
                       >
-                        <Icon className={`w-5 h-5 shrink-0 ${item.id.includes('maha_aushadhi') ? 'text-rose-400 animate-pulse' : 'text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200'}`} />
+                        <Icon className={`w-4.5 h-4.5 shrink-0 ${item.id.includes('maha_aushadhi') ? 'text-rose-500 animate-pulse' : 'text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200'}`} />
                         {!isCollapsed && (
-                          <span className="truncate flex-1">
+                          <span className="truncate flex-1 font-semibold text-xs">
                             {language === 'mr' ? item.labelMr : item.labelEn}
                           </span>
                         )}
@@ -698,7 +698,7 @@ export function Sidebar({
                         )}
                         {/* Tooltip on collapsed desktop */}
                         {isCollapsed && (
-                          <div className="absolute left-full ml-3 px-2.5 py-1 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs font-medium rounded-lg shadow-xl border border-slate-200 dark:border-slate-800 whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
+                          <div className="absolute left-full ml-2.5 px-2 py-1 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-xs font-semibold rounded-md shadow-lg whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
                             {language === 'mr' ? item.labelMr : item.labelEn}
                           </div>
                         )}
@@ -710,24 +710,24 @@ export function Sidebar({
                     <button
                       key={item.id}
                       onClick={() => handleItemClick(item)}
-                      className={`w-full group relative flex items-center ${
-                        isCollapsed ? 'justify-center p-2.5' : 'gap-2.5 px-2.5 py-2'
-                      } rounded-xl text-xs font-medium transition-colors text-left cursor-pointer ${
+                      className={`w-full group relative flex items-center min-h-[38px] ${
+                        isCollapsed ? 'justify-center p-2' : 'gap-2.5 px-2.5 py-1.5'
+                      } rounded-lg text-xs transition-colors text-left cursor-pointer ${
                         isActive
-                          ? 'bg-blue-600 text-white shadow-xs'
-                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900'
+                          ? 'bg-blue-600 text-white font-bold shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900 font-medium'
                       }`}
                       title={language === 'mr' ? item.labelMr : item.labelEn}
                     >
                       <Icon
-                        className={`w-5 h-5 shrink-0 transition-colors ${
+                        className={`w-4.5 h-4.5 shrink-0 transition-colors ${
                           isActive
                             ? 'text-white'
                             : 'text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200'
                         }`}
                       />
                       {!isCollapsed && (
-                        <span className="truncate flex-1">
+                        <span className="truncate flex-1 text-xs">
                           {language === 'mr' ? item.labelMr : item.labelEn}
                         </span>
                       )}
@@ -741,7 +741,7 @@ export function Sidebar({
                       )}
                       {/* Tooltip on collapsed desktop */}
                       {isCollapsed && (
-                        <div className="absolute left-full ml-3 px-2.5 py-1 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs font-medium rounded-lg shadow-xl border border-slate-200 dark:border-slate-800 whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
+                        <div className="absolute left-full ml-2.5 px-2 py-1 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-xs font-semibold rounded-md shadow-lg whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
                           {language === 'mr' ? item.labelMr : item.labelEn}
                         </div>
                       )}
@@ -754,73 +754,73 @@ export function Sidebar({
         </div>
 
         {/* 3. BOTTOM CONTROLS & STATUS */}
-        <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 shrink-0 space-y-2">
+        <div className="p-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/80 shrink-0 space-y-1.5">
           {/* Online status indicator */}
           {!isCollapsed ? (
             <div className="flex items-center justify-between text-xs px-1 text-slate-400">
               <div className="flex items-center gap-1.5">
                 {effectiveOnline ? (
-                  <span className="flex items-center gap-1 text-emerald-400 font-bold text-[11px]">
+                  <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold text-[11px]">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                     <span>Online</span>
                   </span>
                 ) : (
-                  <span className="flex items-center gap-1 text-amber-400 font-bold text-[11px] animate-pulse">
+                  <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-bold text-[11px] animate-pulse">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                     <span>Offline</span>
                   </span>
                 )}
                 {syncQueue.length > 0 && (
                   <span className="text-[10px] text-slate-400 font-mono">
-                    ({syncQueue.length} queued)
+                    ({syncQueue.length})
                   </span>
                 )}
               </div>
 
               <button
                 onClick={toggleSimulatedOffline}
-                className="text-[10px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 underline"
+                className="text-[10px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 underline cursor-pointer"
                 title="Toggle simulated offline mode for field testing"
               >
                 {isSimulatedOffline ? 'Sim: OFF' : 'Simulate'}
               </button>
             </div>
           ) : (
-            <div className="flex justify-center">
+            <div className="flex justify-center py-0.5">
               <span className={`w-2 h-2 rounded-full ${effectiveOnline ? 'bg-emerald-500' : 'bg-amber-500'}`} />
             </div>
           )}
 
           {/* Theme, Language & Sign Out Actions */}
-          <div className={`flex items-center ${isCollapsed ? 'flex-col gap-2 pt-1' : 'justify-between pt-1'}`}>
-            <div className={`flex items-center ${isCollapsed ? 'flex-col gap-1.5' : 'gap-1'}`}>
+          <div className={`flex items-center ${isCollapsed ? 'flex-col gap-1.5 pt-0.5' : 'justify-between pt-0.5'}`}>
+            <div className={`flex items-center ${isCollapsed ? 'flex-col gap-1' : 'gap-1'}`}>
               <button
                 onClick={onToggleDarkMode}
-                className="p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors cursor-pointer"
+                className="p-1.5 rounded-md text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                 title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
               >
-                {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+                {isDarkMode ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5" />}
               </button>
 
               <button
                 onClick={toggleLanguage}
-                className="p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors flex items-center gap-1 cursor-pointer"
+                className="p-1.5 rounded-md text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors flex items-center gap-1 cursor-pointer"
                 title="Toggle Marathi / English"
               >
-                <Languages className="w-4 h-4 text-blue-400" />
-                {!isCollapsed && <span className="text-[11px] font-bold">{language === 'en' ? 'मराठी' : 'EN'}</span>}
+                <Languages className="w-3.5 h-3.5 text-blue-500" />
+                {!isCollapsed && <span className="text-[10px] font-bold">{language === 'en' ? 'मराठी' : 'EN'}</span>}
               </button>
             </div>
 
             <button
               onClick={logout}
-              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 text-[11px] font-bold transition-colors cursor-pointer ${
-                isCollapsed ? 'p-2 justify-center' : ''
+              className={`flex items-center gap-1 px-2 py-1 rounded-md text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-[11px] font-bold transition-colors cursor-pointer ${
+                isCollapsed ? 'p-1.5 justify-center' : ''
               }`}
               title="Sign Out"
             >
-              <LogOut className="w-4 h-4" />
-              {!isCollapsed && <span>{language === 'mr' ? 'बाहेर पडा' : 'Sign Out'}</span>}
+              <LogOut className="w-3.5 h-3.5" />
+              {!isCollapsed && <span>{language === 'mr' ? 'बाहेर' : 'Sign Out'}</span>}
             </button>
           </div>
         </div>

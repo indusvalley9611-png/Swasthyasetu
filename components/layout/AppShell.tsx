@@ -160,8 +160,8 @@ export function AppShell({
 
       {/* Main Workspace Wrapper (Adjusts margin based on sidebar state) */}
       <div
-        className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${
-          isSidebarCollapsed ? 'lg:pl-[76px]' : 'lg:pl-[230px]'
+        className={`flex-1 flex flex-col min-w-0 transition-all duration-200 ${
+          isSidebarCollapsed ? 'lg:pl-[68px]' : 'lg:pl-[216px]'
         }`}
       >
         {/* Sleek Compact Top Header */}
@@ -178,7 +178,7 @@ export function AppShell({
         />
 
         {/* Dynamic Main Workspace Content */}
-        <main className="flex-1 w-full p-3 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+        <main className="flex-1 w-full p-3 sm:p-5 max-w-7xl mx-auto">
           {children}
         </main>
       </div>

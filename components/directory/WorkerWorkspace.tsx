@@ -106,7 +106,7 @@ export default function WorkerWorkspace({
   const hasConsoleToggle = role === 'phc_doctor' || role === 'asha' || role === 'nurse' || role === 'pharmacist';
 
   return (
-    <div className="w-full h-full relative space-y-4">
+    <div className="w-full h-full relative">
 
       {/* Patients Directory: Clean Directory List → Full Patient Profile (Image 2) */}
       {activeSubView === 'directory' && (
