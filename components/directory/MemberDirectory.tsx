@@ -22,6 +22,8 @@ import {
   Building2,
   Stethoscope,
   UserPlus,
+  ArrowUpRight,
+  Clock3,
 } from 'lucide-react';
 
 interface MemberDirectoryProps {
@@ -47,9 +49,34 @@ export default function MemberDirectory({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [scopeTab, setScopeTab] = useState<'ASSIGNED' | 'ALL'>('ASSIGNED');
+  const [scopeTab, setScopeTab] = useState<'ASSIGNED' | 'ALL' | 'REFERRED'>('ASSIGNED');
 
   const isAdmin = user?.administrativeLevel === 'district' || user?.role === 'district_officer';
+
+  // Check if a patient has an active referral originating from the user's facility
+  const getActiveReferralForPatient = (pat: Patient) => {
+    // First check via activeReferralId
+    if (pat.activeReferralId) {
+      const ref = referrals.find(r => r.id === pat.activeReferralId && ['PENDING', 'ACCEPTED', 'ADMITTED', 'ESCALATED'].includes(r.status));
+      if (ref) return ref;
+    }
+    // Fallback: search referrals array for any active referral for this patient
+    return referrals.find(
+      r => r.patientId === pat.id &&
+           ['PENDING', 'ACCEPTED', 'ADMITTED', 'ESCALATED'].includes(r.status)
+    ) ?? null;
+  };
+
+  // A patient is "referred" if they have an active referral AND the referral originated from the user's facility
+  const isReferredFromMyFacility = (pat: Patient): boolean => {
+    const ref = getActiveReferralForPatient(pat);
+    if (!ref) return false;
+    // Check if the referral was created from the user's facility
+    return !!(
+      (ref.referringFacilityId && user?.facilityId && ref.referringFacilityId === user.facilityId) ||
+      (ref.referringUserId && user?.id && ref.referringUserId === user.id)
+    );
+  };
 
   // Determine if a patient is assigned to this user's direct care
   const isDirectlyAssignedToUser = (pat: Patient): boolean => {
@@ -99,11 +126,36 @@ export default function MemberDirectory({
     return true;
   };
 
-  // Pre-calculate counts for tabs
-  const assignedPatientsCount = patients.filter(isDirectlyAssignedToUser).length;
+  // Compute referred patients (those with active referrals from this facility)
+  const referredPatients = patients.filter(p => isReferredFromMyFacility(p));
+  const referredPatientIds = new Set(referredPatients.map(p => p.id));
+
+  // Pre-calculate counts for tabs (excluding referred patients from normal counts)
+  const assignedPatientsCount = patients.filter(p => isDirectlyAssignedToUser(p) && !referredPatientIds.has(p.id)).length;
+  const allNonReferredCount = patients.filter(p => !referredPatientIds.has(p.id)).length;
 
   // Filtered patients calculation
-  const filteredPatients = patients.filter((p) => {
+  const filteredPatients = (scopeTab === 'REFERRED' ? referredPatients : patients).filter((p) => {
+    // For REFERRED tab, search by patient details or referral details
+    if (scopeTab === 'REFERRED') {
+      const activeRef = getActiveReferralForPatient(p);
+      const matchesSearch =
+        p.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.abhaId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.phone.includes(searchQuery) ||
+        (activeRef?.targetFacility && activeRef.targetFacility.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (activeRef?.referralReason && activeRef.referralReason.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (activeRef?.specialtyRequired && activeRef.specialtyRequired.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      let matchesStatus = true;
+      if (statusFilter === 'HIGH_RISK') matchesStatus = p.isHighRiskPregnancy || false;
+
+      return matchesSearch && matchesStatus;
+    }
+
+    // For ASSIGNED/ALL tabs, exclude referred patients
+    if (referredPatientIds.has(p.id)) return false;
+
     // Scope filter (Assigned vs All)
     if (scopeTab === 'ASSIGNED' && !isDirectlyAssignedToUser(p)) {
       return false;
@@ -118,7 +170,7 @@ export default function MemberDirectory({
 
     let matchesStatus = true;
     if (statusFilter === 'HIGH_RISK') matchesStatus = p.isHighRiskPregnancy || false;
-    if (statusFilter === 'REFERRAL') matchesStatus = !!p.activeReferralId;
+    if (statusFilter === 'REFERRAL') matchesStatus = false; // Active referrals are exclusively in the Referred List
 
     return matchesSearch && matchesStatus;
   });
@@ -173,7 +225,7 @@ export default function MemberDirectory({
         </div>
       </div>
 
-      {/* Scope Selector Tabs (My Assigned Patients vs All Patients) */}
+      {/* Scope Selector Tabs (My Assigned Patients vs All Patients vs Referred List) */}
       <div className="flex items-center gap-3 mb-4">
         <button
           onClick={() => setScopeTab('ASSIGNED')}
@@ -219,7 +271,30 @@ export default function MemberDirectory({
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
             }`}
           >
-            {patients.length}
+            {allNonReferredCount}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setScopeTab('REFERRED')}
+          className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 border ${
+            scopeTab === 'REFERRED'
+              ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+          }`}
+        >
+          <ArrowUpRight className="w-4 h-4" />
+          <span>Referred List</span>
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+              scopeTab === 'REFERRED'
+                ? 'bg-white/20 text-white'
+                : referredPatients.length > 0
+                  ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+            }`}
+          >
+            {referredPatients.length}
           </span>
         </button>
       </div>
@@ -230,7 +305,11 @@ export default function MemberDirectory({
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
           <input
             type="text"
-            placeholder="Search by Name, ABHA Number, Phone, Assigned Doctor..."
+            placeholder={
+              scopeTab === 'REFERRED'
+                ? 'Search referred patients by Name, ABHA, Phone, Target Hospital, Reason...'
+                : 'Search by Name, ABHA Number, Phone, Assigned Doctor...'
+            }
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-11 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-all"
@@ -244,7 +323,7 @@ export default function MemberDirectory({
           >
             <option value="ALL">All Clinical Statuses</option>
             <option value="HIGH_RISK">High Risk / HRP</option>
-            <option value="REFERRAL">Active Referral</option>
+            {scopeTab !== 'REFERRED' && <option value="REFERRAL">Active Referral</option>}
           </select>
 
           {onOpenNewPatient && canRegisterPatient(user) && (
@@ -266,23 +345,161 @@ export default function MemberDirectory({
         <div className="overflow-x-auto flex-1">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
-                <th className="px-6 py-4">Patient Member</th>
-                <th className="px-6 py-4">Demographics</th>
-                <th className="px-6 py-4">ABHA ID & Contact</th>
-                <th className="px-6 py-4">Care Relationship & Access</th>
-                <th className="px-6 py-4">Clinical Status</th>
-                <th className="px-6 py-4 text-right">Action</th>
-              </tr>
+              {scopeTab === 'REFERRED' ? (
+                <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
+                  <th className="px-6 py-4">Patient Member</th>
+                  <th className="px-6 py-4">Demographics & ABHA</th>
+                  <th className="px-6 py-4">Destination Hospital</th>
+                  <th className="px-6 py-4">Referral Reason</th>
+                  <th className="px-6 py-4">Urgency</th>
+                  <th className="px-6 py-4">Referral Date & Status</th>
+                  <th className="px-6 py-4 text-right">Action</th>
+                </tr>
+              ) : (
+                <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
+                  <th className="px-6 py-4">Patient Member</th>
+                  <th className="px-6 py-4">Demographics</th>
+                  <th className="px-6 py-4">ABHA ID & Contact</th>
+                  <th className="px-6 py-4">Care Relationship & Access</th>
+                  <th className="px-6 py-4">Clinical Status</th>
+                  <th className="px-6 py-4 text-right">Action</th>
+                </tr>
+              )}
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredPatients.length > 0 ? (
                 filteredPatients.map((pat) => {
                   const isAssigned = isDirectlyAssignedToUser(pat);
-                  const activeReferral = pat.activeReferralId
-                    ? referrals.find((r) => r.id === pat.activeReferralId)
-                    : null;
+                  const activeReferral = getActiveReferralForPatient(pat);
 
+                  if (scopeTab === 'REFERRED') {
+                    const priorityClass =
+                      activeReferral?.triagePriority === 'red'
+                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                        : activeReferral?.triagePriority === 'yellow'
+                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
+
+                    const priorityLabel =
+                      activeReferral?.triagePriority === 'red'
+                        ? 'CRITICAL'
+                        : activeReferral?.triagePriority === 'yellow'
+                        ? 'URGENT'
+                        : 'ROUTINE';
+
+                    const statusClass =
+                      activeReferral?.status === 'ADMITTED'
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
+                        : activeReferral?.status === 'ACCEPTED'
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300 dark:border-blue-700'
+                        : activeReferral?.status === 'ESCALATED'
+                        ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300 dark:border-purple-700'
+                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-700';
+
+                    const formattedDate = activeReferral?.createdAt
+                      ? new Date(activeReferral.createdAt).toLocaleString(language === 'mr' ? 'mr-IN' : 'en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : '—';
+
+                    return (
+                      <tr
+                        key={pat.id}
+                        onClick={() => onSelectMember(pat)}
+                        className="hover:bg-amber-50/40 dark:hover:bg-amber-950/10 cursor-pointer transition-colors group"
+                      >
+                        {/* Patient Name & Location */}
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 group-hover:bg-amber-200">
+                              {pat.fullName.charAt(0)}
+                            </div>
+                            <div>
+                              <div className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-amber-700 dark:group-hover:text-amber-400 transition-colors">
+                                {pat.fullName}
+                              </div>
+                              <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
+                                <MapPin className="w-3 h-3" /> {pat.village}, {pat.taluka}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Demographics & ABHA */}
+                        <td className="px-6 py-4">
+                          <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                            {pat.age} yrs &bull; {pat.gender}
+                          </div>
+                          <div className="font-mono text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                            {pat.abhaId}
+                          </div>
+                        </td>
+
+                        {/* Referral Destination */}
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-slate-900 dark:text-white text-xs flex items-center gap-1.5">
+                            <Building2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                            <span className="truncate max-w-[180px]">
+                              {activeReferral?.targetFacility || 'District Hospital'}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                            Ref #{activeReferral?.tokenCode || activeReferral?.id}
+                          </div>
+                        </td>
+
+                        {/* Referral Reason & Specialty */}
+                        <td className="px-6 py-4">
+                          <div className="font-medium text-slate-800 dark:text-slate-200 text-xs max-w-[200px] truncate">
+                            {activeReferral?.referralReason || 'Specialist Evaluation'}
+                          </div>
+                          <div className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold mt-0.5">
+                            {activeReferral?.specialtyRequired || 'General Medicine'}
+                          </div>
+                        </td>
+
+                        {/* Urgency Priority */}
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${priorityClass}`}>
+                            <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                            {priorityLabel}
+                          </span>
+                        </td>
+
+                        {/* Referral Date & Status */}
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col gap-1 items-start">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${statusClass}`}>
+                              <Activity className="w-3 h-3" /> {activeReferral?.status || 'PENDING'}
+                            </span>
+                            <div className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1 mt-0.5">
+                              <Clock3 className="w-3 h-3" /> {formattedDate}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Action Button */}
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectMember(pat);
+                            }}
+                            className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all border bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100 flex items-center gap-1 ml-auto"
+                          >
+                            <span>Open Referral</span>
+                            <ArrowUpRight className="w-3 h-3" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  // Default view for ASSIGNED and ALL tabs
                   return (
                     <tr
                       key={pat.id}
@@ -400,17 +617,21 @@ export default function MemberDirectory({
                 })
               ) : (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+                  <td colSpan={scopeTab === 'REFERRED' ? 7 : 6} className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
                     <div className="max-w-md mx-auto space-y-2">
                       <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-400">
                         <User className="w-6 h-6" />
                       </div>
                       <div className="font-bold text-slate-700 dark:text-slate-200 text-sm">
-                        No members found in this view
+                        {scopeTab === 'REFERRED'
+                          ? 'No active referrals found'
+                          : 'No members found in this view'}
                       </div>
                       <p className="text-xs text-slate-400">
-                        {scopeTab === 'ASSIGNED'
-                          ? 'There are no patients currently assigned directly to your profile. Switch to "All Network Patients" to search platform records.'
+                        {scopeTab === 'REFERRED'
+                          ? 'Patients with active referrals originating from this facility will appear here.'
+                          : scopeTab === 'ASSIGNED'
+                          ? 'There are no patients currently assigned directly to your profile. Switch to "Facility Care Roster" to search platform records.'
                           : 'Try adjusting your search query or status filter.'}
                       </p>
                     </div>
