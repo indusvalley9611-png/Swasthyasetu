@@ -5,10 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { useSync } from '@/context/SyncContext';
 import { Role, Patient, Referral } from '@/lib/types';
-import { Header } from '@/components/layout/Header';
 import { AppShell } from '@/components/layout/AppShell';
-import { AshaDashboard } from '@/components/dashboards/AshaDashboard';
-import { PhcDoctorDashboard } from '@/components/dashboards/PhcDoctorDashboard';
 import { SpecialistDashboard } from '@/components/dashboards/SpecialistDashboard';
 import { DistrictCoordinationDashboard } from '@/components/dashboards/DistrictCoordinationDashboard';
 import WorkerWorkspace from '@/components/directory/WorkerWorkspace';
@@ -24,8 +21,8 @@ import { StaffLoginModal } from '@/components/auth/StaffLoginModal';
 import { PatientDownloadModal } from '@/components/auth/PatientDownloadModal';
 import { AuditTrailModal } from '@/components/compliance/AuditTrailModal';
 import { EmergencyHelpModal } from '@/components/emergency/EmergencyHelpModal';
-import { LandingPortal } from '@/components/landing/LandingPortal';
-
+import { LandingPitchPage } from '@/components/landing/LandingPitchPage';
+import { SignInPortalPage } from '@/components/auth/SignInPortalPage';
 
 export default function Home() {
   const { role, isAuthenticated, switchRole } = useAuth();
@@ -44,9 +41,11 @@ export default function Home() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isEmergencyOpen, setIsEmergencyOpen] = useState(false);
 
+  // Split Page 1 (Pitch / Landing) vs Page 2 (Sign In)
+  const [unauthView, setUnauthView] = useState<'pitch' | 'signin'>('pitch');
+
   useEffect(() => {
     setMounted(true);
-    // Only use dark mode if user explicitly saved it
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark' || (!savedTheme && document.documentElement.classList.contains('dark'))) {
       setIsDarkMode(true);
@@ -102,20 +101,32 @@ export default function Home() {
     return null;
   }
 
+  // ── UNAUTHENTICATED STATE: SPLIT BETWEEN PAGE 1 (PITCH) & PAGE 2 (SIGN IN) ──
   if (!isAuthenticated || !role) {
+    if (unauthView === 'pitch') {
+      return (
+        <LandingPitchPage
+          onNavigateToSignIn={() => setUnauthView('signin')}
+          isDarkMode={isDarkMode}
+          onToggleDarkMode={toggleDarkMode}
+        />
+      );
+    }
+
     return (
       <>
-        <LandingPortal
+        <SignInPortalPage
           onSelectRole={(r) => {
             setSelectedLoginRole(r as Role | 'patient');
             setIsLoginModalOpen(true);
           }}
           onOpenEmergency={() => setIsEmergencyOpen(true)}
+          onNavigateToPitch={() => setUnauthView('pitch')}
           isDarkMode={isDarkMode}
           onToggleDarkMode={toggleDarkMode}
         />
 
-        {/* Auth Modals — unchanged logic */}
+        {/* Auth Modals */}
         {isLoginModalOpen && selectedLoginRole !== 'patient' && (
           <StaffLoginModal 
             onClose={() => {
@@ -135,9 +146,7 @@ export default function Home() {
     );
   }
 
-
-
-  // Dashboard View for Logged-In Users
+  // ── DASHBOARD VIEW FOR LOGGED-IN USERS ──
   return (
     <AppShell
       activeNavItem={activeNavItem}
