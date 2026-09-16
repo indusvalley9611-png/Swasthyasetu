@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { useLanguage } from '@/context/LanguageContext';
@@ -78,6 +78,42 @@ interface NavGroupDef {
   items: NavItemDef[];
 }
 
+
+const heartbeatKeyframes = `
+@keyframes heartbeat {
+  0% { transform: scale(1); }
+  14% { transform: scale(1.12); }
+  28% { transform: scale(1); }
+  42% { transform: scale(1.07); }
+  70% { transform: scale(1); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .animate-heartbeat {
+    animation: heartbeat 2s ease-in-out infinite;
+  }
+}
+`;
+
+function getInitials(name?: string): string {
+  if (!name) return 'U';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function NavTooltip({ text }: { text: string }) {
+  return (
+    <div
+      role="tooltip"
+      className="pointer-events-none absolute left-full ml-2.5 px-2.5 py-1 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-xs font-semibold rounded-md shadow-lg whitespace-nowrap opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 z-50 flex items-center"
+    >
+      <span className="absolute -left-1 top-1/2 -translate-y-1/2 border-4 border-transparent border-r-slate-900 dark:border-r-slate-100" />
+      {text}
+    </div>
+  );
+}
+
 export function Sidebar({
   isCollapsed,
   onToggleCollapse,
@@ -94,6 +130,22 @@ export function Sidebar({
   onToggleDarkMode,
 }: SidebarProps) {
   const { role, user, logout } = useAuth();
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setIsProfileOpen(false);
+      }
+    }
+    if (isProfileOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isProfileOpen]);
   const { language, toggleLanguage } = useLanguage();
   const {
     effectiveOnline,
@@ -584,6 +636,7 @@ export function Sidebar({
           isMobileOpen ? 'translate-x-0 w-[216px]' : '-translate-x-full lg:translate-x-0'
         } ${isCollapsed ? 'lg:w-[68px]' : 'lg:w-[216px]'}`}
       >
+        <style dangerouslySetInnerHTML={{ __html: heartbeatKeyframes }} />
         {/* Top Government of Maharashtra Tricolor Accent Line */}
         <div className="h-1 bg-gradient-to-r from-orange-500 via-white to-green-600 shrink-0" />
 
@@ -598,7 +651,7 @@ export function Sidebar({
               className="w-7.5 h-7.5 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-md shadow-blue-500/20 shrink-0"
               title="SwasthyaSetu — Government of Maharashtra"
             >
-              <HeartPulse className="w-4 h-4 text-white" />
+              <HeartPulse className="w-4 h-4 text-white animate-heartbeat motion-safe:animate-heartbeat" />
             </div>
             {!isCollapsed && (
               <div className="overflow-hidden leading-tight">
@@ -626,27 +679,6 @@ export function Sidebar({
             <X className="w-4 h-4" />
           </button>
         </div>
-
-        {/* Officer Context Card (Hidden when collapsed) */}
-        {user && user.id !== 'guest-unauthenticated' && !isCollapsed && (
-          <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/60 dark:bg-slate-900/40 shrink-0">
-            <div className="flex items-center justify-between text-[9px] uppercase font-mono tracking-wider text-slate-500 dark:text-slate-400 font-bold">
-              <span>{roleTheme.levelLabel}</span>
-              <span className={`w-1.5 h-1.5 rounded-full ${roleTheme.dotBg}`} />
-            </div>
-            <div className="text-xs font-bold text-slate-900 dark:text-white truncate mt-0.5">
-              {user.name}
-            </div>
-            <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate flex items-center gap-1 mt-0.5">
-              <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
-              <span className="truncate">
-                {role === 'district_officer'
-                  ? `${user.district || 'Pune'} District Health`
-                  : user.facilityName}
-              </span>
-            </div>
-          </div>
-        )}
 
         {/* 2. DYNAMIC NAVIGATION CATEGORIES */}
         <div className={`flex-1 overflow-y-auto ${isCollapsed ? 'px-1.5' : 'px-2'} py-2.5 space-y-3 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800 scrollbar-track-transparent`}>
@@ -751,75 +783,136 @@ export function Sidebar({
           ))}
         </div>
 
-        {/* 3. BOTTOM CONTROLS & STATUS */}
-        <div className="p-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/80 shrink-0 space-y-1.5">
-          {/* Online status indicator */}
-          {!isCollapsed ? (
-            <div className="flex items-center justify-between text-xs px-1 text-slate-400">
-              <div className="flex items-center gap-1.5">
-                {effectiveOnline ? (
-                  <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold text-[11px]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    <span>Online</span>
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-bold text-[11px] animate-pulse">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                    <span>Offline</span>
-                  </span>
-                )}
-                {syncQueue.length > 0 && (
-                  <span className="text-[10px] text-slate-400 font-mono">
-                    ({syncQueue.length})
-                  </span>
-                )}
-              </div>
+        {/* 3. BOTTOM CONTROLS & PROFILE CARD */}
+        <div className="p-2 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/80 shrink-0 space-y-2">
+          {/* Controls (Dark Mode & Language & Offline Simulation) */}
+          <div className={`flex items-center ${isCollapsed ? 'flex-col gap-1.5' : 'justify-between px-1'}`}>
+            <div className={`flex items-center ${isCollapsed ? 'flex-col gap-1' : 'gap-1'}`}>
+              <button
+                onClick={onToggleDarkMode}
+                className="group relative p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              >
+                {isDarkMode ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5" />}
+                {isCollapsed && <NavTooltip text={isDarkMode ? 'Light Mode' : 'Dark Mode'} />}
+              </button>
 
+              <button
+                onClick={toggleLanguage}
+                className="group relative p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-800 transition-colors flex items-center gap-1 cursor-pointer"
+                title="Toggle Marathi / English"
+              >
+                <Languages className="w-3.5 h-3.5 text-blue-500" />
+                {!isCollapsed && <span className="text-[10px] font-bold">{language === 'en' ? 'मराठी' : 'EN'}</span>}
+                {isCollapsed && <NavTooltip text={language === 'en' ? 'मराठी' : 'English'} />}
+              </button>
+            </div>
+
+            {!isCollapsed && (
               <button
                 onClick={toggleSimulatedOffline}
                 className="text-[10px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 underline cursor-pointer"
                 title="Toggle simulated offline mode for field testing"
               >
-                {isSimulatedOffline ? 'Sim: OFF' : 'Simulate'}
+                {isSimulatedOffline ? 'Sim: OFF' : 'Simulate Offline'}
               </button>
-            </div>
-          ) : (
-            <div className="flex justify-center py-0.5">
-              <span className={`w-2 h-2 rounded-full ${effectiveOnline ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* Theme, Language & Sign Out Actions */}
-          <div className={`flex items-center ${isCollapsed ? 'flex-col gap-1.5 pt-0.5' : 'justify-between pt-0.5'}`}>
-            <div className={`flex items-center ${isCollapsed ? 'flex-col gap-1' : 'gap-1'}`}>
-              <button
-                onClick={onToggleDarkMode}
-                className="p-1.5 rounded-md text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-              >
-                {isDarkMode ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5" />}
-              </button>
-
-              <button
-                onClick={toggleLanguage}
-                className="p-1.5 rounded-md text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors flex items-center gap-1 cursor-pointer"
-                title="Toggle Marathi / English"
-              >
-                <Languages className="w-3.5 h-3.5 text-blue-500" />
-                {!isCollapsed && <span className="text-[10px] font-bold">{language === 'en' ? 'मराठी' : 'EN'}</span>}
-              </button>
-            </div>
-
+          {/* Clickable Profile Card with Popover */}
+          <div ref={profileRef} className="relative">
             <button
-              onClick={logout}
-              className={`flex items-center gap-1 px-2 py-1 rounded-md text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-[11px] font-bold transition-colors cursor-pointer ${
-                isCollapsed ? 'p-1.5 justify-center' : ''
-              }`}
-              title="Sign Out"
+              onClick={() => setIsProfileOpen((prev) => !prev)}
+              className={`w-full group flex items-center ${
+                isCollapsed ? 'justify-center p-1.5' : 'gap-2.5 p-2'
+              } rounded-xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800/80 hover:border-blue-400 dark:hover:border-blue-500/50 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all text-left cursor-pointer shadow-xs`}
             >
-              <LogOut className="w-3.5 h-3.5" />
-              {!isCollapsed && <span>{language === 'mr' ? 'बाहेर' : 'Sign Out'}</span>}
+              <div className="relative shrink-0">
+                <div className="w-7 h-7 rounded-full bg-blue-600 text-white font-bold text-[11px] flex items-center justify-center shadow-xs">
+                  {getInitials(user?.name)}
+                </div>
+                <span
+                  className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-white dark:border-slate-950 ${
+                    effectiveOnline ? 'bg-emerald-500' : 'bg-amber-500'
+                  }`}
+                />
+              </div>
+
+              {!isCollapsed && (
+                <div className="overflow-hidden flex-1 min-w-0">
+                  <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                    {user?.name || 'Healthcare Officer'}
+                  </div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                    {roleTheme.levelLabel}
+                  </div>
+                </div>
+              )}
+
+              {isCollapsed && <NavTooltip text={user?.name || 'User Profile'} />}
             </button>
+
+            {/* Popover dialog */}
+            {isProfileOpen && (
+              <div
+                className={`absolute bottom-full mb-2 ${
+                  isCollapsed ? 'left-full ml-2 w-64' : 'left-0 right-0'
+                } bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl p-3 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150`}
+              >
+                <div className="flex items-center gap-2.5 pb-2.5 border-b border-slate-100 dark:border-slate-800">
+                  <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
+                    {getInitials(user?.name)}
+                  </div>
+                  <div className="overflow-hidden flex-1 min-w-0">
+                    <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      {user?.name || 'Healthcare Officer'}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className={`w-1.5 h-1.5 rounded-full ${roleTheme.dotBg}`} />
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                        {roleTheme.levelLabel}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="py-2 space-y-2 text-[11px]">
+                  <div className="flex items-start gap-2 text-slate-600 dark:text-slate-300">
+                    <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                    <div className="truncate flex-1">
+                      <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">
+                        Facility
+                      </span>
+                      <span className="font-medium truncate block text-slate-800 dark:text-slate-200">
+                        {role === 'district_officer'
+                          ? `${user?.district || 'Pune'} District Health`
+                          : user?.facilityName || 'Government Health Facility'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 dark:border-slate-800/80 text-[10px]">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[9px]">
+                      Session Status
+                    </span>
+                    <span
+                      className={`flex items-center gap-1 font-semibold ${
+                        effectiveOnline
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-amber-600 dark:text-amber-400'
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          effectiveOnline ? 'bg-emerald-500' : 'bg-amber-500'
+                        }`}
+                      />
+                      {effectiveOnline ? 'Active (Online)' : 'Offline Mode'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </aside>
