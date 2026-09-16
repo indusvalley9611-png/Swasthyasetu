@@ -200,15 +200,13 @@ export async function POST(request: Request) {
       const srcFac = sourceFacilityId ? resolveCanonicalFacility(sourceFacilityId) : undefined;
       const dstFac = destinationFacilityId ? resolveCanonicalFacility(destinationFacilityId) : undefined;
 
-      // District Officer: At least one facility must be in district or connect to State Reserve
+      // District Officer: At least one facility must be in district
       if (user.role === 'district_officer') {
         const userDistLower = (user.district || '').toLowerCase();
         const srcInDistrict = srcFac?.district.toLowerCase() === userDistLower;
         const dstInDistrict = dstFac?.district.toLowerCase() === userDistLower;
-        const isStateSource = sourceFacilityId === 'fac-state-reserve';
-        const isNationalSource = sourceFacilityId === 'fac-nha-delhi';
 
-        if (!srcInDistrict && !dstInDistrict && !isStateSource && !isNationalSource) {
+        if (!srcInDistrict && !dstInDistrict) {
           recordAuditLog({
             userId: user.id,
             userName: user.name,

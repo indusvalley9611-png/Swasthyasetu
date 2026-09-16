@@ -153,18 +153,6 @@ export function Sidebar({
           dotBg: 'bg-amber-500',
           levelLabel: 'District Health Officer',
         };
-      case 'state_admin':
-        return {
-          badgeBg: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
-          dotBg: 'bg-rose-500',
-          levelLabel: 'State Health Authority',
-        };
-      case 'national_admin':
-        return {
-          badgeBg: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30',
-          dotBg: 'bg-indigo-500',
-          levelLabel: 'National Health Authority',
-        };
       default:
         return {
           badgeBg: 'bg-slate-500/10 text-slate-400 border-slate-700',
@@ -494,80 +482,6 @@ export function Sidebar({
           },
         ];
 
-      case 'state_admin':
-      case 'national_admin':
-        return [
-          {
-            titleEn: 'Workspace',
-            titleMr: 'कार्यक्षेत्र',
-            items: [
-              {
-                id: 'overview',
-                labelEn: role === 'national_admin' ? 'National Control' : 'Apex Command Center',
-                labelMr: 'सर्वोच्च नियंत्रण कक्ष',
-                icon: BarChart3,
-              },
-              {
-                id: 'tertiary',
-                labelEn: 'Referrals & Routing',
-                labelMr: 'तृतीयक संदर्भ समन्वय',
-                icon: Share2,
-              },
-            ],
-          },
-          {
-            titleEn: 'Resources',
-            titleMr: 'संसाधने',
-            items: [
-              {
-                id: 'capacity',
-                labelEn: 'Hospital Capacity',
-                labelMr: 'रुग्णालय खाटा क्षमता',
-                icon: Building2,
-              },
-              {
-                id: 'resources',
-                labelEn: 'Drug Buffer & Logistics',
-                labelMr: 'औषध बफर व पुरवठा',
-                icon: Pill,
-              },
-              {
-                id: 'link:maha_aushadhi',
-                labelEn: 'MahaAushadhi',
-                labelMr: 'महा औषधी',
-                icon: Flame,
-                isExternalLink: true,
-                href: '/maha-aushadhi',
-                badge: activeEmergencyTransfersCount > 0 ? activeEmergencyTransfersCount : undefined,
-                badgeColor: 'bg-rose-600 text-white animate-pulse',
-              },
-            ],
-          },
-          {
-            titleEn: 'Intelligence',
-            titleMr: 'माहिती व विश्लेषण',
-            items: [
-              {
-                id: 'surveillance',
-                labelEn: 'Disease Surveillance',
-                labelMr: 'साथरोग सर्व्हेक्षण व RRT',
-                icon: Activity,
-              },
-              {
-                id: 'gis_map',
-                labelEn: 'GIS Facility Network',
-                labelMr: 'GIS सुविधा नकाशा',
-                icon: Compass,
-              },
-              {
-                id: 'audit',
-                labelEn: 'Audit Trail',
-                labelMr: 'सुरक्षा व ऑडिट ट्रेल',
-                icon: ShieldAlert,
-              },
-            ],
-          },
-        ];
 
       default:
         return [];

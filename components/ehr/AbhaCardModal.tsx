@@ -66,11 +66,11 @@ export function AbhaCardModal({ patient, onClose }: AbhaCardModalProps) {
             <div className="relative z-10 h-2 bg-gradient-to-r from-orange-500 via-white to-green-600 border-b border-slate-200" />
 
             <div className="relative z-10">
-              {/* National Health Authority Banner */}
+              {/* ABDM Banner */}
               <div className="px-4 py-2 bg-slate-50 backdrop-blur-xs border-b border-slate-200 flex justify-between items-center">
                 <div>
                   <div className="text-[10px] font-bold text-slate-800 uppercase tracking-wider">
-                    {language === 'mr' ? 'राष्ट्रीय आरोग्य प्राधिकरण' : 'NATIONAL HEALTH AUTHORITY'}
+                    {language === 'mr' ? 'राष्ट्रीय आरोग्य प्राधिकरण' : 'AYUSHMAN BHARAT DIGITAL MISSION (ABDM)'}
                   </div>
                   <div className="text-[9px] text-slate-500">
                     {language === 'mr' ? 'भारत सरकार व महाराष्ट्र शासन' : 'Govt of India & Govt of Maharashtra'}

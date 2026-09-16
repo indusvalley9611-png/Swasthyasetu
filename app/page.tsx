@@ -12,8 +12,6 @@ import { AshaDashboard } from '@/components/dashboards/AshaDashboard';
 import { PhcDoctorDashboard } from '@/components/dashboards/PhcDoctorDashboard';
 import { SpecialistDashboard } from '@/components/dashboards/SpecialistDashboard';
 import { DistrictCoordinationDashboard } from '@/components/dashboards/DistrictCoordinationDashboard';
-import { StateAdminDashboard } from '@/components/dashboards/StateAdminDashboard';
-import { NationalAdminDashboard } from '@/components/dashboards/NationalAdminDashboard';
 import WorkerWorkspace from '@/components/directory/WorkerWorkspace';
 import { NewPatientModal } from '@/components/ehr/NewPatientModal';
 import { PatientTimelineModal } from '@/components/ehr/PatientTimelineModal';
@@ -30,14 +28,12 @@ import {
   Users, User,
   Stethoscope,
   Building2,
-  BarChart3,
   HeartPulse,
   Activity,
   Languages,
     Moon,
     Sun,
   Pill,
-  Globe,
 } from 'lucide-react';
 
 export default function Home() {
@@ -93,7 +89,7 @@ export default function Home() {
 
   // Active navigation view managed across left sidebar and main content
   const getDefaultNavItem = (r?: Role) => {
-    if (r === 'state_admin' || r === 'national_admin' || r === 'district_officer') return 'overview';
+    if (r === 'district_officer') return 'overview';
     if (r === 'specialist') return 'incoming';
     if (r === 'phc_doctor') return 'directory';
     if (r === 'nurse') return 'directory';
@@ -142,22 +138,6 @@ export default function Home() {
       icon: HeartPulse,
       descEn: 'Chief Casualty Specialist, Bed Matrix & Inpatient Admissions (Aundh & Civil)',
       descMr: 'कॅज्युअल्टी ट्रायज तज्ज्ञ, बेड मॅट्रिक्स व इनपेशंट विभाग (औंध व नाशिक)',
-    },
-    {
-      id: 'state_admin' as Role,
-      titleEn: '5. State Health Authority',
-      titleMr: '५. राज्य आरोग्य प्राधिकरण (DHS)',
-      icon: BarChart3,
-      descEn: 'Directorate of Health Services (DHS), Maharashtra State HQ, Mumbai',
-      descMr: 'आरोग्य सेवा संचालनालय (DHS), महाराष्ट्र शासन, मुंबई',
-    },
-    {
-      id: 'national_admin' as Role,
-      titleEn: '6. National Health Authority',
-      titleMr: '६. राष्ट्रीय आरोग्य प्राधिकरण (NHA)',
-      icon: Globe,
-      descEn: 'National Health Authority (NHA) & MoHFW Apex Mission Control, New Delhi',
-      descMr: 'राष्ट्रीय आरोग्य प्राधिकरण (NHA) व आरोग्य मंत्रालय, नवी दिल्ली',
     },
     {
       id: 'patient' as any,
@@ -312,15 +292,6 @@ export default function Home() {
       isDarkMode={isDarkMode}
       onToggleDarkMode={toggleDarkMode}
     >
-      {role === 'national_admin' && (
-        <NationalAdminDashboard
-          onOpenBedMatrix={() => setIsBedMatrixOpen(true)}
-          onOpenStockLedger={() => setIsDrugStockOpen(true)}
-          activeTab={activeNavItem as any}
-          onTabChange={(tab) => setActiveNavItem(tab)}
-        />
-      )}
-
       {role === 'district_officer' && (
         <DistrictCoordinationDashboard
           onOpenBedMatrix={() => setIsBedMatrixOpen(true)}
@@ -328,15 +299,6 @@ export default function Home() {
           onOpenAuditLogs={() => setIsAuditTrailOpen(true)}
           onOpenPatientTimeline={(patient) => setTimelinePatient(patient)}
           onOpenReferralToken={(ref) => setReferralToken(ref)}
-          activeTab={activeNavItem as any}
-          onTabChange={(tab) => setActiveNavItem(tab)}
-        />
-      )}
-
-      {role === 'state_admin' && (
-        <StateAdminDashboard
-          onOpenBedMatrix={() => setIsBedMatrixOpen(true)}
-          onOpenStockLedger={() => setIsDrugStockOpen(true)}
           activeTab={activeNavItem as any}
           onTabChange={(tab) => setActiveNavItem(tab)}
         />

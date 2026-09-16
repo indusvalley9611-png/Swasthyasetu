@@ -59,9 +59,6 @@ export default function WorkerWorkspace({
     if (user.role === 'district_officer') {
       return filtered.facilityPatients; // District patients
     }
-    if (user.administrativeLevel === 'state' || user.administrativeLevel === 'national') {
-      return filtered.allPatients;
-    }
     return filtered.facilityPatients;
   }, [user, patients, referrals]);
 

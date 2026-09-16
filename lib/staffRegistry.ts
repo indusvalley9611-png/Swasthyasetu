@@ -191,8 +191,8 @@ export const PRE_REGISTERED_STAFF: Record<string, UserProfile> = {
     id: 'user-dist-admin-01',
     name: 'Dr. Vinod Chavan',
     role: 'district_officer',
-    roleTitleEn: 'District Health Officer (DHO) / Civil Surgeon',
-    roleTitleMr: 'जिल्हा आरोग्य अधिकारी (DHO) / जिल्हा शल्यचिकित्सक (पुणे)',
+    roleTitleEn: 'District Health Officer (DHO) & District Medicals Coordinator',
+    roleTitleMr: 'जिल्हा आरोग्य अधिकारी व औषध नियंत्रण (पुणे)',
     phone: '9823091824',
     facilityId: 'fac-dh-pune',
     facilityName: 'District Hospital Aundh, Pune',
@@ -264,8 +264,8 @@ export const PRE_REGISTERED_STAFF: Record<string, UserProfile> = {
     id: 'user-dist-admin-02',
     name: 'Shri Sachin Gite',
     role: 'district_officer',
-    roleTitleEn: 'Hospital Resource Coordinator - Nashik',
-    roleTitleMr: 'रुग्णालय संसाधन समन्वयक (जिल्हा रुग्णालय नाशिक)',
+    roleTitleEn: 'District Medicals & Resource Coordinator - Nashik',
+    roleTitleMr: 'जिल्हा औषध व रुग्णालय संसाधन समन्वयक (नाशिक)',
     phone: '9823091826',
     facilityId: 'fac-dh-nashik',
     facilityName: 'District Civil Hospital, Nashik',
@@ -281,46 +281,6 @@ export const PRE_REGISTERED_STAFF: Record<string, UserProfile> = {
       'view_aggregate_analytics',
     ],
   },
-
-  // ==========================================
-  // 4. HIGHER ADMINISTRATIVE LEVELS
-  // ==========================================
-  '9821094821': {
-    id: 'user-admin-01',
-    name: 'Dr. Nitin Patil',
-    role: 'state_admin',
-    roleTitleEn: 'Director of Health Services (DHS)',
-    roleTitleMr: 'आरोग्य सेवा संचालक, महाराष्ट्र शासन',
-    phone: '9821094821',
-    facilityId: 'fac-state-reserve',
-    facilityName: 'State Medical Reserve Depot, Maharashtra',
-    facilityType: 'State Medical Reserve',
-    hfrCode: 'HFR-MH-MUM-DHS01',
-    taluka: 'Mumbai City',
-    district: 'Mumbai',
-    state: 'Maharashtra',
-    registrationNumber: 'IAS/MED-MH-084',
-    administrativeLevel: 'state',
-    permissions: ['view_aggregate_analytics'],
-  },
-  '9810012345': {
-    id: 'user-national-01',
-    name: 'Dr. Arvind Sharma',
-    role: 'national_admin',
-    roleTitleEn: 'National Health Authority / MoHFW, New Delhi',
-    roleTitleMr: 'राष्ट्रीय आरोग्य प्राधिकरण (NHA) / आरोग्य मंत्रालय, नवी दिल्ली',
-    phone: '9810012345',
-    facilityId: 'fac-nha-delhi',
-    facilityName: 'National Health Authority (NHA), New Delhi',
-    facilityType: 'National Health Authority',
-    hfrCode: 'HFR-IND-DEL-NHA01',
-    taluka: 'New Delhi',
-    district: 'New Delhi',
-    state: 'Delhi',
-    registrationNumber: 'IAS/NHA-GOI-012',
-    administrativeLevel: 'national',
-    permissions: ['view_aggregate_analytics'],
-  },
 };
 
 export const USER_PROFILES_BY_ROLE: Record<Role, UserProfile> = {
@@ -330,8 +290,6 @@ export const USER_PROFILES_BY_ROLE: Record<Role, UserProfile> = {
   pharmacist: PRE_REGISTERED_STAFF['9822066666'],
   specialist: PRE_REGISTERED_STAFF['9823091823'],
   district_officer: PRE_REGISTERED_STAFF['9823091824'],
-  state_admin: PRE_REGISTERED_STAFF['9821094821'],
-  national_admin: PRE_REGISTERED_STAFF['9810012345'],
 };
 
 export const ALL_REGISTERED_USERS: UserProfile[] = Object.values(PRE_REGISTERED_STAFF);

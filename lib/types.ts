@@ -3,12 +3,10 @@ export type Role =
   | 'phc_doctor'
   | 'specialist'
   | 'district_officer'
-  | 'state_admin'
-  | 'national_admin'
   | 'nurse'
   | 'pharmacist';
 
-export type AdministrativeLevel = 'field' | 'facility' | 'district' | 'state' | 'national';
+export type AdministrativeLevel = 'field' | 'facility' | 'district';
 
 export type Permission =
   | 'view_basic_demographics'
@@ -169,12 +167,12 @@ export interface Patient {
   };
   encounters: ClinicalEncounter[];
   activeReferralId?: string;
-  activeCareOwner?: string; // e.g. 'DISTRICT', 'STATE', 'PHC'
+  activeCareOwner?: string; // e.g. 'DISTRICT', 'PHC'
   assignedDoctorId?: string;
   assignedDoctorName?: string;
   assignedFacilityId?: string;
   assignedFacilityName?: string;
-  entryType?: 'COMMUNITY_ASHA' | 'PHC_WALK_IN' | 'DISTRICT_HOSPITAL_WALK_IN' | 'STATE_TERTIARY_WALK_IN';
+  entryType?: 'COMMUNITY_ASHA' | 'PHC_WALK_IN' | 'DISTRICT_HOSPITAL_WALK_IN';
   registrationFacilityId?: string;
   registrationFacilityName?: string;
   registrationLevel?: AdministrativeLevel;
@@ -239,11 +237,7 @@ export interface Facility {
     | 'PHC'
     | 'Rural Hospital'
     | 'District Hospital'
-    | 'Medical College'
-    | 'Directorate of Health Services'
-    | 'National Health Authority'
-    | 'State Medical Reserve'
-    | 'National Medical Reserve';
+    | 'Medical College';
   taluka: string;
   district: string;
   phone: string;
@@ -301,7 +295,7 @@ export interface ReplenishmentRequestItem {
   sourceFacilityId?: string;
   /** Resolved dynamically from facilities[] — never hard-coded */
   sourceFacilityName?: string;
-  supplyTier?: 'PHC' | 'DISTRICT' | 'STATE' | 'NATIONAL';
+  supplyTier?: 'PHC' | 'DISTRICT';
   /** Links to a StockTransfer.id for this item */
   transferId?: string;
 }
@@ -377,7 +371,7 @@ export interface StockTransfer {
   isEmergency?: boolean;
   emergencyIndication?: string;
   requiredByTime?: string;
-  transportMode?: '108_AMBULANCE' | 'STATE_MEDICAL_COURIER' | 'POLICE_GREEN_CORRIDOR' | 'FACILITY_TRANSPORT';
+  transportMode?: '108_AMBULANCE' | 'DISTRICT_MEDICAL_COURIER' | 'POLICE_GREEN_CORRIDOR' | 'FACILITY_TRANSPORT';
   consignmentCode?: string;
   dispatchedByUserName?: string;
   receivedByUserName?: string;
@@ -387,7 +381,7 @@ export interface StockTransfer {
   allocatedByDistrictUserId?: string;
   allocatedByDistrictUserName?: string;
   allocatedAt?: string;
-  supplyTier?: 'PHC' | 'DISTRICT' | 'STATE' | 'NATIONAL';
+  supplyTier?: 'PHC' | 'DISTRICT';
   /** Links this transfer to a parent ReplenishmentRequest.id */
   requestId?: string;
   /** Links this transfer to a specific ReplenishmentRequestItem.id within the parent request */

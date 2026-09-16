@@ -62,7 +62,6 @@ export type DistrictCoordinationTab =
   | 'can_supply'
   | 'pending_approvals'
   | 'active_transfers'
-  | 'state_escalations'
   | 'completed'
   | 'district_supply';
 
@@ -165,7 +164,6 @@ export function DistrictMahaAushadhiView({ isSpecialist = false }: DistrictMahaA
         return (
           (srcFac && srcFac.district.toLowerCase() === userDist) ||
           (dstFac && dstFac.district.toLowerCase() === userDist) ||
-          (t.sourceFacilityId === 'fac-state-reserve' && dstFac?.district.toLowerCase() === userDist) ||
           districtFacilityMap.has(t.sourceFacilityId) ||
           districtFacilityMap.has(t.destinationFacilityId)
         );
@@ -966,10 +964,6 @@ export function DistrictMahaAushadhiView({ isSpecialist = false }: DistrictMahaA
                     <span className="font-bold">2. District Store</span>
                     <span className="text-blue-600 dark:text-blue-400 font-semibold">Priority 2 (District Hospital Aundh)</span>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                    <span className="font-bold">3. State Reserve</span>
-                    <span className="text-rose-600 dark:text-rose-400 font-semibold">Priority 3 (Escalation Reserve)</span>
-                  </div>
                 </div>
               </div>
 
@@ -1670,14 +1664,11 @@ export function DistrictMahaAushadhiView({ isSpecialist = false }: DistrictMahaA
         <span>0 Active Transfers — Awaiting Supply Allocation</span>
         <span>1. Nearby PHC</span>
         <span>2. District</span>
-        <span>3. State Reserve</span>
         <span>Request from District</span>
-        <span>Request from State</span>
         <span>pending_requests</span>
         <span>can_supply</span>
         <span>pending_approvals</span>
         <span>active_transfers</span>
-        <span>state_escalations</span>
         <span>completed</span>
         <span>district_supply</span>
         <span>incoming_requests</span>

@@ -22,7 +22,7 @@ interface StaffLoginModalProps {
   initialRole?: Role;
 }
 
-export type StaffTier = 'asha' | 'phc' | 'district' | 'state' | 'national';
+export type StaffTier = 'asha' | 'phc' | 'district';
 
 export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) {
   const { sendOtp, verifyOtp, user } = useAuth();
@@ -35,8 +35,6 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
     if (r === 'asha') return 'asha';
     if (r === 'phc_doctor' || r === 'nurse' || r === 'pharmacist') return 'phc';
     if (r === 'specialist' || r === 'district_officer') return 'district';
-    if (r === 'state_admin') return 'state';
-    if (r === 'national_admin') return 'national';
     return 'phc';
   };
 
@@ -54,10 +52,6 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
         if (initialRole === 'district_officer') return allStaff.filter((s) => s.role === 'district_officer');
         if (initialRole === 'specialist') return allStaff.filter((s) => s.role === 'specialist');
         return allStaff.filter((s) => s.role === 'district_officer' || s.role === 'specialist');
-      case 'state':
-        return allStaff.filter((s) => s.role === 'state_admin');
-      case 'national':
-        return allStaff.filter((s) => s.role === 'national_admin');
       default:
         return allStaff.filter((s) => s.role === 'phc_doctor');
     }
@@ -132,18 +126,10 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
                   ? (initialRole === 'district_officer'
                       ? (language === 'mr' ? 'जिल्हा आरोग्य अधिकारी व प्रशासन (DHO) प्रवेश' : 'District Health Authority (DHO) Login')
                       : (language === 'mr' ? 'जिल्हा रुग्णालय तज्ज्ञ व कॅज्युअल्टी प्रवेश' : 'District Hospital Specialist Team Login'))
-                  : activeTier === 'state'
-                  ? (language === 'mr' ? 'राज्य आरोग्य प्राधिकरण (DHS) प्रवेश' : 'State Health Directorate Login (DHS Maharashtra)')
-                  : activeTier === 'national'
-                  ? (language === 'mr' ? 'राष्ट्रीय आरोग्य प्राधिकरण (NHA) प्रवेश' : 'National Health Authority Login (NHA / MoHFW)')
                   : (language === 'mr' ? 'आरोग्य कर्मचारी पडताळणी व प्रवेश' : 'MahaArogya Staff Verification & Login')}
               </h3>
               <p className="text-[11px] text-slate-400">
-                {activeTier === 'state'
-                  ? 'State Medical Reserve Depot & DHS, Maharashtra • ABDM HPR Gateway'
-                  : activeTier === 'national'
-                  ? 'National Health Authority (NHA) & MoHFW, New Delhi • Apex Mission Control'
-                  : activeTier === 'district'
+                {activeTier === 'district'
                   ? 'Pune District Health Office & District Hospital Network'
                   : activeTier === 'phc'
                   ? 'Velhe PHC & Nasrapur PHC Catchment Areas'
@@ -209,11 +195,7 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
-                    {activeTier === 'state'
-                      ? (language === 'mr' ? 'राज्य आरोग्य अधिकारी निवडा:' : 'Select State Directorate Officer:')
-                      : activeTier === 'national'
-                      ? (language === 'mr' ? 'राष्ट्रीय आरोग्य अधिकारी निवडा:' : 'Select National Health Official:')
-                      : activeTier === 'district'
+                    {activeTier === 'district'
                       ? (language === 'mr' ? 'जिल्हा रुग्णालय कर्मचारी निवडा:' : 'Select District Hospital Staff:')
                       : activeTier === 'phc'
                       ? (language === 'mr' ? 'प्राथमिक आरोग्य केंद्र (PHC) कर्मचारी निवडा:' : 'Select PHC Staff Member:')
@@ -229,22 +211,14 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
                   {staffList.map((stf) => {
                     const isSelected = phone === stf.phone;
                     const levelLabel =
-                      stf.administrativeLevel === 'national'
-                        ? 'National Level'
-                        : stf.administrativeLevel === 'state'
-                        ? 'State Level'
-                        : stf.administrativeLevel === 'district'
+                      stf.administrativeLevel === 'district'
                         ? 'District Level'
                         : stf.administrativeLevel === 'field' || stf.role === 'asha'
                         ? 'ASHA / Field Level'
                         : 'PHC Level';
 
                     const levelBadgeColor =
-                      stf.administrativeLevel === 'national'
-                        ? 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 border-purple-200'
-                        : stf.administrativeLevel === 'state'
-                        ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 border-amber-200'
-                        : stf.administrativeLevel === 'district'
+                      stf.administrativeLevel === 'district'
                         ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border-indigo-200'
                         : stf.administrativeLevel === 'field' || stf.role === 'asha'
                         ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border-emerald-200'
@@ -384,7 +358,7 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400">
             <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             <span>
-              Tied to National Health Authority (NHA) & Health Facility Registry (HFR) standards.
+              Tied to ABDM & Health Facility Registry (HFR) standards.
             </span>
           </div>
         </div>

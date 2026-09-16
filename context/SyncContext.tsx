@@ -138,7 +138,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const triggerManualSync = useCallback(async () => {
     const queue = getSyncQueue();
     if (queue.length === 0) {
-      showToast('All records are already synced with Maharashtra State Health Gateway.');
+      showToast('All records are already synced with District Health Gateway.');
       return;
     }
 
@@ -405,14 +405,14 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       if (p.id === targetPatientId) {
         let pUpdates: Partial<Patient> = {};
         if (status === 'ADMITTED') {
-          pUpdates.activeCareOwner = (updates?.targetFacility || targetRef.targetFacility).includes('State') || (updates?.targetFacility || targetRef.targetFacility).includes('College') ? 'STATE' : 'DISTRICT';
+          pUpdates.activeCareOwner = 'DISTRICT';
         }
         if (status === 'COMPLETED' || status === 'CANCELLED') {
           if (p.activeReferralId === referralId) pUpdates.activeReferralId = undefined;
           if (status === 'COMPLETED') pUpdates.activeCareOwner = undefined;
         }
         if (status === 'ESCALATED') {
-          pUpdates.activeCareOwner = 'STATE';
+          pUpdates.activeCareOwner = 'DISTRICT';
         }
         return { ...p, ...pUpdates };
       }
@@ -568,7 +568,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
   /**
    * Run hierarchical supply allocation for items in a ReplenishmentRequest.
-   * Allocates sources independently per medicine (PHC -> District -> State).
+   * Allocates sources independently per medicine (PHC -> District).
    */
   const allocateRequestSupplies = (
     requestId: string,
@@ -685,7 +685,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       showToast(`Allocated supply sources for ${newlyCreatedTransfers.length} item(s) in request ${req.id}.`);
       return true;
     } else {
-      showToast(`No eligible surplus donors found across PHC, District, or State tiers for request ${req.id}.`);
+      showToast(`No eligible surplus donors found across PHC or District tiers for request ${req.id}.`);
       return false;
     }
   };

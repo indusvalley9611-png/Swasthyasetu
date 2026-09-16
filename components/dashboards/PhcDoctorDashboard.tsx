@@ -1024,7 +1024,7 @@ export function PhcDoctorDashboard({
                   <span>Permanent Legal Audit Notice</span>
                 </div>
                 <p className="text-[11px] leading-relaxed">
-                  You are overriding clinical access controls for <strong>{selectedPatient.fullName}</strong> (ABHA: {selectedPatient.abhaId}). This emergency override is permanently logged to the State Health Authority audit trail under your MMC Registration ({user.registrationNumber || 'HPR-VERIFIED'}).
+                  You are overriding clinical access controls for <strong>{selectedPatient.fullName}</strong> (ABHA: {selectedPatient.abhaId}). This emergency override is permanently logged to the District Health Authority audit trail under your MMC Registration ({user.registrationNumber || 'HPR-VERIFIED'}).
                 </p>
               </div>
 

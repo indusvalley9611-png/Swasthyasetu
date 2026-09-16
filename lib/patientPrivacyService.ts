@@ -242,20 +242,6 @@ export function canAccessPatientReport(
     };
   }
 
-  // 9. State / National / Administrative Tier
-  if (
-    user.role === 'state_admin' ||
-    user.role === 'national_admin' ||
-    user.administrativeLevel === 'state' ||
-    user.administrativeLevel === 'national'
-  ) {
-    return {
-      allowed: false,
-      reason: 'Administrative level account: Limited to aggregated public health indicators, facility capacity, and outbreak surveillance. Individual medical records restricted under least-privilege data privacy laws.',
-      accessLevel: 'NONE',
-    };
-  }
-
   return {
     allowed: false,
     reason: 'Access Denied: No authorized clinical role or care relationship identified.',
@@ -406,19 +392,17 @@ export function filterPatientsForUser(
     };
   }
 
-  if (user.role === 'district_officer' || user.role === 'state_admin' || user.role === 'national_admin') {
+  if (user.role === 'district_officer') {
     // Only return metadata-level non-clinical aggregated access, or scoped district patients
     // LIMITATION: 'districtId' does not exist in the data model. Using string matching as a fallback.
     const districtPatients = patients.filter(
       (p) => p.district && user.district && p.district === user.district
     );
-    // National/State admin might need larger scope for dashboards, but individual PII records should be limited.
-    // For this prototype, we limit direct patient list exposure even for admins unless explicitly searched.
     return {
       assignedPatients: [],
-      facilityPatients: user.role === 'district_officer' ? districtPatients : [],
+      facilityPatients: districtPatients,
       referralPatients: [],
-      allPatients: user.role === 'district_officer' ? districtPatients : [],
+      allPatients: districtPatients,
     };
   }
 
@@ -506,8 +490,6 @@ export function canProcessDistrictReferral(
   // Administrative / non-clinical roles can never take clinical actions
   if (
     user.role === 'district_officer' ||
-    user.role === 'state_admin' ||
-    user.role === 'national_admin' ||
     user.role === 'pharmacist'
   ) {
     return {

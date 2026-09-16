@@ -11,7 +11,7 @@ export const translations = {
     role_asha: 'ASHA Worker / Sub-Centre',
     role_phc: 'PHC Medical Officer',
     role_specialist: 'District Specialist / Casualty',
-    role_admin: 'State Health Administrator',
+    role_admin: 'District Health Authority / Medicals',
     
     // Nav & Common
     dashboard: 'Dashboard',
@@ -108,7 +108,7 @@ export const translations = {
     role_asha: 'आशा सेविका / उपकेंद्र',
     role_phc: 'वैद्यकीय अधिकारी (प्रा.आ.के.)',
     role_specialist: 'जिल्हा रुग्णालय तज्ज्ञ / कॅज्युअल्टी',
-    role_admin: 'राज्य आरोग्य संचालक',
+    role_admin: 'जिल्हा आरोग्य अधिकारी व औषध नियंत्रण',
     
     // Nav & Common
     dashboard: 'डॅशबोर्ड',

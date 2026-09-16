@@ -305,12 +305,12 @@ export function SpecialistTreatmentModal({ referral, patient, onClose, updateRef
                   {(referral.status === 'ACCEPTED') && (
                     <>
                       <button onClick={() => setActiveAction('ADMIT')} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow transition flex items-center justify-center gap-2"><Building2 className="w-5 h-5" /> Admit Patient</button>
-                      <button onClick={() => setActiveAction('ESCALATE')} className="w-full py-3 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-xl border border-purple-200 transition flex items-center justify-center gap-2"><ArrowRight className="w-5 h-5" /> Escalate to State / Tertiary</button>
+                      <button onClick={() => setActiveAction('ESCALATE')} className="w-full py-3 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-xl border border-purple-200 transition flex items-center justify-center gap-2"><ArrowRight className="w-5 h-5" /> Escalate</button>
                     </>
                   )}
                   {referral.status === 'ADMITTED' && (
                     <>
-                      <button onClick={() => setActiveAction('ESCALATE')} className="w-full py-3 mb-2 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-xl border border-purple-200 transition flex items-center justify-center gap-2"><ArrowRight className="w-5 h-5" /> Escalate to State / Tertiary</button>
+                      <button onClick={() => setActiveAction('ESCALATE')} className="w-full py-3 mb-2 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-xl border border-purple-200 transition flex items-center justify-center gap-2"><ArrowRight className="w-5 h-5" /> Escalate</button>
                       <button onClick={() => setActiveAction('DISCHARGE')} className="w-full py-3 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl shadow transition flex items-center justify-center gap-2"><CheckCircle2 className="w-5 h-5" /> Discharge & Counter-Referral</button>
                     </>
                   )}

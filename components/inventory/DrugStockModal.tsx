@@ -169,7 +169,7 @@ export function DrugStockModal({ onClose }: DrugStockModalProps) {
 }
 
 function TransferTable({ title, transfers, workspaceId, userRole, facilities, onReview, onAction, history = false }: { title: string; transfers: StockTransfer[]; workspaceId: string; userRole?: string; facilities: import('@/lib/types').Facility[]; onReview: (transfer: StockTransfer) => void; onAction: (id: string, action: 'APPROVE' | 'REJECT' | 'DISPATCH' | 'RECEIVE') => boolean; history?: boolean }) { 
-  const isDistrictOrStateAdmin = userRole === 'state_admin' || userRole === 'district_officer';
+  const isDistrictAdmin = userRole === 'district_officer';
   return (
     <section className="mt-6">
       {title && <h3 className="font-black text-slate-900 dark:text-white">{title}</h3>}
@@ -180,8 +180,8 @@ function TransferTable({ title, transfers, workspaceId, userRole, facilities, on
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {transfers.map(transfer => { 
-              const canApproveOrDispatch = transfer.sourceFacilityId === workspaceId || isDistrictOrStateAdmin; 
-              const canReceive = transfer.destinationFacilityId === workspaceId || isDistrictOrStateAdmin; 
+              const canApproveOrDispatch = transfer.sourceFacilityId === workspaceId || isDistrictAdmin; 
+              const canReceive = transfer.destinationFacilityId === workspaceId || isDistrictAdmin; 
               const srcName = resolveCanonicalFacilityName(transfer.sourceFacilityId);
               const dstName = resolveCanonicalFacilityName(transfer.destinationFacilityId);
               return (
@@ -214,14 +214,12 @@ function TransferTable({ title, transfers, workspaceId, userRole, facilities, on
   ); 
 }
 
-function SupplyForm({ destination, stocks, facilities, transfers, userDistrict, workspaceName, onClose, onRequestRefill, onSubmit }: { destination: DrugStockItem; stocks: DrugStockItem[]; facilities: import('@/lib/types').Facility[]; transfers: StockTransfer[]; userDistrict: string; workspaceName: string; onClose: () => void; onRequestRefill: () => void; onSubmit: (source: DrugStockItem, quantity: number, urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL', reason: string, tier: 'PHC' | 'DISTRICT' | 'STATE' | 'NATIONAL') => void }) { 
+function SupplyForm({ destination, stocks, facilities, transfers, userDistrict, workspaceName, onClose, onRequestRefill, onSubmit }: { destination: DrugStockItem; stocks: DrugStockItem[]; facilities: import('@/lib/types').Facility[]; transfers: StockTransfer[]; userDistrict: string; workspaceName: string; onClose: () => void; onRequestRefill: () => void; onSubmit: (source: DrugStockItem, quantity: number, urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL', reason: string, tier: 'PHC' | 'DISTRICT') => void }) { 
   const result = findHierarchicalSupplySources(destination, stocks, transfers, facilities, userDistrict);
   
   const allCandidates = [
     ...result.phcCandidates,
     ...result.districtCandidates,
-    ...result.stateCandidates,
-    ...result.nationalCandidates,
   ];
   
   const recommendedId = result.recommendedCandidate?.stock.id ?? '';
@@ -272,7 +270,7 @@ function SupplyForm({ destination, stocks, facilities, transfers, userDistrict, 
             )}
           </div>
 
-          {/* 4-Tier Step Progression Visualizer */}
+          {/* 2-Tier Step Progression Visualizer */}
           <div className="mb-4 flex items-center justify-between gap-1 p-2.5 bg-slate-100 dark:bg-slate-800 rounded-xl text-[11px] font-bold border border-slate-200 dark:border-slate-700">
             <span className={result.phcAvailableUnits > 0 ? "text-emerald-600 dark:text-emerald-400 font-extrabold flex items-center gap-1" : "text-slate-400 line-through opacity-60"}>
               1. PHC {result.phcAvailableUnits > 0 ? "✓" : "✗"}
@@ -280,14 +278,6 @@ function SupplyForm({ destination, stocks, facilities, transfers, userDistrict, 
             <span className="text-slate-400">→</span>
             <span className={result.districtAvailableUnits > 0 ? "text-blue-600 dark:text-blue-400 font-extrabold flex items-center gap-1" : "text-slate-400 line-through opacity-60"}>
               2. District {result.districtAvailableUnits > 0 ? "✓" : "✗"}
-            </span>
-            <span className="text-slate-400">→</span>
-            <span className={result.stateAvailableUnits > 0 ? "text-purple-600 dark:text-purple-400 font-extrabold flex items-center gap-1" : "text-slate-400 line-through opacity-60"}>
-              3. State {result.stateAvailableUnits > 0 ? "✓" : "✗"}
-            </span>
-            <span className="text-slate-400">→</span>
-            <span className={result.nationalAvailableUnits > 0 ? "text-amber-600 dark:text-amber-400 font-extrabold flex items-center gap-1" : "text-slate-400 line-through opacity-60"}>
-              4. National {result.nationalAvailableUnits > 0 ? "✓" : "✗"}
             </span>
           </div>
 
@@ -327,48 +317,12 @@ function SupplyForm({ destination, stocks, facilities, transfers, userDistrict, 
                 <p className="mt-1 text-sm font-bold text-slate-700 dark:text-slate-300">Unavailable</p>
               )}
             </div>
-
-            <div className="rounded-lg border p-3 dark:border-slate-700">
-              <p className="text-xs font-bold text-slate-500">STATE SUPPLY</p>
-              {result.stateAvailableUnits > 0 ? (
-                <div className="mt-2 space-y-2">
-                  {result.stateCandidates.filter(c => c.isAvailable).map(c => (
-                    <button key={c.stock.id} onClick={() => setSourceId(c.stock.id)} className={`w-full rounded-xl border p-2 text-left text-sm ${sourceId === c.stock.id ? 'border-purple-600 bg-purple-50 dark:bg-purple-950/30' : 'border-slate-200 dark:border-slate-700'}`}>
-                      <div className="flex justify-between">
-                        <b>{c.stock.facilityName}</b>
-                        <span className="font-black text-purple-700">Available: {c.transferable}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="mt-1 text-sm font-bold text-slate-700 dark:text-slate-300">Unavailable</p>
-              )}
-            </div>
-
-            <div className="rounded-lg border p-3 dark:border-slate-700">
-              <p className="text-xs font-bold text-slate-500">NATIONAL SUPPLY</p>
-              {result.nationalAvailableUnits > 0 ? (
-                <div className="mt-2 space-y-2">
-                  {result.nationalCandidates.filter(c => c.isAvailable).map(c => (
-                    <button key={c.stock.id} onClick={() => setSourceId(c.stock.id)} className={`w-full rounded-xl border p-2 text-left text-sm ${sourceId === c.stock.id ? 'border-amber-600 bg-amber-50 dark:bg-amber-950/30' : 'border-slate-200 dark:border-slate-700'}`}>
-                      <div className="flex justify-between">
-                        <b>{c.stock.facilityName}</b>
-                        <span className="font-black text-amber-700">Available: {c.transferable}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="mt-1 text-sm font-bold text-slate-700 dark:text-slate-300">Unavailable</p>
-              )}
-            </div>
           </div>
         </div>
 
         {sourceCandidate ? (
           <div className="mt-6 border-t pt-4 dark:border-slate-800">
-            <p className={`text-xs font-black uppercase tracking-wider mb-2 ${sourceCandidate.tier === 'NATIONAL' ? 'text-amber-600' : sourceCandidate.tier === 'STATE' ? 'text-purple-600' : sourceCandidate.tier === 'DISTRICT' ? 'text-blue-600' : 'text-emerald-600'}`}>
+            <p className={`text-xs font-black uppercase tracking-wider mb-2 ${sourceCandidate.tier === 'DISTRICT' ? 'text-blue-600' : 'text-emerald-600'}`}>
               {sourceCandidate.tier} SUPPLY AVAILABLE
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -391,7 +345,7 @@ function SupplyForm({ destination, stocks, facilities, transfers, userDistrict, 
         <div className="mt-5 flex justify-end gap-2">
           <button onClick={onClose} className="px-3 py-2 font-bold">Cancel</button>
           {sourceCandidate ? (
-            <button disabled={quantity <= 0 || quantity > limit || !reason.trim()} onClick={() => onSubmit(sourceCandidate.stock, quantity, urgency, reason, sourceCandidate.tier)} className={`rounded-lg px-3 py-2 font-bold text-white disabled:opacity-40 ${sourceCandidate.tier === 'NATIONAL' ? 'bg-amber-600' : sourceCandidate.tier === 'STATE' ? 'bg-purple-700' : sourceCandidate.tier === 'DISTRICT' ? 'bg-blue-700' : 'bg-emerald-700'}`}>
+            <button disabled={quantity <= 0 || quantity > limit || !reason.trim()} onClick={() => onSubmit(sourceCandidate.stock, quantity, urgency, reason, sourceCandidate.tier)} className={`rounded-lg px-3 py-2 font-bold text-white disabled:opacity-40 ${sourceCandidate.tier === 'DISTRICT' ? 'bg-blue-700' : 'bg-emerald-700'}`}>
               REQUEST FROM {sourceCandidate.tier}
             </button>
           ) : (

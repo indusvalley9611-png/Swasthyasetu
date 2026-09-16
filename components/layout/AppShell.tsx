@@ -57,8 +57,6 @@ export function AppShell({
   const canCreatePatient = canRegisterPatient(user);
 
   const canViewAuditLogs =
-    role === 'state_admin' ||
-    role === 'national_admin' ||
     role === 'district_officer' ||
     role === 'specialist' ||
     role === 'phc_doctor';
@@ -68,11 +66,7 @@ export function AppShell({
     const crumbs: { label: string; href?: string }[] = [
       {
         label:
-          role === 'national_admin'
-            ? 'National Health Authority'
-            : role === 'state_admin'
-            ? 'State Medical Reserve Depot, Maharashtra'
-            : role === 'district_officer'
+          role === 'district_officer'
             ? `${user?.district || 'Pune'} District`
             : user?.district
             ? `${user.district} District`
@@ -113,11 +107,7 @@ export function AppShell({
         case 'history':
           return language === 'mr' ? 'संदर्भ इतिहास' : 'Referral History Archive';
         case 'overview':
-          return role === 'national_admin'
-            ? 'National Mission Control'
-            : role === 'state_admin'
-            ? 'Apex State Command Center'
-            : role === 'district_officer'
+          return role === 'district_officer'
             ? language === 'mr'
               ? 'जिल्हा नियंत्रण कक्ष'
               : 'District Health Control Center'

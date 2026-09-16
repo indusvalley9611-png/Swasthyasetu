@@ -22,8 +22,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: 'Authentication required.' }, { status: 401 });
     }
 
-    // Role-based gating: only admins or district officers can view all logs.
-    const canViewAll = user.role === 'national_admin' || user.role === 'state_admin' || user.role === 'district_officer';
+    // Role-based gating: only district officers can view all logs.
+    const canViewAll = user.role === 'district_officer';
     
     const url = new URL(request.url);
     const patientId = url.searchParams.get('patientId') || undefined;

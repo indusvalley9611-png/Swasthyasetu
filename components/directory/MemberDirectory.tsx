@@ -49,7 +49,7 @@ export default function MemberDirectory({
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [scopeTab, setScopeTab] = useState<'ASSIGNED' | 'ALL'>('ASSIGNED');
 
-  const isAdmin = user?.administrativeLevel === 'state' || user?.administrativeLevel === 'national' || user?.role === 'district_officer';
+  const isAdmin = user?.administrativeLevel === 'district' || user?.role === 'district_officer';
 
   // Determine if a patient is assigned to this user's direct care
   const isDirectlyAssignedToUser = (pat: Patient): boolean => {
@@ -136,9 +136,7 @@ export default function MemberDirectory({
             <span className="text-[10px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
               {user?.administrativeLevel === 'facility'
                 ? 'Facility Level'
-                : user?.administrativeLevel === 'district'
-                ? 'District Level'
-                : 'State Level'}
+                : 'District Level'}
             </span>
           </div>
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2">

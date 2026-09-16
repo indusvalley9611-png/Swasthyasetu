@@ -572,7 +572,7 @@ export function PatientTimelineModal({
                       <span>Detailed Medical Record Restricted</span>
                     </h3>
                     <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-                      Under National Health Authority (NHA) ABDM and Maharashtra State Patient Data Privacy
+                      Under ABDM (Ayushman Bharat Digital Mission) and Maharashtra State Patient Data Privacy
                       Regulations, clinical consultation notes, diagnoses, prescriptions, and laboratory reports are
                       strictly protected under least-privilege access rules.
                     </p>

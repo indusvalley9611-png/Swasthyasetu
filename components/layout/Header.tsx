@@ -79,16 +79,14 @@ export function Header({
       badgeColor: 'bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300 border-purple-300 dark:border-purple-700',
     },
     {
-      id: 'state_admin',
-      labelEn: 'State Health Administrator',
-      labelMr: 'राज्य आरोग्य संचालक',
+      id: 'district_officer',
+      labelEn: 'District Health Officer',
+      labelMr: 'जिल्हा आरोग्य अधिकारी',
       badgeColor: 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700',
     },
   ];
 
   const getAdminLevelLabel = (level?: string, r?: string) => {
-    if (level === 'national') return 'National Level';
-    if (level === 'state') return 'State Level';
     if (level === 'district') return 'District Level';
     if (level === 'field' || r === 'asha') return 'ASHA / Field Level';
     return 'PHC Level';

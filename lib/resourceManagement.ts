@@ -49,7 +49,7 @@ export function getDistanceKm(origin: Facility, destination: Facility): number |
 }
 
 export interface SupplyCandidate {
-  tier: 'PHC' | 'DISTRICT' | 'STATE' | 'NATIONAL';
+  tier: 'PHC' | 'DISTRICT';
   tierLabel: string;
   badgeColor: string;
   stock: DrugStockItem;
@@ -63,15 +63,9 @@ export interface HierarchicalSupplyResult {
   recommendedCandidate: SupplyCandidate | null;
   phcCandidates: SupplyCandidate[];
   districtCandidates: SupplyCandidate[];
-  stateCandidates: SupplyCandidate[];
-  nationalCandidates: SupplyCandidate[];
   phcAvailableUnits: number;
   districtAvailableUnits: number;
-  stateAvailableUnits: number;
-  nationalAvailableUnits: number;
   escalatedToDistrict: boolean;
-  escalatedToState: boolean;
-  escalatedToNational: boolean;
 }
 
 export function findHierarchicalSupplySources(
@@ -99,8 +93,6 @@ export function findHierarchicalSupplySources(
 
   const phcCandidates: SupplyCandidate[] = [];
   const districtCandidates: SupplyCandidate[] = [];
-  const stateCandidates: SupplyCandidate[] = [];
-  const nationalCandidates: SupplyCandidate[] = [];
 
   matchingStocks.forEach(stock => {
     const facility = resolveCanonicalFacility(stock.facilityId) || facilities.find(f => f.id === stock.facilityId);
@@ -136,32 +128,6 @@ export function findHierarchicalSupplySources(
         isAvailable: transferable > 0,
       });
     }
-    // 3. Level 3: State Level / State Medical Reserve Depot
-    else if (facility && (facility.type === 'State Medical Reserve' || stock.facilityId === 'fac-state-reserve')) {
-      stateCandidates.push({
-        tier: 'STATE',
-        tierLabel: 'State Supply',
-        badgeColor: 'bg-purple-100 text-purple-800 dark:bg-purple-900/60 dark:text-purple-300',
-        stock,
-        facility,
-        distanceKm,
-        transferable,
-        isAvailable: transferable > 0,
-      });
-    }
-    // 4. Level 4: National Level / National Medical Reserve / Central Depot
-    else if (facility && (facility.type === 'National Medical Reserve' || stock.facilityId === 'fac-nha-delhi')) {
-      nationalCandidates.push({
-        tier: 'NATIONAL',
-        tierLabel: 'National Supply',
-        badgeColor: 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300',
-        stock,
-        facility,
-        distanceKm,
-        transferable,
-        isAvailable: transferable > 0,
-      });
-    }
   });
 
   // Sort available candidates by proximity or quantity
@@ -170,50 +136,30 @@ export function findHierarchicalSupplySources(
     return b.transferable - a.transferable;
   });
   districtCandidates.sort((a, b) => b.transferable - a.transferable);
-  stateCandidates.sort((a, b) => b.transferable - a.transferable);
-  nationalCandidates.sort((a, b) => b.transferable - a.transferable);
 
   const phcAvailableUnits = phcCandidates.reduce((sum, c) => sum + c.transferable, 0);
   const districtAvailableUnits = districtCandidates.reduce((sum, c) => sum + c.transferable, 0);
-  const stateAvailableUnits = stateCandidates.reduce((sum, c) => sum + c.transferable, 0);
-  const nationalAvailableUnits = nationalCandidates.reduce((sum, c) => sum + c.transferable, 0);
 
-  // Hierarchy prioritization logic
+  // Hierarchy prioritization logic: PHC Priority 1 -> District Priority 2
   let recommendedCandidate: SupplyCandidate | null = null;
   let escalatedToDistrict = false;
-  let escalatedToState = false;
-  let escalatedToNational = false;
 
   const bestPhc = phcCandidates.find(c => c.isAvailable);
   const bestDistrict = districtCandidates.find(c => c.isAvailable);
-  const bestState = stateCandidates.find(c => c.isAvailable);
-  const bestNational = nationalCandidates.find(c => c.isAvailable);
 
   if (bestPhc && bestPhc.transferable > 0) {
     recommendedCandidate = bestPhc;
   } else if (bestDistrict && bestDistrict.transferable > 0) {
     recommendedCandidate = bestDistrict;
     escalatedToDistrict = true;
-  } else if (bestState && bestState.transferable > 0) {
-    recommendedCandidate = bestState;
-    escalatedToState = true;
-  } else if (bestNational && bestNational.transferable > 0) {
-    recommendedCandidate = bestNational;
-    escalatedToNational = true;
   }
 
   return {
     recommendedCandidate,
     phcCandidates,
     districtCandidates,
-    stateCandidates,
-    nationalCandidates,
     phcAvailableUnits,
     districtAvailableUnits,
-    stateAvailableUnits,
-    nationalAvailableUnits,
     escalatedToDistrict,
-    escalatedToState,
-    escalatedToNational,
   };
 }

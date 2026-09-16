@@ -59,13 +59,13 @@ export function NewReplenishmentRequestModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const isHighLevelAdmin = ['district_officer', 'state_admin', 'national_admin'].includes(role || '');
+  const isHighLevelAdmin = ['district_officer'].includes(role || '');
   const availableFacilities = useMemo(() => {
     if (!isHighLevelAdmin && user?.facilityId) {
       return INITIAL_FACILITIES.filter(f => f.id === user.facilityId);
     }
     if (user?.district) {
-      return INITIAL_FACILITIES.filter(f => f.district === user.district || f.type.includes('Reserve'));
+      return INITIAL_FACILITIES.filter(f => f.district === user.district);
     }
     return INITIAL_FACILITIES;
   }, [isHighLevelAdmin, user]);
