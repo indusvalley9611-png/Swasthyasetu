@@ -46,7 +46,18 @@ export function PhcDoctorDashboard({
 
   const { assignedPatients, facilityPatients, allPatients } = filterPatientsForUser(user, patients, referrals);
 
-  const [queueScope, setQueueScope] = useState<'ASSIGNED' | 'FACILITY' | 'ALL'>('ASSIGNED');
+  // Active referrals originating from or relevant to this PHC / doctor
+  const activeReferralsList = (referrals || []).filter(r => {
+    const isFromMyFacility =
+      !user?.facilityId ||
+      r.referringFacilityId === user?.facilityId ||
+      r.referringFacility?.toLowerCase().includes(user?.facilityName?.toLowerCase() || '') ||
+      r.referringUserId === user?.id;
+    const isActive = !['COMPLETED', 'CANCELLED'].includes(r.status);
+    return isFromMyFacility && isActive;
+  });
+
+  const [queueScope, setQueueScope] = useState<'ASSIGNED' | 'FACILITY' | 'REFERRALS' | 'ALL'>('ASSIGNED');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPatient, setselectedPatient] = useState<Patient | null>(null);
   const [activeTab, setActiveTab] = useState<'clinical' | 'prescriptions' | 'referral'>('clinical');
@@ -74,7 +85,21 @@ export function PhcDoctorDashboard({
     setselectedPatient(patient);
   };
 
-  const baseQueue = queueScope === 'ASSIGNED' ? assignedPatients : queueScope === 'FACILITY' ? facilityPatients : allPatients;
+  const referredPatients = facilityPatients.filter(p =>
+    Boolean(
+      p.activeReferralId ||
+      referrals.some(r => r.patientId === p.id && !['COMPLETED', 'CANCELLED'].includes(r.status))
+    )
+  );
+
+  const baseQueue =
+    queueScope === 'ASSIGNED'
+      ? assignedPatients
+      : queueScope === 'FACILITY'
+      ? facilityPatients
+      : queueScope === 'REFERRALS'
+      ? referredPatients
+      : allPatients;
 
   const filteredPatients = baseQueue.filter((p) => {
     const q = searchQuery.toLowerCase();
@@ -210,10 +235,10 @@ export function PhcDoctorDashboard({
             bg: 'bg-blue-50 dark:bg-blue-900/20',
           },
           {
-            label: language === 'mr' ? 'येणारे संदर्भ' : 'Pending Triage',
-            val: facilityPatients.filter(p => !p.encounters || p.encounters.length === 0).length.toString(),
-            sub: 'Not yet assessed',
-            icon: Clock,
+            label: language === 'mr' ? 'सक्रिय रेफरल पाठवले' : 'Active Referrals Sent',
+            val: activeReferralsList.length.toString(),
+            sub: `${activeReferralsList.length} active in network`,
+            icon: Send,
             color: 'text-amber-600',
             bg: 'bg-amber-50 dark:bg-amber-900/20',
           },
@@ -249,6 +274,166 @@ export function PhcDoctorDashboard({
         ))}
       </div>
 
+      {/* 2. DEDICATED ACTIVE REFERRALS SECTION */}
+      {!selectedPatient && (
+        <div className="bg-white dark:bg-slate-900 border border-amber-200/80 dark:border-amber-900/40 rounded-2xl shadow-xs overflow-hidden">
+          <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 bg-amber-50/40 dark:bg-amber-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold shadow-2xs">
+                <Send className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 text-base sm:text-lg">
+                  <span>{language === 'mr' ? 'सक्रिय रेफरल्स (Active Referrals)' : 'Active Referrals'}</span>
+                  <span className="text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+                    {activeReferralsList.length} {language === 'mr' ? 'सक्रिय' : 'Active'}
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  {language === 'mr'
+                    ? 'दुय्यम/तृतीयक रुग्णालयात पाठवलेले सक्रिय रुग्ण आणि त्यांची सद्यस्थिती'
+                    : 'Track live status of patients referred from this facility to secondary/tertiary hospitals'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {activeReferralsList.length === 0 ? (
+            <div className="p-8 text-center text-slate-400">
+              <Send className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
+              <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                {language === 'mr' ? 'सध्या कोणतेही सक्रिय रेफरल नाहीत.' : 'No active referrals in transit.'}
+              </p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {language === 'mr'
+                  ? 'जेव्हा रुग्णाला रेफर केले जाईल, तेव्हा ते येथे दिसतील.'
+                  : 'Patients referred to secondary or tertiary facilities will appear in this active tracking queue.'}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  <tr>
+                    <th className="px-4 py-3 sm:px-6">{language === 'mr' ? 'रुग्णाचे नाव' : 'Patient Name'}</th>
+                    <th className="px-4 py-3">{language === 'mr' ? 'गंतव्य रुग्णालय' : 'Destination Hospital'}</th>
+                    <th className="px-4 py-3">{language === 'mr' ? 'प्राधान्य' : 'Priority'}</th>
+                    <th className="px-4 py-3">{language === 'mr' ? 'रेफरल दिनांक व वेळ' : 'Referral Date & Time'}</th>
+                    <th className="px-4 py-3">{language === 'mr' ? 'सद्यस्थिती' : 'Current Status'}</th>
+                    <th className="px-4 py-3 text-right sm:px-6">{language === 'mr' ? 'कृती' : 'Action'}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {activeReferralsList.map(ref => {
+                    const matchedPatient = patients.find(p => p.id === ref.patientId);
+                    const priorityClass =
+                      ref.triagePriority === 'red'
+                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                        : ref.triagePriority === 'yellow'
+                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
+
+                    const priorityLabel =
+                      ref.triagePriority === 'red'
+                        ? 'CRITICAL / RED'
+                        : ref.triagePriority === 'yellow'
+                        ? 'URGENT / YELLOW'
+                        : 'ROUTINE / GREEN';
+
+                    const statusClass =
+                      ref.status === 'ADMITTED'
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                        : ref.status === 'ACCEPTED'
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+                        : ref.status === 'ESCALATED'
+                        ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300'
+                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300';
+
+                    const formattedDateTime = ref.createdAt
+                      ? new Date(ref.createdAt).toLocaleString(language === 'mr' ? 'mr-IN' : 'en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : 'N/A';
+
+                    return (
+                      <tr key={ref.id} className="hover:bg-amber-50/30 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="px-4 py-3.5 sm:px-6 font-bold text-slate-900 dark:text-white">
+                          <div className="flex items-center gap-2">
+                            <span>{ref.patientName}</span>
+                            {ref.patientAge ? (
+                              <span className="text-[10px] font-normal text-slate-400">
+                                ({ref.patientAge}y &bull; {ref.patientGender})
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            {ref.tokenCode || ref.id}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5 text-slate-700 dark:text-slate-300">
+                          <div className="font-semibold">{ref.targetFacility}</div>
+                          <div className="text-[10px] text-slate-400">{ref.specialtyRequired}</div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${priorityClass}`}>
+                            {priorityLabel}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                          {formattedDateTime}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${statusClass}`}>
+                            {ref.status || 'PENDING'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5 text-right sm:px-6">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const targetPat: Patient = matchedPatient || {
+                                id: ref.patientId,
+                                fullName: ref.patientName,
+                                abhaId: ref.patientAbha || 'N/A',
+                                abhaAddress: `${(ref.patientAbha || 'user').replace(/[^a-zA-Z0-9]/g, '')}@abdm`,
+                                age: ref.patientAge || 0,
+                                gender: (ref.patientGender === 'Female' || ref.patientGender === 'Male' ? ref.patientGender : 'Female'),
+                                phone: 'N/A',
+                                village: 'N/A',
+                                taluka: 'N/A',
+                                district: 'N/A',
+                                bloodGroup: 'O+',
+                                emergencyContact: {
+                                  name: 'Primary Contact',
+                                  relation: 'Family',
+                                  phone: 'N/A',
+                                },
+                                chronicConditions: [],
+                                encounters: [],
+                                activeReferralId: ref.id,
+                              };
+                              onOpenPatientTimeline(targetPat);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-bold text-xs rounded-lg border border-blue-200 dark:border-blue-800 transition-colors shadow-2xs cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-blue-600" />
+                            <span>{language === 'mr' ? 'रेफरल तपशील' : 'View Referral'}</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 3. CLEAN PATIENT LIST VIEW (When no patient selected) */}
       {!selectedPatient && (
@@ -281,12 +466,12 @@ export function PhcDoctorDashboard({
 
           {/* Scope Tabs & Search Controls */}
           <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row gap-3 items-center justify-between">
-            {/* Scope Tabs: Assigned vs Facility vs All */}
-            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold w-full md:w-auto">
+            {/* Scope Tabs: Assigned vs Facility vs Referrals vs All */}
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold w-full md:w-auto overflow-x-auto">
               <button
                 type="button"
                 onClick={() => setQueueScope('ASSIGNED')}
-                className={`px-3.5 py-1.5 rounded-lg transition-colors text-center ${
+                className={`px-3.5 py-1.5 rounded-lg transition-colors text-center whitespace-nowrap ${
                   queueScope === 'ASSIGNED'
                     ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-2xs'
                     : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
@@ -297,7 +482,7 @@ export function PhcDoctorDashboard({
               <button
                 type="button"
                 onClick={() => setQueueScope('FACILITY')}
-                className={`px-3.5 py-1.5 rounded-lg transition-colors text-center ${
+                className={`px-3.5 py-1.5 rounded-lg transition-colors text-center whitespace-nowrap ${
                   queueScope === 'FACILITY'
                     ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-2xs'
                     : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
@@ -307,8 +492,19 @@ export function PhcDoctorDashboard({
               </button>
               <button
                 type="button"
+                onClick={() => setQueueScope('REFERRALS')}
+                className={`px-3.5 py-1.5 rounded-lg transition-colors text-center whitespace-nowrap ${
+                  queueScope === 'REFERRALS'
+                    ? 'bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-400 shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
+                }`}
+              >
+                {language === 'mr' ? 'सक्रिय रेफरल' : 'Active Referrals'} ({referredPatients.length})
+              </button>
+              <button
+                type="button"
                 onClick={() => setQueueScope('ALL')}
-                className={`px-3.5 py-1.5 rounded-lg transition-colors text-center ${
+                className={`px-3.5 py-1.5 rounded-lg transition-colors text-center whitespace-nowrap ${
                   queueScope === 'ALL'
                     ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-2xs'
                     : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
