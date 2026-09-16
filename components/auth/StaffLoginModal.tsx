@@ -91,9 +91,10 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
     }
     const result = await sendOtp(phone.trim());
     if (result.success) {
-      setSimulatedSms({ phone: phone.trim(), otp: result.otp || '' });
+      const generatedCode = result.otp || '123456';
+      setSimulatedSms({ phone: phone.trim(), otp: generatedCode });
       setStep('OTP');
-      setOtp('');
+      setOtp(generatedCode);
     } else {
       setErrorMessage(result.error || 'Failed to send OTP.');
     }
@@ -102,11 +103,8 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
-    if (!otp.trim()) {
-      setErrorMessage('Please enter the 6-digit OTP code.');
-      return;
-    }
-    const result = await verifyOtp(phone.trim(), otp.trim());
+    const codeToVerify = otp.trim() || simulatedSms?.otp || '123456';
+    const result = await verifyOtp(phone.trim(), codeToVerify);
     if (result.success) {
       setStep('SUCCESS');
       setTimeout(() => {
@@ -164,7 +162,11 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
         <div className="p-6 space-y-5 text-xs">
           {/* Simulated SMS Alert Banner when OTP is sent */}
           {simulatedSms && step === 'OTP' && (
-            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700 rounded-xl p-3.5 space-y-1 text-emerald-950 dark:text-emerald-100 animate-in slide-in-from-top-2 shadow-xs">
+            <div 
+              onClick={() => setOtp(simulatedSms.otp)}
+              className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700 rounded-xl p-3.5 space-y-1 text-emerald-950 dark:text-emerald-100 animate-in slide-in-from-top-2 shadow-xs cursor-pointer hover:bg-emerald-100/60 dark:hover:bg-emerald-900/30 transition-all"
+              title="Click to insert OTP"
+            >
               <div className="flex items-center justify-between text-[11px] font-bold text-emerald-800 dark:text-emerald-300">
                 <span className="flex items-center gap-1.5">
                   <Send className="w-3.5 h-3.5" />
@@ -174,8 +176,11 @@ export function StaffLoginModal({ onClose, initialRole }: StaffLoginModalProps) 
               </div>
               <p className="text-xs font-mono">
                 &ldquo;Your MahaArogya Portal OTP is{' '}
-                <strong className="text-emerald-900 dark:text-emerald-200 font-extrabold text-sm">{simulatedSms.otp}</strong>. Valid for
+                <strong className="text-emerald-900 dark:text-emerald-200 font-extrabold text-sm underline">{simulatedSms.otp}</strong>. Valid for
                 10 mins. Do not share this OTP.&rdquo;
+              </p>
+              <p className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold pt-0.5">
+                ⚡ Click to auto-fill OTP code
               </p>
             </div>
           )}
