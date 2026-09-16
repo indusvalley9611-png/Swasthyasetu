@@ -9,38 +9,29 @@ import {
   StockTransfer,
   MedicineRequest,
   ReplenishmentRequestItem,
+  RequestStatus,
 } from '@/lib/types';
-import { FinalPatientReportModal } from '../ehr/FinalPatientReportModal';
+import { resolveCanonicalFacilityName } from '@/lib/mockData';
 import {
   Pill,
-  Users,
   Search,
-  Filter,
   CheckCircle2,
   Clock,
   Truck,
   ArrowRight,
-  ShieldCheck,
   Building2,
-  FileText,
-  Eye,
-  AlertTriangle,
-  Flame,
-  Activity,
-  UserCheck,
-  ChevronRight,
-  Sparkles,
-  QrCode,
-  Layers,
-  MapPin,
-  Calendar,
-  Send,
+  Check,
+  X,
+  Package,
+  RotateCcw,
+  AlertOctagon,
+  Info,
 } from 'lucide-react';
 
-export type TrackingTab = 'medicine' | 'referrals' | 'patients';
+export type MedicineKpiTab = 'ALL' | 'NEEDS_ACTION' | 'AWAITING_APPROVAL' | 'IN_TRANSIT' | 'RECEIVED';
 
 interface DistrictTrackingCenterProps {
-  initialTab?: TrackingTab;
+  initialTab?: string;
   onOpenPatientTimeline?: (patient: Patient) => void;
   onOpenReferralToken?: (referral: Referral) => void;
   onReviewReferral?: (referral: Referral) => void;
@@ -48,887 +39,922 @@ interface DistrictTrackingCenterProps {
 
 export function DistrictTrackingCenter({
   initialTab = 'medicine',
-  onOpenPatientTimeline,
-  onOpenReferralToken,
-  onReviewReferral,
 }: DistrictTrackingCenterProps) {
   const { user } = useAuth();
   const {
     stocks,
     medicineRequests,
     stockTransfers,
-    referrals,
-    patients,
     facilities,
+    processStockTransfer,
   } = useSync();
 
-  const [activeSubTab, setActiveSubTab] = useState<TrackingTab>(initialTab);
+  // Active KPI Tab
+  const [activeKpiTab, setActiveKpiTab] = useState<MedicineKpiTab>('ALL');
 
-  // Search and Filter states
+  // Search & Detailed Filter States
   const [searchQuery, setSearchQuery] = useState('');
-  const [facilityFilter, setFacilityFilter] = useState<string>('ALL');
-  const [medicineStatusFilter, setMedicineStatusFilter] = useState<string>('ALL');
-  const [referralStatusFilter, setReferralStatusFilter] = useState<string>('ALL');
-  const [patientStageFilter, setPatientStageFilter] = useState<string>('ALL');
+  const [priorityFilter, setPriorityFilter] = useState<'ALL' | 'CRITICAL' | 'URGENT' | 'ROUTINE'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [medicineFilter, setMedicineFilter] = useState<string>('ALL');
+  const [requestingFacilityFilter, setRequestingFacilityFilter] = useState<string>('ALL');
+  const [supplierFacilityFilter, setSupplierFacilityFilter] = useState<string>('ALL');
 
-  // Selected patient for Final Report Modal
-  const [finalReportPatient, setFinalReportPatient] = useState<Patient | null>(null);
+  // Action Modals State
+  const [confirmReceiptTransfer, setConfirmReceiptTransfer] = useState<StockTransfer | null>(null);
+  const [rejectingTransfer, setRejectingTransfer] = useState<StockTransfer | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [actionSuccessMsg, setActionSuccessMsg] = useState('');
 
-  // Synchronize when initialTab changes
-  React.useEffect(() => {
-    setActiveSubTab(initialTab);
-  }, [initialTab]);
-
-  // Available unique facilities for filters
-  const districtFacilities = useMemo(() => {
-    const list = facilities.map((f) => ({ id: f.id, name: f.name }));
-    return list;
-  }, [facilities]);
-
-  // ─────────────────────────────────────────────────────────────
-  // 1. MEDICINE TRACKING DATA & STATS
-  // ─────────────────────────────────────────────────────────────
-  // Flatten medicine items with parent request context
-  const flatMedicineItems = useMemo(() => {
-    const items: Array<{
+  // 1. Normalized & Unified Requisition Items (Derived 100% from single source of truth)
+  const normalizedRequisitions = useMemo(() => {
+    const list: Array<{
       id: string;
       requestId: string;
       medicineName: string;
       requestedQuantity: number;
       unit: string;
-      urgency: 'ROUTINE' | 'URGENT' | 'CRITICAL';
-      status: 'Requested' | 'Approved' | 'Dispatched' | 'Received';
-      rawStatus: string;
-      originFacility: string;
-      originFacilityId: string;
-      sourceFacility: string;
-      timestamp: string;
-      notes?: string;
-      consignmentCode?: string;
-      transportMode?: string;
+      urgency: 'CRITICAL' | 'URGENT' | 'ROUTINE';
+      rawStatus: RequestStatus;
+      displayStatus: 'REQUESTED' | 'APPROVED' | 'DISPATCHED' | 'RECEIVED' | 'REJECTED';
+      requestingFacilityId: string;
+      requestingFacilityName: string;
+      supplierFacilityId?: string;
+      supplierFacilityName: string;
+      supplierAvailableSurplus?: number;
+      hasEligibleSupplier: boolean;
+      supplyTier?: string;
+      createdAt: string;
+      reason?: string;
+      transferObj?: StockTransfer;
     }> = [];
 
-    // From stockTransfers
+    // Process from stockTransfers
     (stockTransfers || []).forEach((st) => {
-      let mappedStatus: 'Requested' | 'Approved' | 'Dispatched' | 'Received' = 'Requested';
-      if (st.status === 'COMPLETED') mappedStatus = 'Received';
-      else if (st.status === 'DISPATCHED') mappedStatus = 'Dispatched';
-      else if (st.status === 'APPROVED' || st.status === 'PENDING_SOURCE_APPROVAL') mappedStatus = 'Approved';
-      else mappedStatus = 'Requested';
+      let displayStatus: 'REQUESTED' | 'APPROVED' | 'DISPATCHED' | 'RECEIVED' | 'REJECTED' = 'REQUESTED';
+      if (st.status === 'COMPLETED') displayStatus = 'RECEIVED';
+      else if (st.status === 'DISPATCHED') displayStatus = 'DISPATCHED';
+      else if (st.status === 'APPROVED') displayStatus = 'APPROVED';
+      else if (st.status === 'REJECTED') displayStatus = 'REJECTED';
+      else displayStatus = 'REQUESTED';
 
-      items.push({
+      const hasSupplier = Boolean(
+        st.sourceFacilityId &&
+        st.sourceFacilityName &&
+        !st.sourceFacilityName.toLowerCase().includes('no eligible') &&
+        !st.sourceFacilityName.toLowerCase().includes('unallocated')
+      );
+
+      list.push({
         id: st.id,
         requestId: st.requestId || st.id,
         medicineName: st.medicineName,
-        requestedQuantity: st.requestedQuantity,
+        requestedQuantity: st.requestedQuantity || 10,
         unit: 'Units',
         urgency: st.urgency || (st.isEmergency ? 'CRITICAL' : 'URGENT'),
-        status: mappedStatus,
         rawStatus: st.status,
-        originFacility: st.destinationFacilityName,
-        originFacilityId: st.destinationFacilityId,
-        sourceFacility: st.sourceFacilityName || 'District Medical Store Depot',
-        timestamp: st.createdAt,
-        notes: st.reason,
-        consignmentCode: st.consignmentCode || (st.transportMode ? `MH-LOG-${st.id.slice(-4)}` : undefined),
-        transportMode: st.transportMode?.replace(/_/g, ' '),
+        displayStatus,
+        requestingFacilityId: st.destinationFacilityId,
+        requestingFacilityName: st.destinationFacilityName || resolveCanonicalFacilityName(st.destinationFacilityId),
+        supplierFacilityId: st.sourceFacilityId,
+        supplierFacilityName: hasSupplier
+          ? (st.sourceFacilityName || resolveCanonicalFacilityName(st.sourceFacilityId))
+          : 'No eligible supplier available',
+        supplierAvailableSurplus: st.supplierAvailableSurplus,
+        hasEligibleSupplier: hasSupplier,
+        supplyTier: st.supplyTier,
+        createdAt: st.createdAt || new Date().toISOString(),
+        reason: st.reason,
+        transferObj: st,
       });
     });
 
-    // From medicineRequests items not already in stockTransfers
+    // Also include medicineRequests items that don't yet have linked transfer records
     (medicineRequests || []).forEach((req) => {
       (req.items || []).forEach((item: ReplenishmentRequestItem) => {
-        // Only include if not duplicate of a transfer
-        if (item.transferId && items.some((it) => it.id === item.transferId)) {
+        if (item.transferId && list.some((it) => it.id === item.transferId)) {
           return;
         }
 
-        let mappedStatus: 'Requested' | 'Approved' | 'Dispatched' | 'Received' = 'Requested';
-        if (item.status === 'COMPLETED') mappedStatus = 'Received';
-        else if (item.status === 'DISPATCHED') mappedStatus = 'Dispatched';
-        else if (item.status === 'APPROVED' || item.status === 'PENDING_SOURCE_APPROVAL') mappedStatus = 'Approved';
-        else mappedStatus = 'Requested';
+        let displayStatus: 'REQUESTED' | 'APPROVED' | 'DISPATCHED' | 'RECEIVED' | 'REJECTED' = 'REQUESTED';
+        if (item.status === 'COMPLETED') displayStatus = 'RECEIVED';
+        else if (item.status === 'DISPATCHED') displayStatus = 'DISPATCHED';
+        else if (item.status === 'APPROVED') displayStatus = 'APPROVED';
+        else if (item.status === 'REJECTED') displayStatus = 'REJECTED';
+        else displayStatus = 'REQUESTED';
 
-        items.push({
+        const hasSupplier = Boolean(
+          item.sourceFacilityId &&
+          item.sourceFacilityName &&
+          !item.sourceFacilityName.toLowerCase().includes('no eligible') &&
+          !item.sourceFacilityName.toLowerCase().includes('unallocated')
+        );
+
+        list.push({
           id: item.id || `${req.id}-${item.medicineName}`,
           requestId: req.id,
           medicineName: item.medicineName,
           requestedQuantity: item.requestedQuantity,
           unit: item.unit || 'Units',
           urgency: item.urgency || req.urgency || 'URGENT',
-          status: mappedStatus,
-          rawStatus: item.status,
-          originFacility: req.destinationFacilityName,
-          originFacilityId: req.destinationFacilityId,
-          sourceFacility: item.sourceFacilityName || 'District Allocation Queue',
-          timestamp: req.createdAt,
-          notes: item.reason || req.notes,
+          rawStatus: item.status as RequestStatus,
+          displayStatus,
+          requestingFacilityId: req.destinationFacilityId,
+          requestingFacilityName: req.destinationFacilityName || resolveCanonicalFacilityName(req.destinationFacilityId),
+          supplierFacilityId: item.sourceFacilityId,
+          supplierFacilityName: hasSupplier
+            ? (item.sourceFacilityName || resolveCanonicalFacilityName(item.sourceFacilityId))
+            : 'No eligible supplier available',
+          supplierAvailableSurplus: item.supplierAvailableSurplus,
+          hasEligibleSupplier: hasSupplier,
+          supplyTier: item.supplyTier,
+          createdAt: req.createdAt || new Date().toISOString(),
+          reason: item.reason || req.notes,
         });
       });
     });
 
-    return items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    // Canonical Sorting: CRITICAL first, then URGENT, then ROUTINE; then newest timestamp
+    return list.sort((a, b) => {
+      const priorityOrder: Record<string, number> = { CRITICAL: 3, URGENT: 2, ROUTINE: 1 };
+      const diffPriority = (priorityOrder[b.urgency] || 1) - (priorityOrder[a.urgency] || 1);
+      if (diffPriority !== 0) return diffPriority;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
   }, [stockTransfers, medicineRequests]);
 
-  const filteredMedicines = useMemo(() => {
-    return flatMedicineItems.filter((item) => {
-      // Search
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesName = item.medicineName.toLowerCase().includes(q);
-        const matchesOrigin = item.originFacility.toLowerCase().includes(q);
-        const matchesSource = item.sourceFacility.toLowerCase().includes(q);
-        const matchesReq = item.requestId.toLowerCase().includes(q);
-        if (!matchesName && !matchesOrigin && !matchesSource && !matchesReq) return false;
+  // Distinct Lists for Dynamic Dropdowns
+  const distinctMedicines = useMemo(() => {
+    return Array.from(new Set(normalizedRequisitions.map((r) => r.medicineName))).filter(Boolean).sort();
+  }, [normalizedRequisitions]);
+
+  const distinctRequestingFacilities = useMemo(() => {
+    return Array.from(new Set(normalizedRequisitions.map((r) => r.requestingFacilityName))).filter(Boolean).sort();
+  }, [normalizedRequisitions]);
+
+  const distinctSupplierFacilities = useMemo(() => {
+    return Array.from(
+      new Set(
+        normalizedRequisitions
+          .map((r) => r.supplierFacilityName)
+          .filter((name) => name && !name.toLowerCase().includes('no eligible'))
+      )
+    ).sort();
+  }, [normalizedRequisitions]);
+
+  // 2. Real Derived KPI Counts
+  const kpiCounts = useMemo(() => {
+    const total = normalizedRequisitions.length;
+    const awaitingApproval = normalizedRequisitions.filter((r) => r.displayStatus === 'REQUESTED').length;
+    const inTransit = normalizedRequisitions.filter((r) => r.displayStatus === 'DISPATCHED').length;
+    const received = normalizedRequisitions.filter((r) => r.displayStatus === 'RECEIVED').length;
+    const needsAction = normalizedRequisitions.filter((r) => r.displayStatus === 'REQUESTED' || r.displayStatus === 'DISPATCHED').length;
+
+    return {
+      total,
+      needsAction,
+      awaitingApproval,
+      inTransit,
+      received,
+    };
+  }, [normalizedRequisitions]);
+
+  // 3. Filtered Requisitions based on KPI Tabs & Detailed Filters
+  const filteredRequisitions = useMemo(() => {
+    return normalizedRequisitions.filter((item) => {
+      // KPI Tab filter
+      if (activeKpiTab === 'NEEDS_ACTION') {
+        if (item.displayStatus !== 'REQUESTED' && item.displayStatus !== 'DISPATCHED') return false;
+      } else if (activeKpiTab === 'AWAITING_APPROVAL') {
+        if (item.displayStatus !== 'REQUESTED') return false;
+      } else if (activeKpiTab === 'IN_TRANSIT') {
+        if (item.displayStatus !== 'DISPATCHED') return false;
+      } else if (activeKpiTab === 'RECEIVED') {
+        if (item.displayStatus !== 'RECEIVED') return false;
       }
 
-      // Facility filter
-      if (facilityFilter !== 'ALL') {
-        const matches =
-          item.originFacilityId === facilityFilter ||
-          item.originFacility.toLowerCase().includes(facilityFilter.toLowerCase()) ||
-          item.sourceFacility.toLowerCase().includes(facilityFilter.toLowerCase());
-        if (!matches) return false;
+      // Search Query filter (ID, medicine, facilities)
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesId = item.id.toLowerCase().includes(q) || item.requestId.toLowerCase().includes(q);
+        const matchesDrug = item.medicineName.toLowerCase().includes(q);
+        const matchesReqFac = item.requestingFacilityName.toLowerCase().includes(q);
+        const matchesSupFac = item.supplierFacilityName.toLowerCase().includes(q);
+        if (!matchesId && !matchesDrug && !matchesReqFac && !matchesSupFac) return false;
       }
+
+      // Priority filter
+      if (priorityFilter !== 'ALL' && item.urgency !== priorityFilter) return false;
 
       // Status filter
-      if (medicineStatusFilter !== 'ALL' && item.status !== medicineStatusFilter) {
-        return false;
-      }
+      if (statusFilter !== 'ALL' && item.displayStatus !== statusFilter) return false;
+
+      // Medicine filter
+      if (medicineFilter !== 'ALL' && item.medicineName !== medicineFilter) return false;
+
+      // Requesting Facility filter
+      if (requestingFacilityFilter !== 'ALL' && item.requestingFacilityName !== requestingFacilityFilter) return false;
+
+      // Supplier Facility filter
+      if (supplierFacilityFilter !== 'ALL' && item.supplierFacilityName !== supplierFacilityFilter) return false;
 
       return true;
     });
-  }, [flatMedicineItems, searchQuery, facilityFilter, medicineStatusFilter]);
+  }, [
+    normalizedRequisitions,
+    activeKpiTab,
+    searchQuery,
+    priorityFilter,
+    statusFilter,
+    medicineFilter,
+    requestingFacilityFilter,
+    supplierFacilityFilter,
+  ]);
 
-  // ─────────────────────────────────────────────────────────────
-  // 2. REFERRAL TRACKING DATA & STATS
-  // ─────────────────────────────────────────────────────────────
-  const flatReferrals = useMemo(() => {
-    return (referrals || []).map((ref) => {
-      let stage: 'Raised' | 'Under Review' | 'Accepted' | 'Admitted' | 'Discharged' = 'Raised';
-      if (['COMPLETED', 'DISCHARGED'].includes(ref.status)) {
-        stage = 'Discharged';
-      } else if (ref.status === 'ADMITTED') {
-        stage = 'Admitted';
-      } else if (ref.status === 'ACCEPTED' || ref.status === 'TRANSFER_APPROVED') {
-        stage = 'Accepted';
-      } else if (ref.status === 'ESCALATED' || ref.status === 'ROUTED_TO_TERTIARY') {
-        stage = 'Under Review';
-      } else {
-        stage = 'Raised';
-      }
+  // Handlers for Supplier Approval, Dispatch, and Requester Receipt
+  const handleApprove = async (transferId: string) => {
+    const success = await processStockTransfer(transferId, 'APPROVE');
+    if (success) {
+      setActionSuccessMsg(`Consignment #${transferId} approved by supplier facility.`);
+      setTimeout(() => setActionSuccessMsg(''), 4000);
+    }
+  };
 
-      return {
-        ...ref,
-        stage,
-      };
-    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [referrals]);
+  const handleDispatch = async (transferId: string) => {
+    const success = await processStockTransfer(transferId, 'DISPATCH');
+    if (success) {
+      setActionSuccessMsg(`Consignment #${transferId} dispatched in transit.`);
+      setTimeout(() => setActionSuccessMsg(''), 4000);
+    }
+  };
 
-  const filteredReferrals = useMemo(() => {
-    return flatReferrals.filter((ref) => {
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesName = ref.patientName.toLowerCase().includes(q);
-        const matchesToken = ref.tokenCode.toLowerCase().includes(q);
-        const matchesAbha = (ref.patientAbha || '').toLowerCase().includes(q);
-        const matchesReason = (ref.referralReason || '').toLowerCase().includes(q);
-        const matchesOrig = ref.referringFacility.toLowerCase().includes(q);
-        const matchesDest = ref.targetFacility.toLowerCase().includes(q);
-        if (!matchesName && !matchesToken && !matchesAbha && !matchesReason && !matchesOrig && !matchesDest) {
-          return false;
-        }
-      }
+  const handleConfirmReceive = async () => {
+    if (!confirmReceiptTransfer) return;
+    const success = await processStockTransfer(confirmReceiptTransfer.id, 'RECEIVE');
+    if (success) {
+      setActionSuccessMsg(
+        `Consignment #${confirmReceiptTransfer.id} confirmed received! Stock credited to requesting facility.`
+      );
+      setConfirmReceiptTransfer(null);
+      setTimeout(() => setActionSuccessMsg(''), 4000);
+    }
+  };
 
-      if (facilityFilter !== 'ALL') {
-        const matches =
-          ref.referringFacilityId === facilityFilter ||
-          ref.targetFacilityId === facilityFilter ||
-          ref.referringFacility.toLowerCase().includes(facilityFilter.toLowerCase()) ||
-          ref.targetFacility.toLowerCase().includes(facilityFilter.toLowerCase());
-        if (!matches) return false;
-      }
+  const handleReject = async () => {
+    if (!rejectingTransfer) return;
+    const success = await processStockTransfer(rejectingTransfer.id, 'REJECT', rejectReason || 'Insufficient buffer at supplier');
+    if (success) {
+      setActionSuccessMsg(`Consignment #${rejectingTransfer.id} rejected.`);
+      setRejectingTransfer(null);
+      setRejectReason('');
+      setTimeout(() => setActionSuccessMsg(''), 4000);
+    }
+  };
 
-      if (referralStatusFilter !== 'ALL' && ref.stage !== referralStatusFilter) {
-        return false;
-      }
+  const isFiltersActive =
+    searchQuery.trim() !== '' ||
+    priorityFilter !== 'ALL' ||
+    statusFilter !== 'ALL' ||
+    medicineFilter !== 'ALL' ||
+    requestingFacilityFilter !== 'ALL' ||
+    supplierFacilityFilter !== 'ALL';
 
-      return true;
-    });
-  }, [flatReferrals, searchQuery, facilityFilter, referralStatusFilter]);
-
-  // ─────────────────────────────────────────────────────────────
-  // 3. PATIENT TRACKING DATA & STATS
-  // ─────────────────────────────────────────────────────────────
-  const flatPatients = useMemo(() => {
-    return (patients || []).map((pat) => {
-      const activeRef = referrals.find(
-        (r) => r.patientId === pat.id && !['COMPLETED', 'CANCELLED'].includes(r.status)
-      ) || (pat.activeReferralId ? referrals.find((r) => r.id === pat.activeReferralId) : null);
-
-      let stage: 'Registered' | 'Referred' | 'Admitted' | 'Discharged' = 'Registered';
-      if (activeRef) {
-        if (['COMPLETED', 'DISCHARGED'].includes(activeRef.status)) {
-          stage = 'Discharged';
-        } else if (activeRef.status === 'ADMITTED') {
-          stage = 'Admitted';
-        } else if (['PENDING', 'ACCEPTED', 'ESCALATED', 'TRANSFER_APPROVED', 'ROUTED_TO_TERTIARY'].includes(activeRef.status)) {
-          stage = 'Referred';
-        }
-      } else if (pat.encounters && pat.encounters.length > 0) {
-        const hasCompletedRef = referrals.some((r) => r.patientId === pat.id && ['COMPLETED', 'DISCHARGED'].includes(r.status));
-        if (hasCompletedRef) stage = 'Discharged';
-      }
-
-      const currentLocation = pat.assignedFacilityName || activeRef?.targetFacility || pat.registrationFacilityName || 'PHC Velhe';
-      const assignedDoctor = pat.assignedDoctorName || activeRef?.referringDoctorName || 'Dr. Sneha Joshi (MO)';
-
-      return {
-        ...pat,
-        stage,
-        currentLocation,
-        assignedDoctor,
-        activeRef,
-      };
-    });
-  }, [patients, referrals]);
-
-  const filteredPatients = useMemo(() => {
-    return flatPatients.filter((pat) => {
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesName = pat.fullName.toLowerCase().includes(q);
-        const matchesAbha = (pat.abhaId || '').toLowerCase().includes(q);
-        const matchesPhone = pat.phone.includes(q);
-        const matchesVillage = (pat.village || '').toLowerCase().includes(q);
-        const matchesDoctor = pat.assignedDoctor.toLowerCase().includes(q);
-        if (!matchesName && !matchesAbha && !matchesPhone && !matchesVillage && !matchesDoctor) {
-          return false;
-        }
-      }
-
-      if (facilityFilter !== 'ALL') {
-        const matches =
-          pat.assignedFacilityId === facilityFilter ||
-          pat.registrationFacilityId === facilityFilter ||
-          pat.currentLocation.toLowerCase().includes(facilityFilter.toLowerCase());
-        if (!matches) return false;
-      }
-
-      if (patientStageFilter !== 'ALL' && pat.stage !== patientStageFilter) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [flatPatients, searchQuery, facilityFilter, patientStageFilter]);
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setPriorityFilter('ALL');
+    setStatusFilter('ALL');
+    setMedicineFilter('ALL');
+    setRequestingFacilityFilter('ALL');
+    setSupplierFacilityFilter('ALL');
+  };
 
   return (
-    <div className="space-y-6">
-      {/* ── TOP HEADER & TAB SELECTOR ── */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-blue-950 border border-slate-800 rounded-3xl p-5 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30 flex items-center gap-1">
-              <Sparkles className="w-3 h-3 text-blue-400" />
-              DISTRICT INTEGRATED TRACKING HUB
-            </span>
+    <div className="space-y-4">
+      {/* ── 1. HEADER ── */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+            <Pill className="w-5 h-5 text-amber-400" />
           </div>
-          <h2 className="text-xl md:text-2xl font-black tracking-tight text-white">
-            Live Lifecycle Tracking
-          </h2>
-          <p className="text-xs text-slate-300">
-            Real-time status progression for MahaAushadhi medicine consignments, secondary referral triage, and citizen care journeys.
-          </p>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                DISTRICT MEDICINE OPERATIONS
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                MAHAAUSHADHI NETWORK
+              </span>
+            </div>
+            <h1 className="text-base sm:text-lg font-black text-white mt-1 flex items-center gap-2">
+              <span>Medicine Requisition &amp; Transfer Tracking</span>
+            </h1>
+            <p className="text-xs text-slate-400">
+              Inter-facility supply allocations, supplier approvals, dispatch transit, and verified receipt acknowledgments
+            </p>
+          </div>
         </div>
 
-        {/* 3 Main Sub-tabs Switcher */}
-        <div className="flex items-center gap-1.5 bg-slate-950/80 p-1.5 rounded-2xl border border-slate-700/60 shadow-inner self-start md:self-auto">
-          <button
-            onClick={() => {
-              setActiveSubTab('medicine');
-              setSearchQuery('');
-            }}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-              activeSubTab === 'medicine'
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-900/40 scale-102'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-            }`}
-          >
-            <Pill className="w-4 h-4" />
-            <span>Track Medicine</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-black/30 text-[10px] font-mono">
-              {flatMedicineItems.length}
+        <div className="flex items-center gap-3">
+          <div className="text-left md:text-right">
+            <span className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
+              Live Network State
             </span>
-          </button>
-
-          <button
-            onClick={() => {
-              setActiveSubTab('referrals');
-              setSearchQuery('');
-            }}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-              activeSubTab === 'referrals'
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-900/40 scale-102'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            <span>Track Referrals</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-black/30 text-[10px] font-mono">
-              {flatReferrals.length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => {
-              setActiveSubTab('patients');
-              setSearchQuery('');
-            }}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-              activeSubTab === 'patients'
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-900/40 scale-102'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-            }`}
-          >
-            <Activity className="w-4 h-4" />
-            <span>Track Patients</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-black/30 text-[10px] font-mono">
-              {flatPatients.length}
-            </span>
-          </button>
+            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>{kpiCounts.total} Requisitions Active / Completed</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* ── FILTER & SEARCH TOOLBAR ── */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
-        {/* Search input */}
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={
-              activeSubTab === 'medicine'
-                ? 'Search medicine name, origin PHC, or consignment ID...'
-                : activeSubTab === 'referrals'
-                ? 'Search patient name, token code, or hospital...'
-                : 'Search patient name, ABHA number, phone, or village...'
-            }
-            className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-          />
+      {/* Success Banner */}
+      {actionSuccessMsg && (
+        <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2 font-bold animate-in fade-in duration-200">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{actionSuccessMsg}</span>
+        </div>
+      )}
+
+      {/* ── 2. KPI TABS (DERIVED FROM REAL REQUISITIONS) ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+        {[
+          {
+            id: 'ALL' as MedicineKpiTab,
+            label: 'All Demands',
+            count: kpiCounts.total,
+            desc: 'Total formulary requisitions',
+            activeClass: 'border-blue-500 bg-blue-50/60 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300',
+            badgeClass: 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200',
+          },
+          {
+            id: 'NEEDS_ACTION' as MedicineKpiTab,
+            label: 'Needs Action',
+            count: kpiCounts.needsAction,
+            desc: 'Pending approval or delivery receipt',
+            activeClass: 'border-rose-500 bg-rose-50/60 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300',
+            badgeClass: 'bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200',
+            indicator: kpiCounts.needsAction > 0,
+          },
+          {
+            id: 'AWAITING_APPROVAL' as MedicineKpiTab,
+            label: 'Awaiting Approval',
+            count: kpiCounts.awaitingApproval,
+            desc: 'Requested at supplier facility',
+            activeClass: 'border-amber-500 bg-amber-50/60 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300',
+            badgeClass: 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200',
+          },
+          {
+            id: 'IN_TRANSIT' as MedicineKpiTab,
+            label: 'In Transit',
+            count: kpiCounts.inTransit,
+            desc: 'Dispatched and en route',
+            activeClass: 'border-purple-500 bg-purple-50/60 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300',
+            badgeClass: 'bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-200',
+          },
+          {
+            id: 'RECEIVED' as MedicineKpiTab,
+            label: 'Received',
+            count: kpiCounts.received,
+            desc: 'Delivered & stock credited',
+            activeClass: 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300',
+            badgeClass: 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200',
+          },
+        ].map((tab) => {
+          const isActive = activeKpiTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveKpiTab(tab.id)}
+              className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 shadow-xs ${
+                isActive
+                  ? `${tab.activeClass} ring-2 ring-blue-500/20 font-bold`
+                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-700 dark:text-slate-300'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black uppercase tracking-wider">{tab.label}</span>
+                {tab.indicator && <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />}
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xl font-black">{tab.count}</span>
+                <span className="text-[10px] text-slate-400 truncate">{tab.desc}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── 3. OPERATIONAL TOOLBAR & FILTERS ── */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 shadow-xs space-y-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+          {/* Search bar */}
+          <div className="relative flex-1">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search Request ID (#TRF-...), Medicine, Requesting Facility, or Supplier Facility..."
+              className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            />
+          </div>
+
+          {/* Quick Clear Filter Button if active */}
+          {isFiltersActive && (
+            <button
+              onClick={handleResetFilters}
+              className="px-2.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shrink-0"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Reset Filters</span>
+            </button>
+          )}
         </div>
 
-        {/* Filters Group */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Facility Filter */}
-          <div className="flex items-center gap-1.5">
-            <Building2 className="w-3.5 h-3.5 text-slate-400" />
+        {/* Filter Dropdowns Row */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs">
+          {/* Priority */}
+          <div>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+              Priority
+            </label>
             <select
-              value={facilityFilter}
-              onChange={(e) => setFacilityFilter(e.target.value)}
-              className="py-2 px-3 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value as any)}
+              className="w-full py-1.5 px-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             >
-              <option value="ALL">All Facilities</option>
-              {districtFacilities.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
+              <option value="ALL">All Priorities</option>
+              <option value="CRITICAL">🔴 Critical Priority</option>
+              <option value="URGENT">🟠 Urgent Priority</option>
+              <option value="ROUTINE">🟢 Routine</option>
+            </select>
+          </div>
+
+          {/* Status */}
+          <div>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+              Lifecycle Status
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full py-1.5 px-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="REQUESTED">1. Requested (Awaiting Approval)</option>
+              <option value="APPROVED">2. Approved</option>
+              <option value="DISPATCHED">3. Dispatched (In Transit)</option>
+              <option value="RECEIVED">4. Received (Stock Credited)</option>
+              <option value="REJECTED">Rejected</option>
+            </select>
+          </div>
+
+          {/* Medicine */}
+          <div>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+              Medicine Formulary
+            </label>
+            <select
+              value={medicineFilter}
+              onChange={(e) => setMedicineFilter(e.target.value)}
+              className="w-full py-1.5 px-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            >
+              <option value="ALL">All Medicines ({distinctMedicines.length})</option>
+              {distinctMedicines.map((m) => (
+                <option key={m} value={m}>
+                  {m}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Sub-tab specific status filter */}
-          {activeSubTab === 'medicine' && (
-            <div className="flex items-center gap-1.5">
-              <Filter className="w-3.5 h-3.5 text-slate-400" />
-              <select
-                value={medicineStatusFilter}
-                onChange={(e) => setMedicineStatusFilter(e.target.value)}
-                className="py-2 px-3 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
-              >
-                <option value="ALL">All Medicine Stages</option>
-                <option value="Requested">1. Requested</option>
-                <option value="Approved">2. Approved</option>
-                <option value="Dispatched">3. Dispatched</option>
-                <option value="Received">4. Received</option>
-              </select>
-            </div>
-          )}
+          {/* Requesting Facility */}
+          <div>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+              Requesting Facility
+            </label>
+            <select
+              value={requestingFacilityFilter}
+              onChange={(e) => setRequestingFacilityFilter(e.target.value)}
+              className="w-full py-1.5 px-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            >
+              <option value="ALL">All Requesters ({distinctRequestingFacilities.length})</option>
+              {distinctRequestingFacilities.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          {activeSubTab === 'referrals' && (
-            <div className="flex items-center gap-1.5">
-              <Filter className="w-3.5 h-3.5 text-slate-400" />
-              <select
-                value={referralStatusFilter}
-                onChange={(e) => setReferralStatusFilter(e.target.value)}
-                className="py-2 px-3 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
-              >
-                <option value="ALL">All Referral Stages</option>
-                <option value="Raised">1. Raised</option>
-                <option value="Under Review">2. Under Review</option>
-                <option value="Accepted">3. Accepted</option>
-                <option value="Admitted">4. Admitted</option>
-                <option value="Discharged">5. Discharged</option>
-              </select>
-            </div>
-          )}
-
-          {activeSubTab === 'patients' && (
-            <div className="flex items-center gap-1.5">
-              <Filter className="w-3.5 h-3.5 text-slate-400" />
-              <select
-                value={patientStageFilter}
-                onChange={(e) => setPatientStageFilter(e.target.value)}
-                className="py-2 px-3 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
-              >
-                <option value="ALL">All Patient Stages</option>
-                <option value="Registered">Registered (Primary Care)</option>
-                <option value="Referred">Referred (In Transit)</option>
-                <option value="Admitted">Admitted (Inpatient)</option>
-                <option value="Discharged">Discharged (Completed)</option>
-              </select>
-            </div>
-          )}
+          {/* Supplier Facility */}
+          <div>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+              Supplier Facility
+            </label>
+            <select
+              value={supplierFacilityFilter}
+              onChange={(e) => setSupplierFacilityFilter(e.target.value)}
+              className="w-full py-1.5 px-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            >
+              <option value="ALL">All Suppliers ({distinctSupplierFacilities.length})</option>
+              {distinctSupplierFacilities.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
-      {/* ───────────────────────────────────────────────────────────── */}
-      {/* 1. VIEW: TRACK MEDICINE                                       */}
-      {/* ───────────────────────────────────────────────────────────── */}
-      {activeSubTab === 'medicine' && (
-        <div className="space-y-4">
-          {/* Summary Progress Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {[
-              { label: 'Requested', count: flatMedicineItems.filter(m => m.status === 'Requested').length, color: 'text-blue-600', bg: 'bg-blue-500/10 border-blue-500/20', step: 'Step 1' },
-              { label: 'Approved', count: flatMedicineItems.filter(m => m.status === 'Approved').length, color: 'text-purple-600', bg: 'bg-purple-500/10 border-purple-500/20', step: 'Step 2' },
-              { label: 'Dispatched', count: flatMedicineItems.filter(m => m.status === 'Dispatched').length, color: 'text-amber-600', bg: 'bg-amber-500/10 border-amber-500/20', step: 'Step 3' },
-              { label: 'Received', count: flatMedicineItems.filter(m => m.status === 'Received').length, color: 'text-emerald-600', bg: 'bg-emerald-500/10 border-emerald-500/20', step: 'Step 4' },
-            ].map((st, i) => (
-              <div key={i} className={`p-4 rounded-2xl border ${st.bg} space-y-1`}>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono uppercase text-slate-400 font-semibold">{st.step}</span>
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">{st.label}</span>
+      {/* ── 4. REQUISITIONS LIST (COMPACT OPERATIONAL LAYOUT) ── */}
+      {filteredRequisitions.length === 0 ? (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center space-y-2.5">
+          <Package className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto" />
+          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+            No medicine requisitions match the selected filters
+          </h3>
+          <p className="text-xs text-slate-400 max-w-md mx-auto">
+            {isFiltersActive
+              ? 'Try adjusting your search query or reset dropdown filters to see active consignments.'
+              : 'There are currently no active or historical medicine transfers matching this KPI category.'}
+          </p>
+          {isFiltersActive && (
+            <button
+              onClick={handleResetFilters}
+              className="mt-2 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset Filters</span>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredRequisitions.map((req) => {
+            const isCritical = req.urgency === 'CRITICAL';
+            const isUrgent = req.urgency === 'URGENT';
+
+            const cardBorder =
+              isCritical
+                ? 'border-rose-300 dark:border-rose-900/60 bg-rose-50/20 dark:bg-rose-950/10'
+                : isUrgent
+                ? 'border-amber-300 dark:border-amber-900/60 bg-amber-50/20 dark:bg-amber-950/10'
+                : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900';
+
+            const priorityBadge =
+              isCritical
+                ? 'bg-rose-500 text-white'
+                : isUrgent
+                ? 'bg-amber-500 text-slate-950'
+                : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300';
+
+            // Lifecycle Steps Mapping
+            const stages: Array<'REQUESTED' | 'APPROVED' | 'DISPATCHED' | 'RECEIVED'> = [
+              'REQUESTED',
+              'APPROVED',
+              'DISPATCHED',
+              'RECEIVED',
+            ];
+            const currentStageIndex =
+              req.displayStatus === 'RECEIVED'
+                ? 3
+                : req.displayStatus === 'DISPATCHED'
+                ? 2
+                : req.displayStatus === 'APPROVED'
+                ? 1
+                : 0;
+
+            const isRejected = req.displayStatus === 'REJECTED';
+
+            return (
+              <div
+                key={req.id}
+                className={`p-4 rounded-2xl border ${cardBorder} shadow-xs space-y-3 hover:border-blue-400 transition-all`}
+              >
+                {/* 1. Header Line: ID + Priority + Timestamp */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80 pb-2.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-xs font-black text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                      #{req.id}
+                    </span>
+                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${priorityBadge}`}>
+                      {req.urgency} PRIORITY
+                    </span>
+                    {req.supplyTier && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                        Tier: {req.supplyTier}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 text-xs text-slate-400 font-mono">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      <span>{new Date(req.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                    </span>
+                  </div>
                 </div>
-                <div className={`text-2xl font-black ${st.color}`}>{st.count}</div>
-                <span className="text-[10px] text-slate-400 block">Consignments in stage</span>
-              </div>
-            ))}
-          </div>
 
-          {/* Medicine List */}
-          {filteredMedicines.length === 0 ? (
-            <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-2">
-              <Pill className="w-10 h-10 text-slate-400 mx-auto" />
-              <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">No medicine consignments match criteria</h4>
-              <p className="text-xs text-slate-400">Try adjusting your search query or facility filter.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredMedicines.map((item) => {
-                const stages: Array<'Requested' | 'Approved' | 'Dispatched' | 'Received'> = [
-                  'Requested',
-                  'Approved',
-                  'Dispatched',
-                  'Received',
-                ];
-                const currentIndex = stages.indexOf(item.status);
-
-                return (
-                  <div
-                    key={item.id}
-                    className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 hover:border-blue-400 dark:hover:border-blue-700 transition-all"
-                  >
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-base font-black text-slate-900 dark:text-white">
-                            {item.medicineName}
-                          </span>
-                          <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-bold text-xs font-mono">
-                            {item.requestedQuantity} {item.unit}
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                              item.urgency === 'CRITICAL'
-                                ? 'bg-rose-500 text-white animate-pulse'
-                                : item.urgency === 'URGENT'
-                                ? 'bg-amber-500 text-slate-950'
-                                : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                            }`}
-                          >
-                            {item.urgency}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
-                          <span>
-                            <strong>Origin:</strong> {item.originFacility}
-                          </span>
-                          <span>&bull;</span>
-                          <span>
-                            <strong>Source:</strong> {item.sourceFacility}
-                          </span>
-                          <span>&bull;</span>
-                          <span className="font-mono">
-                            ID: #{item.requestId}
-                          </span>
-                        </div>
+                {/* 2. Core Requisition Flow: REQUESTING FACILITY -> SUPPLIER FACILITY -> MEDICINE -> QUANTITY */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                  {/* Requisition Route (Requester -> Supplier) */}
+                  <div className="md:col-span-6 space-y-1.5">
+                    <div className="flex items-center gap-2 text-xs">
+                      <div className="p-1 rounded bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400">
+                        <Building2 className="w-3.5 h-3.5" />
                       </div>
-
-                      {/* Right side consignment code & transport */}
-                      <div className="text-left lg:text-right space-y-0.5 text-xs shrink-0">
-                        {item.transportMode && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-[11px] border border-emerald-500/20">
-                            <Truck className="w-3 h-3" />
-                            {item.transportMode}
-                          </span>
-                        )}
-                        <span className="text-slate-400 font-mono text-[11px] block">
-                          Initiated: {new Date(item.timestamp).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      <div className="truncate">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                          Requesting Facility
                         </span>
+                        <strong className="text-slate-900 dark:text-white truncate block">
+                          {req.requestingFacilityName}
+                        </strong>
                       </div>
                     </div>
 
-                    {/* 4-Stage Stepper Bar */}
-                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                      <div className="grid grid-cols-4 gap-2">
-                        {stages.map((stName, idx) => {
-                          const isDone = idx <= currentIndex;
-                          const isCurrent = idx === currentIndex;
-
-                          return (
-                            <div key={stName} className="space-y-1.5">
-                              <div className="flex items-center gap-1.5">
-                                <div
-                                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                                    isDone
-                                      ? 'bg-blue-600 text-white'
-                                      : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
-                                  } ${isCurrent ? 'ring-2 ring-blue-400 ring-offset-1' : ''}`}
-                                >
-                                  {isDone ? '✓' : idx + 1}
-                                </div>
-                                <span
-                                  className={`text-xs font-bold hidden sm:inline ${
-                                    isDone
-                                      ? 'text-slate-900 dark:text-white'
-                                      : 'text-slate-400'
-                                  }`}
-                                >
-                                  {stName}
-                                </span>
-                              </div>
-                              <div
-                                className={`h-1.5 rounded-full ${
-                                  isDone
-                                    ? 'bg-blue-600'
-                                    : 'bg-slate-100 dark:bg-slate-800'
-                                }`}
-                              />
-                            </div>
-                          );
-                        })}
+                    <div className="flex items-center gap-2 pl-2 text-slate-400 text-xs">
+                      <ArrowRight className="w-3.5 h-3.5 text-blue-500" />
+                      <div className="truncate">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                          Supplier Facility
+                        </span>
+                        {req.hasEligibleSupplier ? (
+                          <strong className="text-emerald-700 dark:text-emerald-400 truncate block">
+                            {req.supplierFacilityName}
+                          </strong>
+                        ) : (
+                          <span className="text-rose-600 dark:text-rose-400 font-bold truncate block">
+                            No eligible supplier available (Network below buffer)
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
 
-      {/* ───────────────────────────────────────────────────────────── */}
-      {/* 2. VIEW: TRACK REFERRALS                                      */}
-      {/* ───────────────────────────────────────────────────────────── */}
-      {activeSubTab === 'referrals' && (
-        <div className="space-y-4">
-          {/* Summary Progress Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-            {[
-              { label: 'Raised', count: flatReferrals.filter(r => r.stage === 'Raised').length, color: 'text-blue-600', bg: 'bg-blue-500/10' },
-              { label: 'Under Review', count: flatReferrals.filter(r => r.stage === 'Under Review').length, color: 'text-amber-600', bg: 'bg-amber-500/10' },
-              { label: 'Accepted', count: flatReferrals.filter(r => r.stage === 'Accepted').length, color: 'text-purple-600', bg: 'bg-purple-500/10' },
-              { label: 'Admitted', count: flatReferrals.filter(r => r.stage === 'Admitted').length, color: 'text-indigo-600', bg: 'bg-indigo-500/10' },
-              { label: 'Discharged', count: flatReferrals.filter(r => r.stage === 'Discharged').length, color: 'text-emerald-600', bg: 'bg-emerald-500/10' },
-            ].map((st, i) => (
-              <div key={i} className={`p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 ${st.bg} space-y-1`}>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono text-slate-400">Step {i + 1}</span>
-                  <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase">{st.label}</span>
-                </div>
-                <div className={`text-2xl font-black ${st.color}`}>{st.count}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Referrals List */}
-          {filteredReferrals.length === 0 ? (
-            <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-2">
-              <Users className="w-10 h-10 text-slate-400 mx-auto" />
-              <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">No referrals found matching criteria</h4>
-              <p className="text-xs text-slate-400">Try changing search query or facility filter.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredReferrals.map((ref) => {
-                const stages: Array<'Raised' | 'Under Review' | 'Accepted' | 'Admitted' | 'Discharged'> = [
-                  'Raised',
-                  'Under Review',
-                  'Accepted',
-                  'Admitted',
-                  'Discharged',
-                ];
-                const currentIndex = stages.indexOf(ref.stage);
-
-                return (
-                  <div
-                    key={ref.id}
-                    className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 hover:border-blue-400 dark:hover:border-blue-700 transition-all"
-                  >
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-base font-black text-slate-900 dark:text-white">
-                            {ref.patientName}
-                          </span>
-                          <span className="text-xs text-slate-400 font-semibold">
-                            ({ref.patientAge} Yrs, {ref.patientGender})
-                          </span>
-                          <span className="font-mono text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-900">
-                            {ref.tokenCode}
-                          </span>
-                          <span
-                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                              ref.triagePriority === 'red'
-                                ? 'bg-rose-500 text-white'
-                                : ref.triagePriority === 'yellow'
-                                ? 'bg-amber-500 text-slate-950'
-                                : 'bg-emerald-500 text-white'
-                            }`}
-                          >
-                            Priority {ref.triagePriority} &bull; Score: {ref.triageScore}/100
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 flex-wrap">
-                          <span>
-                            <strong>From:</strong> {ref.referringFacility} (Dr. {ref.referringDoctorName})
-                          </span>
-                          <span>&rarr;</span>
-                          <span>
-                            <strong>To:</strong> {ref.targetFacility} ({ref.specialtyRequired})
-                          </span>
-                        </div>
-
-                        {ref.referralReason && (
-                          <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1 italic">
-                            &ldquo;{ref.referralReason}&rdquo;
-                          </p>
-                        )}
+                  {/* Medicine + Quantity + Supplier Surplus */}
+                  <div className="md:col-span-6 space-y-1 bg-slate-50/60 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <Pill className="w-4 h-4 text-amber-500 shrink-0" />
+                        <h4 className="text-sm font-black text-slate-900 dark:text-white">
+                          {req.medicineName}
+                        </h4>
                       </div>
-
-                      {/* Right actions */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        {onOpenReferralToken && (
-                          <button
-                            onClick={() => onOpenReferralToken(ref)}
-                            className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-                          >
-                            <QrCode className="w-3.5 h-3.5" />
-                            <span>QR Token</span>
-                          </button>
-                        )}
-                        {onReviewReferral && (
-                          <button
-                            onClick={() => onReviewReferral(ref)}
-                            className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>Review</span>
-                          </button>
-                        )}
-                      </div>
+                      <span className="font-mono font-black text-sm text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-950 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-900">
+                        {req.requestedQuantity} {req.unit}
+                      </span>
                     </div>
 
-                    {/* 5-Stage Stepper Bar */}
-                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                      <div className="grid grid-cols-5 gap-1.5">
-                        {stages.map((stName, idx) => {
-                          const isDone = idx <= currentIndex;
-                          const isCurrent = idx === currentIndex;
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                      {req.hasEligibleSupplier && req.supplierAvailableSurplus !== undefined ? (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>Supplier Available Surplus: {req.supplierAvailableSurplus} {req.unit}</span>
+                        </span>
+                      ) : (
+                        <span className="text-rose-500 font-semibold">
+                          Buffer preserved &bull; Reallocation queue active
+                        </span>
+                      )}
 
-                          return (
-                            <div key={stName} className="space-y-1">
-                              <div className="flex items-center gap-1">
-                                <div
-                                  className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
-                                    isDone
-                                      ? 'bg-blue-600 text-white'
-                                      : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
-                                  } ${isCurrent ? 'ring-2 ring-blue-400 ring-offset-1' : ''}`}
-                                >
-                                  {isDone ? '✓' : idx + 1}
-                                </div>
-                                <span
-                                  className={`text-[11px] font-bold truncate hidden sm:inline ${
-                                    isDone
-                                      ? 'text-slate-900 dark:text-white'
-                                      : 'text-slate-400'
-                                  }`}
-                                >
-                                  {stName}
-                                </span>
-                              </div>
-                              <div
-                                className={`h-1.5 rounded-full ${
-                                  isDone
-                                    ? 'bg-blue-600'
-                                    : 'bg-slate-100 dark:bg-slate-800'
-                                }`}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
+                      {req.reason && (
+                        <span className="truncate max-w-[180px] italic text-slate-400">
+                          &ldquo;{req.reason}&rdquo;
+                        </span>
+                      )}
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ───────────────────────────────────────────────────────────── */}
-      {/* 3. VIEW: TRACK PATIENTS & JOURNEY                             */}
-      {/* ───────────────────────────────────────────────────────────── */}
-      {activeSubTab === 'patients' && (
-        <div className="space-y-4">
-          {/* Summary Progress Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {[
-              { label: 'Registered', count: flatPatients.filter(p => p.stage === 'Registered').length, color: 'text-blue-600', bg: 'bg-blue-500/10 border-blue-500/20', desc: 'Active primary care' },
-              { label: 'Referred', count: flatPatients.filter(p => p.stage === 'Referred').length, color: 'text-amber-600', bg: 'bg-amber-500/10 border-amber-500/20', desc: 'In triage / transit' },
-              { label: 'Admitted', count: flatPatients.filter(p => p.stage === 'Admitted').length, color: 'text-purple-600', bg: 'bg-purple-500/10 border-purple-500/20', desc: 'District Hospital bed' },
-              { label: 'Discharged', count: flatPatients.filter(p => p.stage === 'Discharged').length, color: 'text-emerald-600', bg: 'bg-emerald-500/10 border-emerald-500/20', desc: 'Episode completed' },
-            ].map((st, i) => (
-              <div key={i} className={`p-4 rounded-2xl border ${st.bg} space-y-1`}>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold">Stage</span>
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">{st.label}</span>
                 </div>
-                <div className={`text-2xl font-black ${st.color}`}>{st.count}</div>
-                <span className="text-[10px] text-slate-400 block">{st.desc}</span>
-              </div>
-            ))}
-          </div>
 
-          {/* Patients Directory */}
-          {filteredPatients.length === 0 ? (
-            <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-2">
-              <Activity className="w-10 h-10 text-slate-400 mx-auto" />
-              <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">No patients match your search</h4>
-              <p className="text-xs text-slate-400">Try changing the search query or stage filter.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredPatients.map((pat) => {
-                return (
-                  <div
-                    key={pat.id}
-                    className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 hover:border-blue-400 dark:hover:border-blue-700 transition-all flex flex-col justify-between"
-                  >
-                    <div className="space-y-3">
-                      {/* Top Header */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-base font-black text-slate-900 dark:text-white">
-                              {pat.fullName}
-                            </h4>
-                            <span className="text-xs text-slate-400 font-semibold">
-                              {pat.age}Y &bull; {pat.gender}
-                            </span>
-                          </div>
-                          <span className="text-xs font-mono font-bold text-blue-600 dark:text-blue-400">
-                            ABHA: {pat.abhaId || 'N/A'}
-                          </span>
-                        </div>
-
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${
-                            pat.stage === 'Discharged'
-                              ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/30'
-                              : pat.stage === 'Admitted'
-                              ? 'bg-purple-500/10 text-purple-600 border border-purple-500/30'
-                              : pat.stage === 'Referred'
-                              ? 'bg-amber-500/10 text-amber-600 border border-amber-500/30'
-                              : 'bg-blue-500/10 text-blue-600 border border-blue-500/30'
-                          }`}
-                        >
-                          {pat.stage}
-                        </span>
-                      </div>
-
-                      {/* Location & Doctor info */}
-                      <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-100 dark:border-slate-800 space-y-1.5 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400">Current Facility:</span>
-                          <span className="font-bold text-slate-800 dark:text-slate-200">{pat.currentLocation}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400">Assigned Doctor:</span>
-                          <span className="font-semibold text-slate-700 dark:text-slate-300">{pat.assignedDoctor}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400">Taluka / Village:</span>
-                          <span className="text-slate-600 dark:text-slate-400">{pat.village || 'Velhe'}, {pat.taluka || 'Velhe'}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400">Clinical Encounters:</span>
-                          <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{pat.encounters?.length || 0} visits</span>
-                        </div>
-                      </div>
+                {/* 3. Compact Lifecycle Stepper + Action Buttons */}
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  {/* 4-Step Lifecycle Indicator */}
+                  {isRejected ? (
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-3 py-1 rounded-lg border border-rose-200 dark:border-rose-800">
+                      <AlertOctagon className="w-3.5 h-3.5" />
+                      <span>Requisition Rejected by Supplier Facility</span>
                     </div>
+                  ) : (
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {stages.map((stageName, sIdx) => {
+                        const isDone = sIdx <= currentStageIndex;
+                        const isCurrent = sIdx === currentStageIndex;
 
-                    {/* Action buttons */}
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                      {onOpenPatientTimeline && (
+                        return (
+                          <React.Fragment key={stageName}>
+                            <div
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase flex items-center gap-1 transition-all ${
+                                isCurrent
+                                  ? 'bg-blue-600 text-white shadow-2xs'
+                                  : isDone
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300'
+                                  : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+                              }`}
+                            >
+                              {isDone && <Check className="w-2.5 h-2.5" />}
+                              <span>{stageName}</span>
+                            </div>
+                            {sIdx < stages.length - 1 && (
+                              <span className="text-[10px] text-slate-300 dark:text-slate-600 font-bold">&rarr;</span>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Operational Action CTA Buttons */}
+                  {req.transferObj && (
+                    <div className="flex items-center gap-2 shrink-0">
+                      {/* Step 1: Supplier Approve / Reject */}
+                      {req.displayStatus === 'REQUESTED' && (
+                        <>
+                          <button
+                            onClick={() => {
+                              setRejectingTransfer(req.transferObj!);
+                              setRejectReason('');
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer border border-rose-200 dark:border-rose-800"
+                          >
+                            <X className="w-3 h-3" />
+                            <span>Reject</span>
+                          </button>
+                          <button
+                            onClick={() => handleApprove(req.transferObj!.id)}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all flex items-center gap-1 shadow-xs cursor-pointer"
+                          >
+                            <Check className="w-3 h-3" />
+                            <span>Approve Request</span>
+                          </button>
+                        </>
+                      )}
+
+                      {/* Step 2: Supplier Dispatch */}
+                      {req.displayStatus === 'APPROVED' && (
                         <button
-                          onClick={() => onOpenPatientTimeline(pat)}
-                          className="py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                          onClick={() => handleDispatch(req.transferObj!.id)}
+                          className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
                         >
-                          <Activity className="w-3.5 h-3.5 text-blue-600" />
-                          <span>View Journey</span>
+                          <Truck className="w-3.5 h-3.5" />
+                          <span>Dispatch Consignment</span>
                         </button>
                       )}
 
-                      <button
-                        onClick={() => setFinalReportPatient(pat)}
-                        className="py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm shadow-blue-500/20"
-                      >
-                        <FileText className="w-3.5 h-3.5" />
-                        <span>Final Report</span>
-                      </button>
+                      {/* Step 3: Requester Confirm Receipt */}
+                      {req.displayStatus === 'DISPATCHED' && (
+                        <button
+                          onClick={() => setConfirmReceiptTransfer(req.transferObj!)}
+                          className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Confirm Receipt &amp; Credit Stock</span>
+                        </button>
+                      )}
+
+                      {/* Step 4: Received badge */}
+                      {req.displayStatus === 'RECEIVED' && (
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-md border border-emerald-200 dark:border-emerald-800">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Stock Credited</span>
+                        </span>
+                      )}
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* ── FINAL CLINICAL DISCHARGE / SUMMARY REPORT MODAL ── */}
-      {finalReportPatient && (
-        <FinalPatientReportModal
-          patient={finalReportPatient}
-          onClose={() => setFinalReportPatient(null)}
-          onOpenReferralToken={onOpenReferralToken}
-        />
+      {/* ── 5. RECEIPT CONFIRMATION MODAL ── */}
+      {confirmReceiptTransfer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                    Confirm Stock Receipt
+                  </h3>
+                  <p className="text-[11px] text-slate-400">Requisition #{confirmReceiptTransfer.id}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setConfirmReceiptTransfer(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-100 dark:border-slate-800 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Medicine Item:</span>
+                <strong className="text-slate-900 dark:text-white">{confirmReceiptTransfer.medicineName}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Quantity to Credit:</span>
+                <strong className="text-emerald-600 dark:text-emerald-400 font-bold">
+                  {confirmReceiptTransfer.requestedQuantity} Units
+                </strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Supplier Facility:</span>
+                <span className="text-slate-700 dark:text-slate-300 font-semibold">{confirmReceiptTransfer.sourceFacilityName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Receiving Destination:</span>
+                <span className="text-slate-700 dark:text-slate-300 font-semibold">{confirmReceiptTransfer.destinationFacilityName}</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 text-[11px] text-blue-800 dark:text-blue-300 flex items-start gap-2">
+              <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+              <span>
+                Confirming receipt will automatically update the canonical inventory ledger: deducting from supplier and crediting to requesting facility.
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={() => setConfirmReceiptTransfer(null)}
+                className="flex-1 py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmReceive}
+                className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Confirm &amp; Receive Stock</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 6. REJECT REQUISITION MODAL ── */}
+      {rejectingTransfer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400">
+                  <AlertOctagon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                    Reject Requisition
+                  </h3>
+                  <p className="text-[11px] text-slate-400">Requisition #{rejectingTransfer.id}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setRejectingTransfer(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                Reason for Rejection
+              </label>
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="e.g. Statutory buffer threshold constraint, upcoming local immunization drive..."
+                rows={3}
+                className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={() => setRejectingTransfer(null)}
+                className="flex-1 py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReject}
+                className="flex-1 py-2 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Confirm Rejection</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

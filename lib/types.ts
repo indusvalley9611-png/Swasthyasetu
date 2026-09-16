@@ -299,6 +299,8 @@ export interface ReplenishmentRequestItem {
   supplyTier?: 'PHC' | 'DISTRICT' | 'STATE' | 'NATIONAL';
   /** Links to a StockTransfer.id for this item */
   transferId?: string;
+  /** Available surplus units at supplier facility */
+  supplierAvailableSurplus?: number;
 }
 
 /** Overall status of a parent replenishment request (derived from item statuses). */
