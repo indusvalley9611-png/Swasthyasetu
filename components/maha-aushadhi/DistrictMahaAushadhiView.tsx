@@ -1353,15 +1353,19 @@ export function DistrictMahaAushadhiView({ isSpecialist = false }: DistrictMahaA
                               Created: {new Date(item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                             </span>
 
-                            {canApprove && item.transfer && (
+                            {canApprove && item.transfer ? (
                               <button
                                 disabled={isProcessing}
                                 onClick={() => handleApproveTransfer(item.transfer!)}
                                 className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
                               >
-                                Approve Transfer
+                                Approve &amp; Prepare Dispatch
                               </button>
-                            )}
+                            ) : item.isOutgoing ? (
+                              <span className="px-3 py-1 rounded-lg text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800">
+                                Awaiting {item.sourceFacilityName} Approval
+                              </span>
+                            ) : null}
                           </div>
                         </div>
                       );

@@ -920,7 +920,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     };
 
     if (action === 'APPROVE') {
-      if (transfer.status !== 'PENDING_SOURCE_APPROVAL') {
+      if (transfer.status !== 'PENDING_SOURCE_APPROVAL' && transfer.status !== 'PENDING') {
         showToast('Only pending transfers can be approved.');
         return false;
       }
@@ -936,7 +936,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       return true;
     }
     if (action === 'REJECT') {
-      if (transfer.status !== 'PENDING_SOURCE_APPROVAL' || !rejectionReason?.trim()) { showToast('A reason is required to reject a pending transfer.'); return false; }
+      if ((transfer.status !== 'PENDING_SOURCE_APPROVAL' && transfer.status !== 'PENDING') || !rejectionReason?.trim()) { showToast('A reason is required to reject a pending transfer.'); return false; }
       const updated = stockTransfers.map(item => item.id === transferId ? { ...item, ...consignmentMeta, status: 'REJECTED' as const, rejectionReason, } : item);
       setStockTransfers(updated); saveStoredStockTransfers(updated);
       syncParentRequest('REJECTED');

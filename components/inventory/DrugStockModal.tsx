@@ -41,8 +41,10 @@ export function DrugStockModal({ onClose }: DrugStockModalProps) {
     return true; 
   }), [inventory, search, filter]);
 
-  const incoming = stockTransfers.filter(transfer => transfer.destinationFacilityId === workspaceId && !['COMPLETED', 'REJECTED'].includes(transfer.status));
-  const outgoing = stockTransfers.filter(transfer => transfer.sourceFacilityId === workspaceId && !['COMPLETED', 'REJECTED'].includes(transfer.status));
+  // Incoming requests: Other facilities requesting medicine FROM this PHC (source = this PHC)
+  const incoming = stockTransfers.filter(transfer => transfer.sourceFacilityId === workspaceId && !['COMPLETED', 'REJECTED'].includes(transfer.status));
+  // Outgoing requests: Requests made BY this PHC to other facilities (destination = this PHC)
+  const outgoing = stockTransfers.filter(transfer => transfer.destinationFacilityId === workspaceId && !['COMPLETED', 'REJECTED'].includes(transfer.status));
   const completed = stockTransfers.filter(transfer => {
     if (transfer.sourceFacilityId !== workspaceId && transfer.destinationFacilityId !== workspaceId) return false;
     if (historyStatus !== 'ALL' && transfer.status !== historyStatus) return false;
@@ -198,10 +200,21 @@ function TransferTable({ title, transfers, workspaceId, userRole, facilities, on
                   <td className="p-3 text-xs font-bold">{transfer.urgency}</td>
                   <td className="p-3"><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-700 dark:bg-slate-800 dark:text-slate-200">{transfer.status.replaceAll('_', ' ')}</span></td>
                   <td className="p-3 text-right">
-                    {canApproveOrDispatch && transfer.status === 'PENDING_SOURCE_APPROVAL' && <button onClick={() => onReview(transfer)} className="rounded-lg bg-indigo-700 px-2.5 py-1.5 text-xs font-bold text-white">Review</button>}
-                    {canApproveOrDispatch && transfer.status === 'APPROVED' && <button onClick={() => onAction(transfer.id, 'DISPATCH')} className="rounded-lg bg-amber-600 px-2.5 py-1.5 text-xs font-bold text-white">Dispatch</button>}
-                    {canReceive && transfer.status === 'DISPATCHED' && <button onClick={() => onAction(transfer.id, 'RECEIVE')} className="rounded-lg bg-emerald-700 px-2.5 py-1.5 text-xs font-bold text-white">Mark received</button>}
-                    {history && transfer.status === 'REJECTED' && <span className="text-xs text-rose-600">{transfer.rejectionReason}</span>}
+                    {canApproveOrDispatch && (transfer.status === 'PENDING_SOURCE_APPROVAL' || transfer.status === 'PENDING') && (
+                      <button onClick={() => onReview(transfer)} className="rounded-lg bg-indigo-700 px-2.5 py-1.5 text-xs font-bold text-white cursor-pointer">Review & Approve</button>
+                    )}
+                    {canApproveOrDispatch && transfer.status === 'APPROVED' && (
+                      <button onClick={() => onAction(transfer.id, 'DISPATCH')} className="rounded-lg bg-amber-600 px-2.5 py-1.5 text-xs font-bold text-white cursor-pointer">Dispatch</button>
+                    )}
+                    {canReceive && !canApproveOrDispatch && (transfer.status === 'PENDING_SOURCE_APPROVAL' || transfer.status === 'PENDING' || transfer.status === 'APPROVED') && (
+                      <span className="rounded bg-blue-50 dark:bg-blue-950/40 px-2 py-1 text-[11px] font-bold text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">Tracked Request</span>
+                    )}
+                    {canReceive && transfer.status === 'DISPATCHED' && (
+                      <button onClick={() => onAction(transfer.id, 'RECEIVE')} className="rounded-lg bg-emerald-700 px-2.5 py-1.5 text-xs font-bold text-white cursor-pointer">Mark received</button>
+                    )}
+                    {history && transfer.status === 'REJECTED' && (
+                      <span className="text-xs text-rose-600 font-semibold">{transfer.rejectionReason || 'Rejected by source donor'}</span>
+                    )}
                   </td>
                 </tr>
               ); 

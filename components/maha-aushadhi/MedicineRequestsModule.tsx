@@ -737,37 +737,79 @@ export function MedicineRequestsModule() {
 
                           {/* Action */}
                           <td className="px-4 py-2.5 text-right">
-                            {isRequestedByUs && req.status === 'DISPATCHED' ? (
-                              <button
-                                onClick={() => {
-                                  setReceivingTransfer(req);
-                                  setInputOtp('');
-                                  setOtpError('');
-                                }}
-                                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer inline-flex items-center gap-1"
-                              >
-                                <KeyRound className="w-3 h-3" />
-                                <span>Receive (OTP)</span>
-                              </button>
-                            ) : isRequestedByUs && req.status === 'REJECTED' ? (
-                              <button
-                                onClick={() => {
-                                  setForwardingTransfer(req);
-                                  setForwardReason('Re-routing after previous donor rejection');
-                                  setSelectedAlternateFacilityId(eligibleDonorFacilities[0]?.id || '');
-                                }}
-                                className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer inline-flex items-center gap-1"
-                              >
-                                <RotateCcw className="w-3 h-3" />
-                                <span>Alternate Supply</span>
-                              </button>
-                            ) : req.status === 'COMPLETED' ? (
-                              <span className="text-emerald-700 dark:text-emerald-400 font-bold text-xs inline-flex items-center gap-1">
-                                <CheckCircle2 className="w-3 h-3" />
-                                <span>Reconciled</span>
-                              </span>
+                            {isRequestedByUs ? (
+                              req.status === 'DISPATCHED' ? (
+                                <button
+                                  onClick={() => {
+                                    setReceivingTransfer(req);
+                                    setInputOtp('');
+                                    setOtpError('');
+                                  }}
+                                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer inline-flex items-center gap-1"
+                                >
+                                  <KeyRound className="w-3 h-3" />
+                                  <span>Receive (OTP)</span>
+                                </button>
+                              ) : req.status === 'REJECTED' ? (
+                                <button
+                                  onClick={() => {
+                                    setForwardingTransfer(req);
+                                    setForwardReason('Re-routing after previous donor rejection');
+                                    setSelectedAlternateFacilityId(eligibleDonorFacilities[0]?.id || '');
+                                  }}
+                                  className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer inline-flex items-center gap-1"
+                                >
+                                  <RotateCcw className="w-3 h-3" />
+                                  <span>Find Alternate Supply</span>
+                                </button>
+                              ) : req.status === 'COMPLETED' ? (
+                                <span className="text-emerald-700 dark:text-emerald-400 font-bold text-xs inline-flex items-center gap-1">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  <span>Reconciled</span>
+                                </span>
+                              ) : (
+                                <span className="text-blue-600 dark:text-blue-400 font-bold text-xs inline-flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  <span>Tracked Request</span>
+                                </span>
+                              )
                             ) : (
-                              <span className="text-slate-400 text-xs font-mono">{req.status}</span>
+                              /* We are the Supplying / Donor Facility */
+                              req.status === 'PENDING' || req.status === 'PENDING_SOURCE_APPROVAL' ? (
+                                <button
+                                  onClick={() => {
+                                    setSelectedIncomingRequest(req);
+                                    setShowRejectInput(false);
+                                    setRejectReason('');
+                                  }}
+                                  className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer inline-flex items-center gap-1"
+                                >
+                                  <Shield className="w-3 h-3" />
+                                  <span>Review &amp; Approve</span>
+                                </button>
+                              ) : req.status === 'APPROVED' ? (
+                                <button
+                                  onClick={() => {
+                                    setSelectedIncomingRequest(req);
+                                  }}
+                                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer inline-flex items-center gap-1"
+                                >
+                                  <Truck className="w-3 h-3" />
+                                  <span>Dispatch</span>
+                                </button>
+                              ) : req.status === 'DISPATCHED' ? (
+                                <span className="text-purple-600 dark:text-purple-400 font-bold text-xs inline-flex items-center gap-1">
+                                  <Truck className="w-3 h-3" />
+                                  <span>In Transit</span>
+                                </span>
+                              ) : req.status === 'COMPLETED' ? (
+                                <span className="text-emerald-700 dark:text-emerald-400 font-bold text-xs inline-flex items-center gap-1">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  <span>Fulfilled</span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 text-xs font-mono">{req.status}</span>
+                              )
                             )}
                           </td>
 
