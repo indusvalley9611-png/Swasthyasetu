@@ -619,30 +619,45 @@ export function DistrictCoordinationDashboard({
             </div>
           </div>
 
-          {/* SECTION 1: ACTIONABLE NEEDS ATTENTION QUEUE */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
+          {/* ── SECTION 1A: PATIENT OPERATIONS (CLINICAL TRIAGE & ADMISSION QUEUE) ── */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <AlertOctagon className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-                <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                  Actionable Operational Items
-                </h2>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
+                  <HeartPulse className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                    Patient Actions &amp; Clinical Triage Queue
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Incoming referrals, emergency triage, admissions, and specialist escalations
+                  </p>
+                </div>
               </div>
-              <span className="text-xs font-bold px-2.5 py-0.5 rounded-md bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                {totalNeedsAttention} Pending
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                  {pendingTriageReferrals.length} Pending Referrals
+                </span>
+                <button
+                  onClick={() => setActiveTab('tertiary')}
+                  className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <span>View All</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
-            {totalNeedsAttention === 0 ? (
-              <div className="text-center py-6">
-                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-1.5" />
-                <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">District Healthcare Network Stable</h3>
-                <p className="text-xs text-slate-400 mt-0.5">No unresolved bottlenecks or emergency shortages across {currentDistrict}.</p>
+            {pendingTriageReferrals.length === 0 ? (
+              <div className="text-center py-6 bg-slate-50/50 dark:bg-slate-800/20 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
+                <CheckCircle2 className="w-7 h-7 text-emerald-500 mx-auto mb-1.5" />
+                <h3 className="text-xs font-bold text-slate-700 dark:text-slate-200">Patient Referral Queue Cleared</h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">All incoming patient referrals across {currentDistrict} have been reviewed and routed.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {/* 1. Pending Triage Referrals */}
-                {pendingTriageReferrals.slice(0, 2).map((ref) => {
+                {pendingTriageReferrals.slice(0, 3).map((ref) => {
                   const triageMeta = getTriageUrgencyMeta(ref.triagePriority, ref.urgency);
                   return (
                     <div
@@ -650,18 +665,23 @@ export function DistrictCoordinationDashboard({
                       className={`p-3.5 rounded-xl border ${triageMeta.cardBorder} ${triageMeta.cardBg} flex flex-col justify-between gap-3`}
                     >
                       <div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-black uppercase text-slate-500">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-black uppercase text-slate-500 truncate max-w-[150px]">
                             {ref.referringFacility}
                           </span>
-                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${triageMeta.badgeBg}`}>
+                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded shrink-0 ${triageMeta.badgeBg}`}>
                             {triageMeta.label}
                           </span>
                         </div>
                         <h4 className="text-sm font-bold text-slate-900 dark:text-white mt-1">
                           {ref.patientName || 'Emergency Patient'}
                         </h4>
-                        <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 line-clamp-2">
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-2">
+                          <span>Specialty: <strong className="text-slate-700 dark:text-slate-200">{ref.specialtyRequired || 'General'}</strong></span>
+                          <span>&bull;</span>
+                          <span>ABHA: <strong className="text-slate-700 dark:text-slate-200">{ref.patientId || 'N/A'}</strong></span>
+                        </div>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 mt-1.5 line-clamp-2">
                           {ref.referralReason || 'Specialist care required'}
                         </p>
                       </div>
@@ -669,25 +689,66 @@ export function DistrictCoordinationDashboard({
                         onClick={() => handleOpenReferral(ref)}
                         className={`w-full py-1.5 px-3 rounded-lg ${triageMeta.ctaBg} text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer`}
                       >
-                        <span>Review &amp; Route</span>
+                        <span>Review &amp; Route Referral</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
 
-                {/* 2. Critical Medicine Shortage */}
+          {/* ── SECTION 1B: MEDICINE & RESOURCE OPERATIONS (SUPPLY CHAIN & REALLOCATION) ── */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+                  <Pill className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                    Medicine &amp; Resource Operations
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Formulary deficit management, inter-facility supplier matching, and transfer consignments
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                  {criticalStockItems.length + activeDistrictTransfers.length} Actionable Demands
+                </span>
+                <button
+                  onClick={() => setActiveTab('track_medicine')}
+                  className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <span>Track Logistics</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {criticalStockItems.length === 0 && activeDistrictTransfers.length === 0 ? (
+              <div className="text-center py-6 bg-slate-50/50 dark:bg-slate-800/20 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
+                <CheckCircle2 className="w-7 h-7 text-emerald-500 mx-auto mb-1.5" />
+                <h3 className="text-xs font-bold text-slate-700 dark:text-slate-200">Pharmacy Supply Chains Optimal</h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">All essential medicines maintain healthy buffer thresholds across {currentDistrict}.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {/* 1. Critical Stock Deficits */}
                 {criticalStockItems.slice(0, 2).map((item) => (
                   <div
                     key={item.id}
                     className="p-3.5 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20 flex flex-col justify-between gap-3"
                   >
                     <div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase text-slate-500">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-black uppercase text-slate-500 truncate max-w-[150px]">
                           {item.facilityName}
                         </span>
-                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-500 text-slate-950">
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-500 text-slate-950 shrink-0">
                           CRITICAL BUFFER
                         </span>
                       </div>
@@ -696,6 +757,9 @@ export function DistrictCoordinationDashboard({
                       </h4>
                       <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
                         Current: <strong className="text-rose-600 dark:text-rose-400">{item.currentStock} {item.unit}</strong> (Min Buffer: {item.bufferStock})
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        Category: {item.category || 'Essential'} &bull; Batch: {item.batchNumber || 'N/A'}
                       </p>
                     </div>
                     <button
@@ -708,34 +772,39 @@ export function DistrictCoordinationDashboard({
                   </div>
                 ))}
 
-                {/* 3. Open State Escalation */}
-                {openEscalations.slice(0, 1).map((esc) => (
+                {/* 2. Active Transfer Consignments */}
+                {activeDistrictTransfers.slice(0, 1).map((t) => (
                   <div
-                    key={esc.id}
-                    className="p-3.5 rounded-xl border border-purple-200 dark:border-purple-900/50 bg-purple-50/40 dark:bg-purple-950/20 flex flex-col justify-between gap-3"
+                    key={t.id}
+                    className="p-3.5 rounded-xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/40 dark:bg-blue-950/20 flex flex-col justify-between gap-3"
                   >
                     <div>
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <span className="text-[10px] font-black uppercase text-slate-500">
-                          State Escalation
+                          Transfer Consignment
                         </span>
-                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-purple-600 text-white">
-                          {esc.urgency}
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-600 text-white shrink-0">
+                          {t.status.replace(/_/g, ' ')}
                         </span>
                       </div>
                       <h4 className="text-sm font-bold text-slate-900 dark:text-white mt-1">
-                        {esc.title}
+                        {t.medicineName} ({t.requestedQuantity || 10} Units)
                       </h4>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 line-clamp-2">
-                        {esc.summary}
+                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 line-clamp-1">
+                        From: <strong className="text-slate-800 dark:text-slate-200">{t.sourceFacilityName || 'Surplus PHC'}</strong> &rarr; To: <strong className="text-slate-800 dark:text-slate-200">{t.destinationFacilityName || 'Requesting PHC'}</strong>
                       </p>
+                      {t.supplierAvailableSurplus !== undefined && (
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                          Supplier Surplus: <strong className="text-emerald-600 dark:text-emerald-400">{t.supplierAvailableSurplus}</strong> units
+                        </p>
+                      )}
                     </div>
                     <button
-                      onClick={() => setActiveTab('escalations')}
-                      className="w-full py-1.5 px-3 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                      onClick={() => setActiveTab('track_medicine')}
+                      className="w-full py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
                     >
-                      <span>Track State Response</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
+                      <Truck className="w-3.5 h-3.5" />
+                      <span>Track Consignment</span>
                     </button>
                   </div>
                 ))}
