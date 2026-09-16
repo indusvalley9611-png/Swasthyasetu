@@ -36,6 +36,10 @@ import {
   FileText,
   AlertTriangle,
   Package,
+  Award,
+  Sparkles,
+  Radio,
+  Milestone,
 } from 'lucide-react';
 
 export interface SidebarProps {
@@ -423,37 +427,75 @@ export function Sidebar({
       case 'district_officer':
         return [
           {
-            titleEn: 'District',
-            titleMr: 'जिल्हा',
+            titleEn: 'District Command',
+            titleMr: 'जिल्हा नियंत्रण',
             items: [
               {
                 id: 'overview',
-                labelEn: 'District Overview',
-                labelMr: 'जिल्हा आढावा',
+                labelEn: 'Command Center',
+                labelMr: 'नियंत्रण कक्ष आढावा',
                 icon: BarChart3,
+              },
+              {
+                id: 'map',
+                labelEn: 'Facility Map',
+                labelMr: 'सुविधा नकाशा (GIS)',
+                icon: MapPin,
+              },
+              {
+                id: 'scorecard',
+                labelEn: 'Health Scorecards',
+                labelMr: 'आरोग्य गुणपत्रिका',
+                icon: Award,
               },
             ],
           },
           {
-            titleEn: 'Patient Flow',
-            titleMr: 'रुग्ण प्रवाह',
+            titleEn: 'Track',
+            titleMr: 'थेट स्थिती ट्रॅकिंग',
+            items: [
+              {
+                id: 'track_medicine',
+                labelEn: 'Track Medicine',
+                labelMr: 'औषध साठा ट्रॅकिंग',
+                icon: Pill,
+              },
+              {
+                id: 'track_referrals',
+                labelEn: 'Track Referrals',
+                labelMr: 'रुग्ण संदर्भ ट्रॅकिंग',
+                icon: Users,
+              },
+              {
+                id: 'track_patients',
+                labelEn: 'Track Patients',
+                labelMr: 'रुग्ण प्रवास व अहवाल',
+                icon: Activity,
+              },
+            ],
+          },
+          {
+            titleEn: 'Clinical & Logistics',
+            titleMr: 'रुग्ण सेवा व रसद',
             items: [
               {
                 id: 'tertiary',
-                labelEn: 'Referrals',
-                labelMr: 'रुग्ण संदर्भ',
+                labelEn: 'Referral Risk Queue',
+                labelMr: 'रुग्ण संदर्भ व ट्रायज',
                 icon: Users,
+                badge: (referrals || []).filter((r) => r.status === 'PENDING').length > 0 ? (referrals || []).filter((r) => r.status === 'PENDING').length : undefined,
+                badgeColor: 'bg-blue-600 text-white',
               },
-            ],
-          },
-          {
-            titleEn: 'Resources',
-            titleMr: 'संसाधने',
-            items: [
+              {
+                id: 'reallocation',
+                labelEn: 'Smart Reallocation',
+                labelMr: 'संसाधन वाटप',
+                icon: Sparkles,
+              },
               {
                 id: 'capacity',
                 labelEn: 'Hospital Capacity',
-                labelMr: 'रुग्णालय खाटा क्षमता',
+                labelMr: 'खाटा व ICU क्षमता',
                 icon: Building2,
               },
               {
@@ -469,14 +511,26 @@ export function Sidebar({
             ],
           },
           {
-            titleEn: 'Oversight',
-            titleMr: 'देखरेख व सुरक्षा',
+            titleEn: 'Governance & Security',
+            titleMr: 'प्रशासन व सुरक्षा',
             items: [
               {
+                id: 'escalations',
+                labelEn: 'State Escalations',
+                labelMr: 'राज्य संदर्भ गेटवे',
+                icon: Radio,
+              },
+              {
                 id: 'audit',
-                labelEn: 'Audit Trail',
+                labelEn: 'Tamper Audit Trail',
                 labelMr: 'सुरक्षा व ऑडिट ट्रेल',
                 icon: ShieldAlert,
+              },
+              {
+                id: 'roadmap',
+                labelEn: 'Architecture Roadmap',
+                labelMr: 'आर्किटेक्चर आराखडा',
+                icon: Milestone,
               },
             ],
           },

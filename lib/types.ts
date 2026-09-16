@@ -477,3 +477,287 @@ export interface PredictiveForecast {
   riskAlert?: string;
 }
 
+// =========================================================================
+// DISTRICT HEALTH AUTHORITY (DHO) ENTERPRISE SUITE TYPES (SIH26133)
+// =========================================================================
+
+export type DhoResourceType =
+  | 'MEDICINE'
+  | 'ICU_BED'
+  | 'OXYGEN_BED'
+  | 'GENERAL_BED'
+  | 'AMBULANCE'
+  | 'BLOOD_UNITS';
+
+export interface FacilityResourceBalance {
+  facilityId: string;
+  facilityName: string;
+  facilityType: string;
+  taluka: string;
+  resourceType: DhoResourceType;
+  resourceName: string;
+  currentStock: number;
+  bufferThreshold: number;
+  balance: number; // positive = surplus, negative = deficit
+  unit: string;
+  urgency: 'OPTIMAL' | 'MODERATE' | 'CRITICAL';
+}
+
+export interface SmartReallocationRecommendation {
+  id: string;
+  resourceType: DhoResourceType;
+  resourceName: string;
+  sourceFacilityId: string;
+  sourceFacilityName: string;
+  sourceAvailableSurplus: number;
+  destinationFacilityId: string;
+  destinationFacilityName: string;
+  destinationDeficit: number;
+  recommendedQuantity: number;
+  unit: string;
+  urgency: 'CRITICAL' | 'URGENT' | 'ROUTINE';
+  distanceKm: number;
+  estimatedTransitMinutes: number;
+  status: 'PENDING_DHO_APPROVAL' | 'APPROVED' | 'REJECTED' | 'DISPATCHED' | 'COMPLETED';
+  decisionReason?: string;
+  decidedAt?: string;
+  decidedByUserName?: string;
+  auditBlockId?: string;
+}
+
+export interface ReferralRiskScore {
+  referralId: string;
+  clinicalSeverityScore: number; // 0 - 50 pts (Vitals, GCS, SpO2, high-risk pregnancy, red triage)
+  transportRiskScore: number;     // 0 - 30 pts (Distance, transit duration, terrain/delay)
+  destinationCapacityScore: number; // 0 - 20 pts (ICU/Bed occupancy, specialist availability at destination)
+  compositeScore: number;         // 0 - 100 total
+  riskLevel: 'EXTREME' | 'HIGH' | 'MODERATE' | 'LOW';
+  breakdownFactors: {
+    clinical: string[];
+    transport: string[];
+    capacity: string[];
+  };
+}
+
+export type StateEscalationStatus = 'PENDING' | 'ACKNOWLEDGED' | 'RESOLVED' | 'AUTO_ESCALATED_NATIONAL';
+
+export interface StateEscalation {
+  id: string;
+  district: string;
+  title: string;
+  issueCategory: 'ICU_SATURATION' | 'DRUG_STOCKOUT' | 'SPECIALIST_UNAVAILABLE' | 'MASS_CASUALTY';
+  summary: string;
+  attemptedResolutions: string[];
+  urgency: 'CRITICAL' | 'HIGH';
+  status: StateEscalationStatus;
+  createdAt: string;
+  slaWindowMinutes: number;
+  slaExpiresAt: string;
+  escalatedToNationalAt?: string;
+  dhoActorId: string;
+  dhoActorName: string;
+  actionReason: string;
+  stateResponseNotes?: string;
+  autoEscalateTriggered?: boolean;
+}
+
+export interface TamperEvidentAuditBlock {
+  id: string;
+  index: number;
+  timestamp: string;
+  prevHash: string;
+  hash: string;
+  actorId: string;
+  actorName: string;
+  actorRole: Role;
+  action: string;
+  resource: string;
+  reason: string;
+  beforeState: Record<string, any>;
+  afterState: Record<string, any>;
+  isValid?: boolean;
+}
+
+export interface PredictiveCapacityAlert {
+  id: string;
+  facilityId: string;
+  facilityName: string;
+  resourceType: DhoResourceType;
+  resourceName: string;
+  currentValue: number;
+  capacityThreshold: number;
+  projectedSaturationTime: string;
+  hoursUntilCritical: number;
+  trendRatePerHour: number; // e.g. +1.4 beds/hr or -8 vials/hr
+  status: 'CRITICAL_PROJECTED' | 'WARNING_PROJECTED' | 'STABLE';
+  formattedAlert: string;
+}
+
+export interface FacilityHealthScorecard {
+  facilityId: string;
+  facilityName: string;
+  facilityType: string;
+  taluka: string;
+  compositeScore: number; // 0 - 100
+  rank: number;
+  trend: 'IMPROVING' | 'STABLE' | 'DECLINING';
+  changePercent7Days: number;
+  metrics: {
+    stockAdequacyScore: number; // 0 - 100
+    referralSpeedScore: number; // 0 - 100
+    bedSafetyScore: number;     // 0 - 100
+    icuStabilityScore: number;  // 0 - 100
+  };
+  rootCauses: string[];
+  suggestedCorrectiveAction: string;
+}
+
+export interface DistrictSlaMetrics {
+  averageResponseMinutes: number;
+  worstCaseResponseMinutes: number;
+  totalDecisionsLogged: number;
+  categories: {
+    referrals: { avgMinutes: number; worstMinutes: number; count: number };
+    stock: { avgMinutes: number; worstMinutes: number; count: number };
+    icu: { avgMinutes: number; worstMinutes: number; count: number };
+  };
+}
+
+export interface KpiTrendDataPoint {
+  dateLabel: string;
+  timestamp: string;
+  bedOccupancyPct: number;
+  referralVolume: number;
+  medicineTurnoverRate: number;
+  icuUtilizationPct: number;
+  isAnomaly?: boolean;
+  anomalyReason?: string;
+}
+
+export interface DhoNotification {
+  id: string;
+  title: string;
+  message: string;
+  category: 'REFERRAL' | 'STOCK' | 'CAPACITY' | 'EPIDEMIC' | 'SLA_ALERT' | 'ESCALATION';
+  severity: 'CRITICAL' | 'WARNING' | 'INFO';
+  timestamp: string;
+  read: boolean;
+  targetTab?: string;
+  targetId?: string;
+}
+
+export interface EpidemicCluster {
+  id: string;
+  syndromeName: string;
+  caseCount: number;
+  matchingSymptoms: string[];
+  affectedFacilities: string[];
+  taluka: string;
+  district: string;
+  firstReportedAt: string;
+  lastReportedAt: string;
+  status: 'ACTIVE_CLUSTER' | 'RRT_DISPATCHED' | 'CONTAINED';
+  riskScore: number;
+  recommendedIntervention: string;
+  dispatchedAt?: string;
+  rrtTeamLead?: string;
+}
+
+// =========================================================================
+// DISTRICT HOSPITAL SPECIALIST & CASUALTY ROLE TYPES (SIH26133)
+// =========================================================================
+
+export type HospitalDepartment =
+  | 'ICU'
+  | 'General Ward'
+  | 'Maternity / NICU'
+  | 'Casualty / ER'
+  | 'Surgical Suite';
+
+export interface SpecialistOnDuty {
+  id: string;
+  name: string;
+  qualification: string;
+  specialty: string;
+  department: HospitalDepartment;
+  status: 'ON_DUTY' | 'IN_SURGERY' | 'ON_CALL' | 'OFF_DUTY';
+  phone: string;
+  shift: 'MORNING' | 'EVENING' | 'NIGHT' | '24_HOUR_CALL';
+  facilityId: string;
+  facilityName: string;
+  activeCasesCount: number;
+}
+
+export interface HospitalBedSlot {
+  bedId: string;
+  bedNumber: string;
+  wardName: string;
+  department: HospitalDepartment;
+  status: 'AVAILABLE' | 'OCCUPIED' | 'MAINTENANCE';
+  patientId?: string;
+  patientName?: string;
+  patientAbha?: string;
+  triagePriority?: TriagePriority;
+  assignedAt?: string;
+  attendingSpecialist?: string;
+  specialtyRequired?: string;
+  referralId?: string;
+}
+
+export interface EmergencyWalkIn {
+  id: string;
+  tokenCode: string;
+  fullName: string;
+  age: number;
+  gender: 'Female' | 'Male' | 'Other';
+  phone: string;
+  abhaId?: string;
+  chiefComplaint: string;
+  triagePriority: TriagePriority;
+  vitals: Vitals;
+  arrivalTime: string;
+  status: 'TRIAGED' | 'IN_CONSULTATION' | 'ADMITTED' | 'DISCHARGED_OPD';
+  assignedDoctorName?: string;
+  assignedBedId?: string;
+}
+
+export interface FacilityDischargeRecord {
+  id: string;
+  referralId?: string;
+  patientId: string;
+  patientName: string;
+  patientAbha?: string;
+  dischargeDiagnosis: string;
+  treatmentGiven: string;
+  proceduresPerformed: string[];
+  dischargeMedications: {
+    medicineName: string;
+    dosage: string;
+    frequency: string;
+    durationDays: number;
+    instructions: string;
+  }[];
+  patientCondition: 'STABLE' | 'IMPROVED' | 'REQUIRES_HOME_MONITORING' | 'CRITICAL_TRANSFER';
+  followUpDate: string;
+  referBackFacilityId: string;
+  referBackFacilityName: string;
+  ashaWorkerName?: string;
+  ashaWorkerPhone?: string;
+  followUpInstructions: string;
+  warningSigns: string;
+  dischargedAt: string;
+  dischargedByDoctorName: string;
+  dischargedByDoctorId: string;
+  auditBlockId?: string;
+  assignedBedFreed?: string;
+}
+
+export interface HospitalBloodStock {
+  bloodGroup: 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-';
+  unitsAvailable: number;
+  bufferThreshold: number;
+  status: 'OPTIMAL' | 'LOW' | 'CRITICAL_OUT';
+  lastUpdated: string;
+}
+
+

@@ -415,9 +415,9 @@ export default function MemberProfile({ patient, role, onBack, onOpenAction }: M
           ) : (
             <button 
               onClick={() => onOpenAction('REFERRAL')}
-              className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl transition-all shadow-md shadow-amber-500/20 flex items-center gap-2"
+              className="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-sm font-bold rounded-xl transition-all shadow-md shadow-teal-500/20 flex items-center gap-2 cursor-pointer hover:scale-102"
             >
-              <Activity className="w-4 h-4" /> Create Referral
+              <Send className="w-4 h-4" /> Refer to District Hospital
             </button>
           )}
           

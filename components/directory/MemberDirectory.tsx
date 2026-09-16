@@ -24,7 +24,9 @@ import {
   UserPlus,
   ArrowUpRight,
   Clock3,
+  Send,
 } from 'lucide-react';
+import { Referral } from '@/lib/types';
 
 interface MemberDirectoryProps {
   patients: Patient[];
@@ -33,6 +35,8 @@ interface MemberDirectoryProps {
   workerRoleName: string;
   workerLocation: string;
   onOpenNewPatient?: () => void;
+  onOpenReferral?: (patient: Patient) => void;
+  onOpenReferralToken?: (referral: Referral) => void;
 }
 
 export default function MemberDirectory({
@@ -42,6 +46,8 @@ export default function MemberDirectory({
   workerRoleName,
   workerLocation,
   onOpenNewPatient,
+  onOpenReferral,
+  onOpenReferralToken,
 }: MemberDirectoryProps) {
   const { language } = useLanguage();
   const { user } = useAuth();
@@ -596,21 +602,52 @@ export default function MemberDirectory({
                         </div>
                       </td>
 
-                      {/* Action Button */}
+                      {/* Action Buttons */}
                       <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSelectMember(pat);
-                          }}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                            isAssigned
-                              ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-100'
-                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
-                          }`}
-                        >
-                          {isAssigned ? 'Open EHR' : 'View Profile'}
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          {/* Dedicated Direct Referral Action for PHC & Field Workers */}
+                          {activeReferral ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (onOpenReferralToken) onOpenReferralToken(activeReferral);
+                                else onSelectMember(pat);
+                              }}
+                              className="px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 flex items-center gap-1 cursor-pointer shrink-0"
+                              title="Active referral in progress - click to view token"
+                            >
+                              <Activity className="w-3.5 h-3.5 text-amber-600" />
+                              <span className="hidden sm:inline">Ref Active</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (onOpenReferral) onOpenReferral(pat);
+                                else onSelectMember(pat);
+                              }}
+                              className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0 hover:scale-102"
+                              title="Refer patient to District Hospital"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                              <span>Refer to DH</span>
+                            </button>
+                          )}
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectMember(pat);
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                              isAssigned
+                                ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-100'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                            }`}
+                          >
+                            {isAssigned ? 'Open EHR' : 'View Profile'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

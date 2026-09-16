@@ -1,13 +1,16 @@
 'use client';
-import React, { useState } from 'react';
-import { Patient, Referral } from '@/lib/types';
+import React, { useState, useMemo } from 'react';
+import { Patient, Referral, Facility } from '@/lib/types';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
 import { useSync } from '@/context/SyncContext';
 import { recordAuditLog } from '@/lib/patientPrivacyService';
+import { getRankedDistrictHospitals, getRoadDistanceKm, getEstimatedTransitMinutes, formatTransitMinutes } from '@/lib/maharashtraGisEngine';
+import { MaharashtraNetworkMap } from '../maps/MaharashtraNetworkMap';
 import {
   X, Send, Activity, AlertTriangle, CheckCircle2, ChevronRight, 
-  Stethoscope, Clock, ShieldCheck
+  Stethoscope, Clock, ShieldCheck, MapPin, Navigation, Compass,
+  Bed, ArrowRight, Zap, Building2, Eye
 } from 'lucide-react';
 
 interface SmartReferralModalProps {
@@ -23,18 +26,58 @@ export function SmartReferralModal({
 }: SmartReferralModalProps) {
   const { language } = useLanguage();
   const { user } = useAuth();
-  const { referrals, createReferral } = useSync();
+  const { referrals, facilities, createReferral } = useSync();
 
   const existingActiveReferral = referrals.find(
     r => r.patientId === patient.id && !['COMPLETED', 'CANCELLED'].includes(r.status)
   ) || (patient.activeReferralId ? referrals.find(r => r.id === patient.activeReferralId && !['COMPLETED', 'CANCELLED'].includes(r.status)) : null);
 
   const [step, setStep] = useState<1 | 2>(1);
+  const [showGisMapModal, setShowGisMapModal] = useState<boolean>(false);
 
-  const [selectedSpecialty, setSelectedSpecialty] = useState(patient.gender === 'Female' && patient.isHighRiskPregnancy ? 'Obstetrics & Gynecology' : 'General Medicine');
-  const [selectedFacility, setSelectedFacility] = useState('District Hospital Aundh, Pune');
+  const [selectedSpecialty, setSelectedSpecialty] = useState(
+    patient.gender === 'Female' && patient.isHighRiskPregnancy ? 'Obstetrics & Gynaecology' : 'General Medicine'
+  );
+
+  // Determine referring facility
+  const originFacility = useMemo(() => {
+    return facilities.find(f => f.id === user?.facilityId) ||
+      facilities.find(f => f.name.toLowerCase().includes(user?.facilityName?.toLowerCase() || '')) ||
+      facilities.find(f => f.id === 'fac-phc-velhe') ||
+      facilities[0];
+  }, [facilities, user]);
+
+  // Calculate ranked district hospitals by distance & specialty
+  const rankedHospitals = useMemo(() => {
+    if (!originFacility) return [];
+    return getRankedDistrictHospitals(originFacility, facilities, selectedSpecialty);
+  }, [originFacility, facilities, selectedSpecialty]);
+
+  const defaultHospital = rankedHospitals[0]?.destination;
+
+  const [selectedFacilityId, setSelectedFacilityId] = useState<string>(defaultHospital?.id || 'fac-dh-pune');
   const [priority, setPriority] = useState<'routine' | 'high'>(patient.isHighRiskPregnancy ? 'high' : 'routine');
-  const [reason, setReason] = useState(patient.isHighRiskPregnancy ? 'High risk pregnancy with severe anemia. Needs immediate secondary care observation.' : '');
+  const [reason, setReason] = useState(
+    patient.isHighRiskPregnancy ? 'High risk pregnancy with severe anemia. Needs immediate secondary care observation.' : ''
+  );
+
+  // Selected Target Facility details
+  const targetFacility = useMemo(() => {
+    return facilities.find(f => f.id === selectedFacilityId) || defaultHospital || facilities[0];
+  }, [facilities, selectedFacilityId, defaultHospital]);
+
+  // Target hospital road stats
+  const targetHospitalStats = useMemo(() => {
+    if (!originFacility || !targetFacility) return { distanceKm: 42, transitFormatted: '55 min', isShortest: true };
+    const dist = getRoadDistanceKm(originFacility, targetFacility);
+    const transitMin = getEstimatedTransitMinutes(dist, true);
+    const isShortest = rankedHospitals[0]?.destination.id === targetFacility.id;
+    return {
+      distanceKm: dist,
+      transitFormatted: formatTransitMinutes(transitMin),
+      isShortest,
+    };
+  }, [originFacility, targetFacility, rankedHospitals]);
 
   if (existingActiveReferral) {
     return (
@@ -98,6 +141,7 @@ export function SmartReferralModal({
   }
 
   const handleSubmit = () => {
+    const selectedFacName = targetFacility?.name || 'District Hospital Aundh, Pune';
     const newRef: Referral = {
       id: 'REF-' + Date.now().toString().slice(-6),
       tokenCode: 'MH-REF-' + Date.now().toString().slice(-4),
@@ -106,17 +150,26 @@ export function SmartReferralModal({
       patientAbha: patient.abhaId,
       patientAge: patient.age,
       patientGender: patient.gender,
-      referringFacility: user.facilityName,
-      referringFacilityId: user.facilityId,
-      referringDoctorName: user.name,
-      referringUserId: user.id,
-      targetFacility: selectedFacility,
-      targetFacilityId: selectedFacility.includes('Sassoon') ? 'fac-sassoon-pune' : selectedFacility.includes('Aundh') ? 'fac-dh-pune' : selectedFacility.includes('Bhor') ? 'fac-rh-bhor' : selectedFacility.includes('Nashik') ? 'fac-dh-nashik' : 'fac-dh-pune',
+      referringFacility: user?.facilityName || originFacility?.name || 'Velhe Primary Health Centre (PHC)',
+      referringFacilityId: user?.facilityId || originFacility?.id || 'fac-phc-velhe',
+      referringDoctorName: user?.name || 'Dr. Rajesh Deshmukh',
+      referringUserId: user?.id || 'user-phc-01',
+      targetFacility: selectedFacName,
+      targetFacilityId: targetFacility?.id || 'fac-dh-pune',
       specialtyRequired: selectedSpecialty,
       triagePriority: (priority === 'high' ? 'red' : 'green') as 'red' | 'yellow' | 'green',
       triageScore: priority === 'high' ? 8 : 2,
-      triageReasons: [],
-      vitalsAtReferral: patient.encounters[0]?.vitals || { systolicBp: 120, diastolicBp: 80, heartRate: 75, spO2: 98, respiratoryRate: 16, temperature: 37.0, consciousLevel: 'alert', recordedAt: new Date().toISOString() },
+      triageReasons: patient.isHighRiskPregnancy ? ['High-Risk Maternal Alert', 'Severe Anemia Protocol'] : [],
+      vitalsAtReferral: patient.encounters[0]?.vitals || {
+        systolicBp: 120,
+        diastolicBp: 80,
+        heartRate: 75,
+        spO2: 98,
+        respiratoryRate: 16,
+        temperature: 37.0,
+        consciousLevel: 'alert',
+        recordedAt: new Date().toISOString()
+      },
       qrPayload: 'https://swasthyasetu.gov.in/verify/MH-REF-' + Date.now().toString().slice(-4),
       referralReason: reason,
       status: 'PENDING',
@@ -125,16 +178,16 @@ export function SmartReferralModal({
     createReferral(newRef);
 
     recordAuditLog({
-      userId: user.id,
-      userName: user.name,
-      userRole: user.role,
-      userFacility: user.facilityName,
-      administrativeLevel: user.administrativeLevel,
+      userId: user?.id || 'user-phc-01',
+      userName: user?.name || 'Dr. Rajesh Deshmukh',
+      userRole: user?.role || 'phc_doctor',
+      userFacility: user?.facilityName || 'Velhe Primary Health Centre (PHC)',
+      administrativeLevel: user?.administrativeLevel || 'facility',
       patientId: patient.id,
       patientName: patient.fullName,
       patientAbha: patient.abhaId,
       action: 'CREATE_REFERRAL',
-      resource: `Referral Token ${newRef.tokenCode} to ${selectedFacility}`,
+      resource: `Referral Token ${newRef.tokenCode} to ${selectedFacName} (${targetHospitalStats.distanceKm} km)`,
       accessGranted: true,
       reason: `Clinical Referral Created: ${selectedSpecialty} - ${reason || 'Specialist Evaluation'}`,
     });
@@ -145,44 +198,44 @@ export function SmartReferralModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 sm:p-6 animate-in fade-in duration-300">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700">
         
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/40 rounded-xl flex items-center justify-center text-indigo-600">
+            <div className="w-10 h-10 bg-teal-100 dark:bg-teal-900/40 rounded-xl flex items-center justify-center text-teal-600 dark:text-teal-400">
               <Send className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">Create Referral</h2>
-              <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-0.5">Patient: <span className="text-slate-800 dark:text-slate-100">{patient.fullName}</span> (ABHA: {patient.abhaId})</div>
+              <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">Create Smart Clinical Referral</h2>
+              <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                Patient: <span className="text-slate-800 dark:text-slate-100">{patient.fullName}</span> ({patient.age}y, {patient.gender}) • ABHA: <span className="font-mono">{patient.abhaId}</span>
+              </div>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 dark:bg-slate-700 rounded-xl transition-all">
+          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-all">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Stepper Progress */}
-        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-center items-center relative bg-white dark:bg-slate-900">
-          <div className="absolute top-1/2 left-20 right-20 h-0.5 bg-slate-100 dark:bg-slate-950 -translate-y-1/2 z-0"></div>
-          
+        <div className="px-6 py-3 border-b border-slate-100 dark:border-slate-800 flex justify-center items-center relative bg-white dark:bg-slate-900">
           <div className="w-full max-w-sm flex justify-between">
             {[
-              { num: 1, label: 'Clinical Details' },
-              { num: 2, label: 'Confirm' }
+              { num: 1, label: 'Routing & Shortest Distance' },
+              { num: 2, label: 'Review & Dispatch' }
             ].map(s => {
               const isActive = step === s.num;
               const isPast = step > s.num;
               return (
-                <div key={s.num} className="relative z-10 flex flex-col items-center gap-2 bg-white dark:bg-slate-900 px-2">
-                  <div className={"w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all " + 
-                    (isActive ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-200' : 
-                     isPast ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-600 text-indigo-600' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-400')}
+                <div key={s.num} className="relative z-10 flex flex-col items-center gap-1 bg-white dark:bg-slate-900 px-2">
+                  <div className={"w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all " + 
+                    (isActive ? 'bg-teal-600 border-teal-600 text-white shadow-md shadow-teal-200' : 
+                     isPast ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-600 text-teal-600' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-400')}
                   >
-                    {isPast ? <CheckCircle2 className="w-4 h-4" /> : s.num}
+                    {isPast ? <CheckCircle2 className="w-3.5 h-3.5" /> : s.num}
                   </div>
-                  <div className={"text-[10px] font-bold uppercase tracking-widest " + (isActive || isPast ? 'text-indigo-900 dark:text-indigo-200' : 'text-slate-400')}>{s.label}</div>
+                  <div className={"text-[10px] font-bold uppercase tracking-widest " + (isActive || isPast ? 'text-teal-900 dark:text-teal-200' : 'text-slate-400')}>{s.label}</div>
                 </div>
               );
             })}
@@ -192,103 +245,218 @@ export function SmartReferralModal({
         {/* Main Content Area */}
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-800/50">
           
-          {/* STEP 1: Details */}
+          {/* STEP 1: Details & Distance Map */}
           {step === 1 && (
-            <div className="max-w-2xl mx-auto space-y-6 animate-in slide-in-from-right-8 duration-300">
+            <div className="max-w-3xl mx-auto space-y-5 animate-in slide-in-from-right-8 duration-300">
               
               {patient.isHighRiskPregnancy && (
-                <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-100 rounded-xl p-4 flex gap-3">
-                  <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+                <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-900/40 rounded-2xl p-4 flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
                   <div>
-                    <div className="text-sm font-bold text-rose-900 dark:text-rose-200">High Risk Pregnancy Flagged</div>
-                    <div className="text-xs text-rose-700 dark:text-rose-400 font-medium mt-1">Gestational Week {patient.gestationalWeeks}. Patient requires priority escalation.</div>
+                    <div className="text-sm font-bold text-rose-900 dark:text-rose-200">High-Risk Pregnancy Flagged (Gestational Week {patient.gestationalWeeks})</div>
+                    <div className="text-xs text-rose-700 dark:text-rose-400 font-medium mt-0.5">
+                      System automatically prioritizes District Hospitals with active OB-GYN and NICU facilities on emergency duty.
+                    </div>
                   </div>
                 </div>
               )}
 
-              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm">
-                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2"><Stethoscope className="w-4 h-4 text-slate-400" /> Referral Routing</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+              {/* Destination Facility Card with GIS Map Trigger */}
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">Maharashtra District Hospital Routing</h3>
+                  </div>
+
+                  {/* Interactive GIS Map Trigger Button */}
+                  <button
+                    type="button"
+                    onClick={() => setShowGisMapModal(true)}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-teal-50 dark:bg-teal-900/30 border border-teal-200 dark:border-teal-700/60 text-teal-700 dark:text-teal-300 font-bold text-xs hover:bg-teal-100 dark:hover:bg-teal-800/40 transition-all shadow-sm"
+                  >
+                    <Compass className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                    📍 View on Maharashtra GIS Map & Shortest Routes
+                  </button>
+                </div>
+
+                {/* Ranked Shortest Hospital Card */}
+                {targetFacility && (
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-teal-50/60 via-slate-50 to-blue-50/40 dark:from-teal-950/30 dark:via-slate-900 dark:to-blue-950/20 border border-teal-200 dark:border-teal-900/50 flex flex-wrap items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-teal-500/30">
+                          {targetHospitalStats.isShortest ? '⚡ Optimal Shortest Route' : 'Selected Hospital'}
+                        </span>
+                        <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
+                          {targetHospitalStats.distanceKm} km from {originFacility?.name.split(' ')[0]}
+                        </span>
+                        <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                          (~{targetHospitalStats.transitFormatted} transit)
+                        </span>
+                      </div>
+                      <div className="text-sm font-black text-slate-900 dark:text-white">
+                        {targetFacility.name}
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        {targetFacility.district} District • {targetFacility.icuBedsTotal - targetFacility.icuBedsOccupied} ICU Beds Available • {targetFacility.totalBeds - targetFacility.occupiedBeds} Total Beds Free
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase">Emergency Helpline</div>
+                      <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
+                        {targetFacility.phone}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Facility & Specialty Selectors */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5">Destination Facility</label>
-                    <select value={selectedFacility} onChange={(e) => setSelectedFacility(e.target.value)} className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-hidden dark:bg-slate-800 dark:text-white bg-slate-50 dark:bg-slate-800/50">
-                      <option>District Hospital Aundh, Pune</option>
-                      <option>Sassoon General Hospital, Pune</option>
-                      <option>Rural Hospital Bhor</option>
+                    <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5">
+                      Target District Hospital (Ranked by Distance)
+                    </label>
+                    <select
+                      value={selectedFacilityId}
+                      onChange={(e) => setSelectedFacilityId(e.target.value)}
+                      className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none dark:bg-slate-800 bg-slate-50"
+                    >
+                      {rankedHospitals.map((r, i) => (
+                        <option key={r.destination.id} value={r.destination.id}>
+                          {i === 0 ? '⚡ ' : ''}{r.destination.name} ({r.distanceKm} km, {r.transitTimeFormatted})
+                        </option>
+                      ))}
                     </select>
                   </div>
+
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5">Target Specialty</label>
-                    <select value={selectedSpecialty} onChange={(e) => setSelectedSpecialty(e.target.value)} className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-hidden dark:bg-slate-800 dark:text-white bg-slate-50 dark:bg-slate-800/50">
-                      <option>Obstetrics & Gynecology</option>
-                      <option>Cardiology</option>
-                      <option>General Medicine</option>
-                      <option>Pediatrics</option>
+                    <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5">
+                      Required Medical Specialty
+                    </label>
+                    <select
+                      value={selectedSpecialty}
+                      onChange={(e) => setSelectedSpecialty(e.target.value)}
+                      className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none dark:bg-slate-800 bg-slate-50"
+                    >
+                      <option value="Obstetrics & Gynaecology">Obstetrics & Gynaecology (Maternal/NICU)</option>
+                      <option value="Cardiology">Cardiology / Emergency Cardiac Care</option>
+                      <option value="General Medicine">General Medicine</option>
+                      <option value="Pediatrics">Pediatrics</option>
+                      <option value="Trauma & Emergency Care">Trauma & Emergency Care</option>
+                      <option value="Orthopedics">Orthopedics</option>
+                      <option value="General Surgery">General Surgery</option>
                     </select>
                   </div>
                 </div>
 
-                <div className="mb-5">
+                {/* Urgency Selection */}
+                <div>
                   <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5">Clinical Urgency</label>
                   <div className="flex gap-3">
-                    <button onClick={() => setPriority('high')} className={"flex-1 py-3 rounded-xl border flex items-center justify-center gap-2 font-bold text-sm transition-all " + (priority === 'high' ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-400 shadow-sm' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50')}>
-                      <AlertTriangle className="w-4 h-4" /> Critical / Immediate
+                    <button
+                      type="button"
+                      onClick={() => setPriority('high')}
+                      className={"flex-1 py-2.5 rounded-xl border flex items-center justify-center gap-2 font-bold text-xs transition-all " + (priority === 'high' ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-400 shadow-sm' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50')}
+                    >
+                      <AlertTriangle className="w-4 h-4 text-rose-600" /> Critical / Red Priority (Immediate Casualty Triage)
                     </button>
-                    <button onClick={() => setPriority('routine')} className={"flex-1 py-3 rounded-xl border flex items-center justify-center gap-2 font-bold text-sm transition-all " + (priority === 'routine' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400 shadow-sm' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50')}>
-                      <Clock className="w-4 h-4" /> Routine
+                    <button
+                      type="button"
+                      onClick={() => setPriority('routine')}
+                      className={"flex-1 py-2.5 rounded-xl border flex items-center justify-center gap-2 font-bold text-xs transition-all " + (priority === 'routine' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400 shadow-sm' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50')}
+                    >
+                      <Clock className="w-4 h-4 text-blue-600" /> Routine / Elective Referral
                     </button>
                   </div>
                 </div>
 
+                {/* Referral Reason */}
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5">Clinical Referral Notes</label>
-                  <textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Describe the clinical reason for this referral..." rows={3} className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-hidden dark:bg-slate-800 dark:text-white bg-slate-50 dark:bg-slate-800/50"></textarea>
+                  <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5">
+                    Clinical Referral Notes & Chief Complaints
+                  </label>
+                  <textarea
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Describe patient symptoms, vitals observations, and reason for specialist escalation..."
+                    rows={3}
+                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-medium text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none dark:bg-slate-800 bg-slate-50"
+                  />
                 </div>
               </div>
 
               <div className="flex gap-4">
-                <button onClick={() => setStep(2)} className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl shadow-md transition-colors flex justify-center items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl shadow-md transition-colors flex justify-center items-center gap-2"
+                >
                   Proceed to Final Confirmation <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </div>
           )}
 
-          {/* STEP 2: Confirmation */}
+          {/* STEP 2: Confirmation & Route Audit */}
           {step === 2 && (
-            <div className="max-w-xl mx-auto space-y-6 text-center animate-in slide-in-from-right-8 duration-300 py-6">
-              <div className="w-20 h-20 bg-indigo-50 dark:bg-indigo-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <ShieldCheck className="w-10 h-10 text-indigo-600" />
+            <div className="max-w-xl mx-auto space-y-5 text-center animate-in slide-in-from-right-8 duration-300 py-4">
+              <div className="w-16 h-16 bg-teal-50 dark:bg-teal-900/20 rounded-full flex items-center justify-center mx-auto">
+                <ShieldCheck className="w-8 h-8 text-teal-600" />
               </div>
-              <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Confirm Referral Details</h3>
-              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">A secure referral token will be generated on the ABDM network and routed to the destination triage queue.</p>
+              <div>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Confirm & Route Referral</h3>
+                <p className="text-slate-500 dark:text-slate-400 text-xs font-medium mt-1">
+                  Referral token will be registered on the ABDM network and routed directly to the casualty intake queue at {targetFacility?.name}.
+                </p>
+              </div>
               
-              <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 p-6 rounded-2xl text-left mt-6 space-y-3 shadow-inner">
-                <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3">
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Patient</span>
-                  <span className="text-sm font-bold text-slate-900 dark:text-white">{patient.fullName}</span>
+              <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 p-5 rounded-2xl text-left space-y-2.5 shadow-inner">
+                <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-2 text-xs">
+                  <span className="font-bold text-slate-500 dark:text-slate-400 uppercase">Patient</span>
+                  <span className="font-bold text-slate-900 dark:text-white">{patient.fullName} (ABHA: {patient.abhaId})</span>
                 </div>
-                <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3">
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Destination</span>
-                  <span className="text-sm font-bold text-slate-900 dark:text-white">{selectedFacility}</span>
+                <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-2 text-xs">
+                  <span className="font-bold text-slate-500 dark:text-slate-400 uppercase">Referring PHC</span>
+                  <span className="font-bold text-slate-900 dark:text-white">{originFacility?.name}</span>
                 </div>
-                <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3">
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Specialty</span>
-                  <span className="text-sm font-bold text-slate-900 dark:text-white">{selectedSpecialty}</span>
+                <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-2 text-xs">
+                  <span className="font-bold text-slate-500 dark:text-slate-400 uppercase">Target Hospital</span>
+                  <span className="font-bold text-teal-600 dark:text-teal-400">{targetFacility?.name}</span>
                 </div>
-                <div className="flex justify-between items-center pt-1">
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Priority</span>
-                  <span className={"text-xs font-bold px-2 py-1 rounded " + (priority === 'high' ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400' : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400')}>
-                    {priority === 'high' ? 'CRITICAL' : 'ROUTINE'}
+                <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-2 text-xs">
+                  <span className="font-bold text-slate-500 dark:text-slate-400 uppercase">Distance & Transit</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-white">
+                    {targetHospitalStats.distanceKm} km (~{targetHospitalStats.transitFormatted})
+                  </span>
+                </div>
+                <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-2 text-xs">
+                  <span className="font-bold text-slate-500 dark:text-slate-400 uppercase">Specialty Required</span>
+                  <span className="font-bold text-slate-900 dark:text-white">{selectedSpecialty}</span>
+                </div>
+                <div className="flex justify-between items-center pt-1 text-xs">
+                  <span className="font-bold text-slate-500 dark:text-slate-400 uppercase">Priority</span>
+                  <span className={"font-bold px-2 py-0.5 rounded " + (priority === 'high' ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400' : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400')}>
+                    {priority === 'high' ? 'CRITICAL / EMERGENCY' : 'ROUTINE'}
                   </span>
                 </div>
               </div>
 
-              <div className="flex gap-4 mt-8">
-                <button onClick={() => setStep(1)} className="px-6 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-sm rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">Back</button>
-                <button onClick={handleSubmit} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow-md transition-colors flex justify-center items-center gap-2">
-                  <Send className="w-4 h-4" /> Generate Secure Referral
+              <div className="flex gap-4 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setStep(1)}
+                  className="px-6 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-50 transition-colors"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  className="flex-1 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors flex justify-center items-center gap-2"
+                >
+                  <Send className="w-4 h-4" /> Dispatch Referral to {targetFacility?.name.split(',')[0]}
                 </button>
               </div>
             </div>
@@ -296,6 +464,24 @@ export function SmartReferralModal({
 
         </div>
       </div>
+
+      {/* Fullscreen Maharashtra Network GIS Map Modal */}
+      {showGisMapModal && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
+          <div className="max-w-6xl w-full h-[88vh] rounded-3xl overflow-hidden shadow-2xl">
+            <MaharashtraNetworkMap
+              facilities={facilities}
+              initialOriginFacilityId={originFacility?.id || 'fac-phc-velhe'}
+              requiredSpecialty={selectedSpecialty}
+              onSelectHospitalForReferral={(fac) => {
+                setSelectedFacilityId(fac.id);
+                setShowGisMapModal(false);
+              }}
+              onClose={() => setShowGisMapModal(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

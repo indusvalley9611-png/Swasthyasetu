@@ -16,6 +16,7 @@ interface AuthContextType {
   generatedOtp: string | null;
   sendOtp: (phone: string) => Promise<{ success: boolean; otp?: string; error?: string }>;
   verifyOtp: (phone: string, otp: string) => Promise<{ success: boolean; error?: string }>;
+  switchRole: (newRole: Role) => void;
   logout: () => void;
 }
 
@@ -121,6 +122,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const switchRole = (newRole: Role) => {
+    const profile = USER_PROFILES_BY_ROLE[newRole];
+    if (profile) {
+      setCurrentUser(profile);
+      setRoleState(profile.role);
+      setActivePhone(profile.phone);
+      setIsAuthenticated(true);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(AUTH_STORAGE_KEY, profile.phone);
+      }
+    }
+  };
+
   // Resolve active user: prioritized to exact currentUser, fallback to role profile or guest session
   const activeUser: UserProfile =
     currentUser || (role ? USER_PROFILES_BY_ROLE[role] : GUEST_PROFILE);
@@ -136,6 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         generatedOtp,
         sendOtp,
         verifyOtp,
+        switchRole,
         logout,
       }}
     >

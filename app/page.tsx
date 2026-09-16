@@ -37,7 +37,7 @@ import {
 } from 'lucide-react';
 
 export default function Home() {
-  const { role, isAuthenticated } = useAuth();
+  const { role, isAuthenticated, switchRole } = useAuth();
   const { language, toggleLanguage, t } = useLanguage();
   const { referrals } = useSync();
 
@@ -378,6 +378,11 @@ export default function Home() {
         <ReferralTokenModal
           referral={referralToken}
           onClose={() => setReferralToken(null)}
+          onOpenInDistrict={(ref) => {
+            setReferralToken(null);
+            switchRole('specialist');
+            setActiveNavItem('incoming');
+          }}
         />
       )}
 

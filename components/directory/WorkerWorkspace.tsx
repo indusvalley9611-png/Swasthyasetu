@@ -119,6 +119,8 @@ export default function WorkerWorkspace({
               workerRoleName={workerInfo.roleName}
               workerLocation={workerInfo.location}
               onOpenNewPatient={onOpenNewPatient}
+              onOpenReferral={onOpenReferral}
+              onOpenReferralToken={onOpenReferralToken}
             />
           ) : (
             <MemberProfile

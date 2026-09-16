@@ -1,25 +1,79 @@
 'use client';
-import React, { useState } from 'react';
+
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
 import { useSync } from '@/context/SyncContext';
-import { Patient, Referral } from '@/lib/types';
 import {
-  Users, Stethoscope, Search, Clock, 
-  MapPin, AlertTriangle, ShieldCheck, ShieldAlert,
-  Activity, QrCode, Flame, Lock, UserPlus
+  Patient,
+  Referral,
+  SpecialistOnDuty,
+  HospitalBedSlot,
+  EmergencyWalkIn,
+  FacilityDischargeRecord,
+  HospitalBloodStock,
+  TamperEvidentAuditBlock,
+  HospitalDepartment,
+} from '@/lib/types';
+import {
+  INITIAL_SPECIALISTS_ON_DUTY,
+  INITIAL_HOSPITAL_BED_SLOTS,
+  INITIAL_EMERGENCY_WALKINS,
+  INITIAL_HOSPITAL_BLOOD_STOCK,
+  INITIAL_FACILITY_DISCHARGE_RECORDS,
+} from '@/lib/specialistData';
+import { INITIAL_TAMPER_AUDIT_BLOCKS } from '@/lib/mockData';
+import { createTamperEvidentBlock, GENESIS_HASH } from '@/lib/dhoIntelligenceEngine';
+import { CasualtyIntakeQueue } from '../specialist/CasualtyIntakeQueue';
+import { SpecialistReferralReviewModal } from '../specialist/SpecialistReferralReviewModal';
+import { DepartmentBedMatrixView } from '../specialist/DepartmentBedMatrixView';
+import { SpecialistRosterView } from '../specialist/SpecialistRosterView';
+import { PatientAdmissionModal } from '../specialist/PatientAdmissionModal';
+import { PatientDischargeModal } from '../specialist/PatientDischargeModal';
+import { FacilityTamperAuditView } from '../specialist/FacilityTamperAuditView';
+import { FacilityBloodDrugWidget } from '../specialist/FacilityBloodDrugWidget';
+import {
+  Users,
+  Stethoscope,
+  Search,
+  Clock,
+  MapPin,
+  AlertTriangle,
+  ShieldCheck,
+  Activity,
+  Flame,
+  UserPlus,
+  Bed,
+  FileCheck,
+  Droplet,
+  CheckCircle2,
+  XCircle,
+  Eye,
+  Plus,
+  Radio,
+  FileText,
 } from 'lucide-react';
-import { SpecialistTreatmentModal } from './SpecialistTreatmentModal';
 
 export interface SpecialistDashboardProps {
   onOpenPatientTimeline: (patient: Patient) => void;
   onOpenReferralToken: (referral: Referral) => void;
   onOpenBedMatrix: () => void;
   onOpenNewPatient?: () => void;
-  activeTab?: 'incoming' | 'under_review' | 'accepted' | 'admitted' | 'escalated' | 'counter_referral' | 'history';
-  onTabChange?: (tab: 'incoming' | 'under_review' | 'accepted' | 'admitted' | 'escalated' | 'counter_referral' | 'history') => void;
+  activeTab?: SpecialistTab;
+  onTabChange?: (tab: SpecialistTab) => void;
 }
+
+export type SpecialistTab =
+  | 'intake'
+  | 'referrals'
+  | 'incoming'
+  | 'beds'
+  | 'roster'
+  | 'admitted'
+  | 'discharges'
+  | 'audit'
+  | 'inventory_sla';
 
 export function SpecialistDashboard({
   onOpenPatientTimeline,
@@ -31,369 +85,885 @@ export function SpecialistDashboard({
 }: SpecialistDashboardProps) {
   const { language } = useLanguage();
   const { user } = useAuth();
-  const { referrals, patients, updateReferralStatus } = useSync();
+  const { referrals, patients, stocks, updateReferralStatus } = useSync();
 
-  const [internalTab, setInternalTab] = useState<
-    'incoming' | 'under_review' | 'accepted' | 'admitted' | 'escalated' | 'counter_referral' | 'history'
-  >(externalTab || 'incoming');
-
+  // Active navigation tab
+  const [internalTab, setInternalTab] = useState<SpecialistTab>(externalTab || 'intake');
   const activeTab = externalTab !== undefined ? externalTab : internalTab;
-  const setActiveTab = (
-    tab: 'incoming' | 'under_review' | 'accepted' | 'admitted' | 'escalated' | 'counter_referral' | 'history'
-  ) => {
+  const setActiveTab = (tab: SpecialistTab) => {
     setInternalTab(tab);
     if (onTabChange) onTabChange(tab);
   };
-  const [searchQuery, setSearchQuery] = useState('');
-  const [facilityScope, setFacilityScope] = useState<'MY_FACILITY' | 'ALL_DISTRICT'>('MY_FACILITY');
-  
-  // Modals
-  const [treatmentModalRef, setTreatmentModalRef] = useState<Referral | null>(null);
 
-  // Advanced Filtering
-  const [urgencyFilter, setUrgencyFilter] = useState<'all' | 'high' | 'routine'>('all');
+  // Hospital Identity Scoping (Strict Single-Facility Enforcement)
+  const currentHospitalName = user?.facilityName || 'District Hospital Aundh, Pune';
+  const currentHospitalId = user?.facilityId || 'fac-dh-pune';
 
-  const getPatientForReferral = (patientId: string) => patients.find(p => p.id === patientId);
-
-  const isReferralForMyFacility = (r: Referral) => {
-    if (!user?.facilityName || !r.targetFacility) return false;
-    const target = r.targetFacility.toLowerCase();
-    const fac = user.facilityName.toLowerCase();
-    return (
-      target.includes(fac) ||
-      fac.includes(target) ||
-      (target.includes('aundh') && fac.includes('aundh')) ||
-      (target.includes('pune') && fac.includes('pune') && target.includes('district') && fac.includes('district')) ||
-      (target.includes('nashik') && fac.includes('nashik'))
+  // State Management for Hospital-Level Resources
+  const [bedSlots, setBedSlots] = useState<HospitalBedSlot[]>(INITIAL_HOSPITAL_BED_SLOTS);
+  const [specialistsOnDuty, setSpecialistsOnDuty] = useState<SpecialistOnDuty[]>(INITIAL_SPECIALISTS_ON_DUTY);
+  const [walkIns, setWalkIns] = useState<EmergencyWalkIn[]>(INITIAL_EMERGENCY_WALKINS);
+  const [dischargeRecords, setDischargeRecords] = useState<FacilityDischargeRecord[]>(INITIAL_FACILITY_DISCHARGE_RECORDS);
+  const [bloodStock, setBloodStock] = useState<HospitalBloodStock[]>(INITIAL_HOSPITAL_BLOOD_STOCK);
+  const [tamperBlocks, setTamperBlocks] = useState<TamperEvidentAuditBlock[]>(() => {
+    return INITIAL_TAMPER_AUDIT_BLOCKS.filter(
+      (b) => b.actorRole === 'specialist' || b.resource.toLowerCase().includes('district') || b.resource.toLowerCase().includes('bed') || b.resource.toLowerCase().includes('aundh')
     );
+  });
+
+  // Active Modals
+  const [reviewReferral, setReviewReferral] = useState<Referral | null>(null);
+  const [admissionTarget, setAdmissionTarget] = useState<{
+    patientName: string;
+    patientAge?: number;
+    patientGender?: string;
+    patientAbha?: string;
+    triagePriority: 'red' | 'yellow' | 'green';
+    chiefComplaint: string;
+    specialtyRequired?: string;
+    referralId?: string;
+    walkInId?: string;
+  } | null>(null);
+  const [dischargeTargetBed, setDischargeTargetBed] = useState<HospitalBedSlot | null>(null);
+
+  // STRICT SINGLE-FACILITY DATA SCOPING (No district-wide leaks)
+  const myHospitalReferrals = useMemo(() => {
+    return (referrals || []).filter((r) => {
+      if (!r.targetFacility) return false;
+      const target = r.targetFacility.toLowerCase();
+      const fac = currentHospitalName.toLowerCase();
+      return (
+        target.includes(fac) ||
+        fac.includes(target) ||
+        (target.includes('aundh') && fac.includes('aundh')) ||
+        (target.includes('pune') && fac.includes('pune') && target.includes('district') && fac.includes('district')) ||
+        (target.includes('nashik') && fac.includes('nashik') && target.includes('civil') && fac.includes('civil'))
+      );
+    });
+  }, [referrals, currentHospitalName]);
+
+  const pendingIncomingReferrals = useMemo(() => {
+    return myHospitalReferrals.filter((r) => r.status === 'PENDING');
+  }, [myHospitalReferrals]);
+
+  const admittedReferrals = useMemo(() => {
+    return myHospitalReferrals.filter((r) => r.status === 'ADMITTED');
+  }, [myHospitalReferrals]);
+
+  const myHospitalDrugStocks = useMemo(() => {
+    return (stocks || []).filter((s) => {
+      const fac = (s.facilityName || '').toLowerCase();
+      return fac.includes('aundh') || fac.includes('district hospital') || fac.includes(currentHospitalName.toLowerCase());
+    });
+  }, [stocks, currentHospitalName]);
+
+  // Cryptographic SHA-256 Audit Logger for this facility
+  const recordHospitalTamperAudit = async (
+    action: string,
+    resource: string,
+    reason: string,
+    beforeState?: Record<string, unknown>,
+    afterState?: Record<string, unknown>
+  ) => {
+    const lastBlock = tamperBlocks[tamperBlocks.length - 1];
+    const prevHash = lastBlock ? lastBlock.hash : GENESIS_HASH;
+
+    const newBlock = await createTamperEvidentBlock({
+      index: tamperBlocks.length + 1,
+      prevHash,
+      actorId: user?.id || 'user-spec-01',
+      actorName: user?.name || 'Dr. Ananya Kulkarni',
+      actorRole: 'specialist',
+      action,
+      resource,
+      reason,
+      beforeState: beforeState || {},
+      afterState: afterState || {},
+    });
+
+    setTamperBlocks((prev) => [...prev, newBlock]);
   };
 
-  const myFacilityReferrals = referrals.filter(isReferralForMyFacility);
+  // HANDLER: Accept Incoming Referral (Proceeds to Bed Assignment)
+  const handleAcceptReferral = (ref: Referral, overrideReason?: string) => {
+    setReviewReferral(null);
+    // Open Bed Assignment Modal
+    setAdmissionTarget({
+      patientName: ref.patientName,
+      patientAge: ref.patientAge,
+      patientGender: ref.patientGender,
+      patientAbha: ref.patientAbha,
+      triagePriority: ref.triagePriority,
+      chiefComplaint: ref.referralReason,
+      specialtyRequired: ref.specialtyRequired,
+      referralId: ref.id,
+    });
 
-  const filteredReferrals = referrals.filter(r => {
-    if (facilityScope === 'MY_FACILITY' && !isReferralForMyFacility(r)) {
-      return false;
+    if (overrideReason) {
+      recordHospitalTamperAudit(
+        'SPECIALIST_OVERRIDE_ACCEPT',
+        `Referral #${ref.id} (${ref.patientName})`,
+        `Specialist Absent Override: ${overrideReason}`,
+        { status: 'PENDING', specialtyRequired: ref.specialtyRequired },
+        { status: 'ACCEPTED_UNDER_OVERRIDE', overrideReason }
+      );
+    }
+  };
+
+  // HANDLER: Reject Incoming Referral
+  const handleRejectReferral = (ref: Referral, reason: string) => {
+    updateReferralStatus(ref.id, 'CANCELLED', {
+      cancellationReason: reason,
+      cancelledBy: user?.name || 'Casualty Specialist',
+      cancelledByRole: 'specialist',
+    });
+
+    recordHospitalTamperAudit(
+      'REJECT_INCOMING_REFERRAL',
+      `Referral #${ref.id} (${ref.patientName})`,
+      reason,
+      { status: ref.status },
+      { status: 'CANCELLED', rejectionReason: reason, rejectedBy: user?.name }
+    );
+
+    setReviewReferral(null);
+  };
+
+  // HANDLER: Confirm Admission & Bed Assignment (Feature 5)
+  const handleConfirmAdmission = ({
+    bedId,
+    department,
+    attendingDoctor,
+    admissionNotes,
+  }: {
+    bedId: string;
+    department: HospitalDepartment;
+    attendingDoctor: string;
+    admissionNotes: string;
+  }) => {
+    if (!admissionTarget) return;
+
+    // 1. Update Bed Slot in Real Time
+    setBedSlots((prev) =>
+      prev.map((b) =>
+        b.bedId === bedId
+          ? {
+              ...b,
+              status: 'OCCUPIED',
+              patientName: admissionTarget.patientName,
+              patientAbha: admissionTarget.patientAbha,
+              triagePriority: admissionTarget.triagePriority,
+              assignedAt: new Date().toISOString(),
+              attendingSpecialist: attendingDoctor,
+              specialtyRequired: admissionTarget.specialtyRequired,
+              referralId: admissionTarget.referralId,
+            }
+          : b
+      )
+    );
+
+    // 2. If Referral, update status to ADMITTED
+    if (admissionTarget.referralId) {
+      updateReferralStatus(admissionTarget.referralId, 'ADMITTED', {
+        assignedBed: bedId,
+        assignedBedType: department === 'ICU' ? 'icuBedsOccupied' : 'occupiedBeds',
+      });
     }
 
-    const p = getPatientForReferral(r.patientId);
-    const pName = p?.fullName || r.patientName || '';
-    const searchMatch = pName.toLowerCase().includes(searchQuery.toLowerCase()) || r.id.includes(searchQuery) || (r.tokenCode && r.tokenCode.includes(searchQuery));
-    
-    if (activeTab === 'incoming') {
-      if (r.status !== 'PENDING') return false;
-    } else if (activeTab === 'under_review') {
-      if (r.status !== 'PENDING') return false;
-    } else if (activeTab === 'accepted') {
-      if (r.status !== 'ACCEPTED') return false;
-    } else if (activeTab === 'admitted') {
-      if (r.status !== 'ADMITTED') return false;
-    } else if (activeTab === 'escalated') {
-      if (r.status !== 'ESCALATED') return false;
-    } else if (activeTab === 'counter_referral') {
-      if (r.status !== 'COMPLETED' || !r.counterReferredTo) return false;
-    } else if (activeTab === 'history') {
-      if (r.status !== 'COMPLETED' && r.status !== 'CANCELLED') return false;
+    // 3. If Walk-In, update walk-in status
+    if (admissionTarget.walkInId) {
+      setWalkIns((prev) =>
+        prev.map((w) =>
+          w.id === admissionTarget.walkInId
+            ? { ...w, status: 'ADMITTED', assignedDoctorName: attendingDoctor, assignedBedId: bedId }
+            : w
+        )
+      );
     }
 
-    if (urgencyFilter === 'high' && r.triagePriority !== 'red') return false;
-    if (urgencyFilter === 'routine' && r.triagePriority === 'red') return false;
+    // 4. Log to Cryptographic SHA-256 Audit Chain
+    recordHospitalTamperAudit(
+      'INPATIENT_BED_ASSIGNMENT',
+      `Bed #${bedId} (${department}) -> Patient ${admissionTarget.patientName}`,
+      admissionNotes,
+      { bedStatus: 'AVAILABLE' },
+      {
+        bedStatus: 'OCCUPIED',
+        assignedPatient: admissionTarget.patientName,
+        assignedBedId: bedId,
+        department,
+        attendingDoctor,
+        admittedAt: new Date().toISOString(),
+      }
+    );
 
-    return searchMatch;
-  });
+    setAdmissionTarget(null);
+  };
+
+  // HANDLER: Confirm Discharge with Refer-Back-to-PHC (Feature 6)
+  const handleConfirmDischarge = (
+    dischargeData: Omit<FacilityDischargeRecord, 'id' | 'dischargedAt'>
+  ) => {
+    if (!dischargeTargetBed) return;
+
+    const newRecord: FacilityDischargeRecord = {
+      id: `dis-${Date.now()}`,
+      ...dischargeData,
+      dischargedAt: new Date().toISOString(),
+    };
+
+    // 1. Append Discharge Record (Care Continuity)
+    setDischargeRecords((prev) => [newRecord, ...prev]);
+
+    // 2. Free up the Bed Slot in Real Time
+    setBedSlots((prev) =>
+      prev.map((b) =>
+        b.bedId === dischargeTargetBed.bedId
+          ? {
+              ...b,
+              status: 'AVAILABLE',
+              patientId: undefined,
+              patientName: undefined,
+              patientAbha: undefined,
+              triagePriority: undefined,
+              assignedAt: undefined,
+              attendingSpecialist: undefined,
+              specialtyRequired: undefined,
+              referralId: undefined,
+            }
+          : b
+      )
+    );
+
+    // 3. Update Referral Status to COMPLETED / COUNTER_REFERRED
+    if (dischargeTargetBed.referralId) {
+      updateReferralStatus(dischargeTargetBed.referralId, 'COMPLETED', {
+        counterReferredTo: dischargeData.referBackFacilityName,
+      });
+    }
+
+    // 4. Log to Cryptographic SHA-256 Audit Chain
+    recordHospitalTamperAudit(
+      'PATIENT_DISCHARGE_REFER_BACK',
+      `Patient ${dischargeTargetBed.patientName} from Bed ${dischargeTargetBed.bedNumber}`,
+      `Discharged: ${dischargeData.dischargeDiagnosis}. Referred back to ${dischargeData.referBackFacilityName} (ASHA: ${dischargeData.ashaWorkerName})`,
+      { bedStatus: 'OCCUPIED', patient: dischargeTargetBed.patientName },
+      {
+        bedStatus: 'AVAILABLE',
+        freedBed: dischargeTargetBed.bedNumber,
+        referBackFacility: dischargeData.referBackFacilityName,
+        followUpDate: dischargeData.followUpDate,
+      }
+    );
+
+    setDischargeTargetBed(null);
+  };
+
+  // Quick stats
+  const criticalIntakeCount =
+    pendingIncomingReferrals.filter((r) => r.triagePriority === 'red').length +
+    walkIns.filter((w) => w.triagePriority === 'red' && w.status !== 'ADMITTED').length;
+
+  const totalAvailableBeds = bedSlots.filter((b) => b.status === 'AVAILABLE').length;
+  const occupiedBedsCount = bedSlots.filter((b) => b.status === 'OCCUPIED').length;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
-      
-      {/* 1. DISTRICT HEALTH OPERATIONS */}
-      <div className="mb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
-            <MapPin className="w-3.5 h-3.5" /> {user?.facilityName || 'District Hospital'} &bull; {user?.district || 'Pune'} District
+      {/* ── 1. HOSPITAL COMMAND HEADER ── */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-slate-800 rounded-3xl p-5 text-white shadow-2xl flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-600 flex items-center justify-center shrink-0 shadow-lg border border-indigo-400/30">
+            <Stethoscope className="w-7 h-7 text-white" />
           </div>
-          <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight uppercase">
-            Casualty & Specialty Referral Command
-          </h2>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-indigo-400" />
+                DISTRICT HOSPITAL SPECIALIST &amp; CASUALTY DESK
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                FACILITY-SCOPED SESSION
+              </span>
+            </div>
+            <h2 className="text-xl md:text-2xl font-black tracking-tight text-white mt-1 flex items-center gap-2">
+              <span>{currentHospitalName}</span>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-200 border border-indigo-400/30">
+                {user?.name || 'Dr. Ananya Kulkarni'} ({user?.roleTitleEn || 'Chief Casualty & Triage Specialist'})
+              </span>
+            </h2>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Trauma triage, inpatient bed assignments, on-call roster cross-checks &amp; refer-back care loop
+            </p>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+
+        {/* Quick Actions */}
+        <div className="flex items-center gap-2 flex-wrap">
           {onOpenNewPatient && (
             <button
-              type="button"
               onClick={onOpenNewPatient}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-2xs transition-colors cursor-pointer"
-              title="Direct Hospital Patient Intake / ABDM Search & Registration"
+              className="px-3.5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-blue-950/40 cursor-pointer"
             >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>+ Patient Intake</span>
+              <UserPlus className="w-4 h-4" />
+              <span>+ Register Patient</span>
             </button>
           )}
+
           <Link
             href="/maha-aushadhi"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-extrabold border border-rose-200 dark:border-rose-800 transition-colors"
-            title="MahaAushadhi — Emergency Drug Response Network"
+            className="px-3.5 py-2.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition-all flex items-center gap-1.5"
           >
-            <Flame className="w-3.5 h-3.5 text-rose-600 animate-pulse" />
-            <span>Emergency Drug Grid (MahaAushadhi) &rarr;</span>
+            <Flame className="w-4 h-4 text-rose-400 animate-pulse" />
+            <span>Emergency Drug Grid &rarr;</span>
           </Link>
         </div>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-        {/* Critical Cases */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-rose-100 dark:border-rose-900 p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
-          <div className="text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tight">{myFacilityReferrals.filter(r => r.triagePriority === 'red' && r.status === 'PENDING').length}</div>
-          <div className="text-sm font-bold text-rose-600 dark:text-rose-400 mt-1 uppercase tracking-wide">Critical Cases</div>
+
+      {/* ── 2. HOSPITAL NAVIGATION TABS ── */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-2 shadow-sm flex items-center gap-1.5 overflow-x-auto">
+        <button
+          onClick={() => setActiveTab('intake')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            activeTab === 'intake'
+              ? 'bg-rose-600 text-white shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Flame className="w-3.5 h-3.5" />
+          <span>Casualty Intake Queue</span>
+          {criticalIntakeCount > 0 && (
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${activeTab === 'intake' ? 'bg-white text-rose-600' : 'bg-rose-500 text-white'}`}>
+              {criticalIntakeCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('referrals')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            activeTab === 'referrals'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Users className="w-3.5 h-3.5" />
+          <span>Incoming Referrals</span>
+          {pendingIncomingReferrals.length > 0 && (
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${activeTab === 'referrals' ? 'bg-white text-blue-600' : 'bg-blue-500 text-white'}`}>
+              {pendingIncomingReferrals.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('beds')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            activeTab === 'beds'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Bed className="w-3.5 h-3.5" />
+          <span>Department Bed Matrix</span>
+          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${activeTab === 'beds' ? 'bg-white text-indigo-600' : 'bg-emerald-500 text-white'}`}>
+            {totalAvailableBeds} Free
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('roster')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            activeTab === 'roster'
+              ? 'bg-teal-600 text-white shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Stethoscope className="w-3.5 h-3.5" />
+          <span>Specialist On-Call Roster</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('admitted')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            activeTab === 'admitted'
+              ? 'bg-purple-600 text-white shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Activity className="w-3.5 h-3.5" />
+          <span>Active Inpatients</span>
+          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${activeTab === 'admitted' ? 'bg-white text-purple-600' : 'bg-purple-500 text-white'}`}>
+            {occupiedBedsCount}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('discharges')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            activeTab === 'discharges'
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <FileCheck className="w-3.5 h-3.5" />
+          <span>Refer-Back Loop</span>
+          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${activeTab === 'discharges' ? 'bg-white text-emerald-600' : 'bg-emerald-500 text-white'}`}>
+            {dischargeRecords.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('audit')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            activeTab === 'audit'
+              ? 'bg-slate-900 text-white shadow-sm dark:bg-slate-100 dark:text-slate-900'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5" />
+          <span>Facility Tamper Audit</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('inventory_sla')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            activeTab === 'inventory_sla'
+              ? 'bg-rose-700 text-white shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Droplet className="w-3.5 h-3.5" />
+          <span>Blood, Drugs &amp; SLA</span>
+        </button>
+      </div>
+
+      {/* ── 3. 4 TOP CLINICAL SUMMARY CARDS ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Card 1: Critical Emergency Cases */}
+        <div
+          onClick={() => setActiveTab('intake')}
+          className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+            activeTab === 'intake'
+              ? 'bg-rose-500/10 border-rose-500/40 ring-2 ring-rose-500/20 shadow-sm'
+              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Emergency Intake
+            </span>
+            <Flame className="w-4 h-4 text-rose-500 animate-pulse" />
+          </div>
+          <div className="flex items-baseline gap-2 mt-2">
+            <span className="text-2xl font-black text-rose-600 dark:text-rose-400">
+              {pendingIncomingReferrals.length + walkIns.filter((w) => w.status !== 'ADMITTED').length}
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">Arriving / Triaged</span>
+          </div>
         </div>
 
-        {/* Incoming Referrals */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-blue-100 dark:border-blue-900 p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden cursor-pointer" onClick={() => setActiveTab('incoming')}>
-          <div className="text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tight">{myFacilityReferrals.filter(r => r.status === 'PENDING').length}</div>
-          <div className="text-sm font-bold text-blue-600 dark:text-blue-400 mt-1 uppercase tracking-wide">Incoming Referrals</div>
+        {/* Card 2: Active Inpatients */}
+        <div
+          onClick={() => setActiveTab('admitted')}
+          className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-purple-300 dark:hover:border-purple-800 transition-all cursor-pointer shadow-sm"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Active Inpatients
+            </span>
+            <Activity className="w-4 h-4 text-purple-500" />
+          </div>
+          <div className="flex items-baseline gap-2 mt-2">
+            <span className="text-2xl font-black text-purple-600 dark:text-purple-400">
+              {occupiedBedsCount}
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">Under Care</span>
+          </div>
         </div>
 
-        {/* Active Admissions */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-indigo-100 dark:border-indigo-900 p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden cursor-pointer" onClick={() => setActiveTab('admitted')}>
-          <div className="text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tight">{referrals.filter(r => r.status === 'ADMITTED').length}</div>
-          <div className="text-sm font-bold text-indigo-600 dark:text-indigo-400 mt-1 uppercase tracking-wide">Active Admissions</div>
+        {/* Card 3: Free Inpatient Beds */}
+        <div
+          onClick={() => setActiveTab('beds')}
+          className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-800 transition-all cursor-pointer shadow-sm"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Available Beds
+            </span>
+            <Bed className="w-4 h-4 text-emerald-500" />
+          </div>
+          <div className="flex items-baseline gap-2 mt-2">
+            <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+              {totalAvailableBeds}
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">of {bedSlots.length} Slots</span>
+          </div>
         </div>
 
-        {/* Available Critical Beds */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-emerald-100 dark:border-emerald-900 p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden cursor-pointer" onClick={onOpenBedMatrix}>
-          <div className="text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tight">18</div>
-          <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-1 uppercase tracking-wide">Critical Beds</div>
-        </div>
-
-        {/* Resource Alerts */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-amber-100 dark:border-amber-900 p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden cursor-pointer" onClick={() => {}}>
-          <div className="text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tight">3</div>
-          <div className="text-sm font-bold text-amber-600 dark:text-amber-400 mt-1 uppercase tracking-wide">Resource Alerts</div>
+        {/* Card 4: Discharged & Counter-Referred */}
+        <div
+          onClick={() => setActiveTab('discharges')}
+          className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-teal-300 dark:hover:border-teal-800 transition-all cursor-pointer shadow-sm"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Refer-Back Care Loop
+            </span>
+            <FileCheck className="w-4 h-4 text-teal-500" />
+          </div>
+          <div className="flex items-baseline gap-2 mt-2">
+            <span className="text-2xl font-black text-teal-600 dark:text-teal-400">
+              {dischargeRecords.length}
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">Referred to PHCs</span>
+          </div>
         </div>
       </div>
 
-      {/* RESOURCE ALERTS ENGINE */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 p-3 rounded-xl flex items-center gap-3 cursor-pointer" onClick={onOpenBedMatrix}>
-          <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
-          <div><div className="text-xs font-bold text-rose-800 dark:text-rose-300">CRITICAL</div><div className="text-xs text-rose-600 dark:text-rose-400">ICU capacity exhausted</div></div>
-        </div>
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 rounded-xl flex items-center gap-3 cursor-pointer">
-          <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-          <div><div className="text-xs font-bold text-amber-800 dark:text-amber-300">WARNING</div><div className="text-xs text-amber-600 dark:text-amber-400">Anti-snake venom below buffer</div></div>
-        </div>
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-3 rounded-xl flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('history')}>
-          <Activity className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
-          <div><div className="text-xs font-bold text-yellow-800 dark:text-yellow-300">FOLLOW-UP</div><div className="text-xs text-yellow-600 dark:text-yellow-400">14 discharged patients require follow-up</div></div>
-        </div>
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3 rounded-xl flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('incoming')}>
-          <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-          <div><div className="text-xs font-bold text-blue-800 dark:text-blue-300">REFERRAL</div><div className="text-xs text-blue-600 dark:text-blue-400">8 referrals waiting for review</div></div>
-        </div>
-      </div>
+      {/* ── 4. FEATURE 1: CASUALTY / ER INTAKE QUEUE ── */}
+      {activeTab === 'intake' && (
+        <CasualtyIntakeQueue
+          hospitalName={currentHospitalName}
+          incomingReferrals={pendingIncomingReferrals}
+          walkIns={walkIns.filter((w) => w.status !== 'ADMITTED')}
+          patients={patients}
+          onReviewReferral={(ref) => setReviewReferral(ref)}
+          onAdmitWalkIn={(walkIn) => {
+            setAdmissionTarget({
+              patientName: walkIn.fullName,
+              patientAge: walkIn.age,
+              patientGender: walkIn.gender,
+              patientAbha: walkIn.abhaId,
+              triagePriority: walkIn.triagePriority,
+              chiefComplaint: walkIn.chiefComplaint,
+              walkInId: walkIn.id,
+            });
+          }}
+          onRegisterWalkIn={onOpenNewPatient}
+        />
+      )}
 
-      {/* 2. REFERRAL COMMAND CENTER */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl shadow-sm overflow-hidden flex flex-col min-h-[600px] mt-6">
-        {/* Header & Controls */}
-        <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex flex-wrap gap-4 justify-between items-center">
-          <div>
-            <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Referral Command Center</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">{user.facilityName} &middot; Trauma & Triage Desk</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-            {/* Facility Scope Toggle */}
-            <div className="flex bg-slate-200/80 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold shadow-xs">
-              <button
-                type="button"
-                onClick={() => setFacilityScope('MY_FACILITY')}
-                className={`px-3 py-1.5 rounded-lg transition-colors ${
-                  facilityScope === 'MY_FACILITY'
-                    ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-              >
-                My Hospital ({myFacilityReferrals.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFacilityScope('ALL_DISTRICT')}
-                className={`px-3 py-1.5 rounded-lg transition-colors ${
-                  facilityScope === 'ALL_DISTRICT'
-                    ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-              >
-                All District Referrals ({referrals.length})
-              </button>
-            </div>
-
-            <div className="bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap text-sm font-bold shadow-sm">
-              {['incoming', 'under_review', 'accepted', 'admitted', 'escalated', 'counter_referral', 'history'].map(tab => (
-                <button 
-                  key={tab}
-                  onClick={() => setActiveTab(tab as any)} 
-                  className={`px-3 py-1.5 rounded-lg transition-colors capitalize ${activeTab === tab ? 'bg-slate-900 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
-                  {tab.replace('_', ' ')}
-                </button>
-              ))}
-            </div>
-            <div className="relative flex-1 sm:w-64">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search patient, ABHA..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-hidden dark:bg-slate-800 dark:text-white shadow-sm"
-              />
-            </div>
-            <button className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 shadow-sm text-slate-600 dark:text-slate-300">
-              <QrCode className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Filter Ribbon */}
-        <div className="px-6 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-4 overflow-x-auto">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider shrink-0">Filter By Urgency:</span>
-          <div className="flex gap-2">
-            <button onClick={() => setUrgencyFilter('all')} className={"px-3 py-1.5 rounded-md text-xs font-bold transition-colors " + (urgencyFilter === 'all' ? 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 border border-slate-200 dark:border-slate-700')}>All</button>
-            <button onClick={() => setUrgencyFilter('high')} className={"px-3 py-1.5 rounded-md text-xs font-bold transition-colors " + (urgencyFilter === 'high' ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 border border-slate-200 dark:border-slate-700')}>Critical / High Risk</button>
-            <button onClick={() => setUrgencyFilter('routine')} className={"px-3 py-1.5 rounded-md text-xs font-bold transition-colors " + (urgencyFilter === 'routine' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 border border-slate-200 dark:border-slate-700')}>Routine</button>
-          </div>
-        </div>
-
-        {/* Patient List */}
-        <div className="flex-1 overflow-y-auto">
-          {filteredReferrals.length === 0 ? (
-            <div className="p-12 text-center">
-              <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center mx-auto mb-3">
-                <ShieldCheck className="w-8 h-8 text-slate-300" />
+      {/* ── 5. FEATURE 2 & 4: INCOMING REFERRALS REVIEW ── */}
+      {(activeTab === 'referrals' || activeTab === 'incoming') && (
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
+                  <Users className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                    Incoming PHC &amp; CHC Referrals
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Patient cases referred specifically to <strong>{currentHospitalName}</strong> awaiting clinical acceptance.
+                  </p>
+                </div>
               </div>
-              <div className="text-slate-800 dark:text-slate-100 font-bold">No active cases</div>
-              <div className="text-slate-500 dark:text-slate-400 text-sm mt-1">Queue is empty for the selected filters.</div>
             </div>
-          ) : (
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredReferrals.map(ref => {
-                const patient = getPatientForReferral(ref.patientId) || (ref.patientName ? ({
-                  id: ref.patientId,
-                  fullName: ref.patientName,
-                  age: ref.patientAge || 30,
-                  gender: (ref.patientGender as any) || 'Female',
-                  abhaId: ref.patientAbha || 'ABDM-WALKIN',
-                  phone: '9823091823',
-                  village: 'Pune',
-                  district: 'Pune',
-                  bloodGroup: 'B Positive',
-                  encounters: [],
-                } as unknown as Patient) : null);
-                if (!patient) return null;
-                const isHigh = ref.triagePriority === 'red';
-                const isMyFacility = isReferralForMyFacility(ref);
+          </div>
+
+          <div className="space-y-3">
+            {pendingIncomingReferrals.length === 0 ? (
+              <div className="text-center py-12 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800">
+                <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
+                <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">No Pending Referrals</h4>
+                <p className="text-xs text-slate-400 mt-1">All incoming cases for this hospital have been accepted or triaged.</p>
+              </div>
+            ) : (
+              pendingIncomingReferrals.map((ref) => {
+                const patient = patients.find((p) => p.id === ref.patientId);
 
                 return (
-                  <div key={ref.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group">
-
-                    {/* Urgency avatar */}
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
-                      isHigh
-                        ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-600 animate-pulse'
-                        : 'bg-blue-100 dark:bg-blue-900/40 text-blue-600'
-                    }`}>
-                      {isHigh
-                        ? <AlertTriangle className="w-4 h-4" />
-                        : <Clock className="w-4 h-4" />
-                      }
-                    </div>
-
-                    {/* Patient identity */}
-                    <div className="flex-1 min-w-0">
-                      {isMyFacility ? (
-                        <div
-                          className="font-semibold text-sm text-slate-900 dark:text-white group-hover:text-blue-600 transition-colors cursor-pointer truncate"
-                          onClick={() => onOpenPatientTimeline(patient)}
-                          title="Open full EHR"
+                  <div
+                    key={ref.id}
+                    className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:border-blue-400 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                  >
+                    <div className="space-y-2 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                            ref.triagePriority === 'red'
+                              ? 'bg-rose-500 text-white'
+                              : 'bg-amber-500 text-slate-950'
+                          }`}
                         >
-                          {patient.fullName}
-                        </div>
-                      ) : (
-                        <div
-                          className="font-semibold text-sm text-slate-700 dark:text-slate-300 hover:text-amber-600 transition-colors cursor-pointer flex items-center gap-1.5 truncate"
-                          onClick={() => setTreatmentModalRef(ref)}
-                          title="View referral summary (coordination only)"
-                        >
-                          {patient.fullName}
-                          <Lock className="w-3 h-3 text-amber-500 shrink-0" />
-                        </div>
-                      )}
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1.5">
-                        <span>{patient.age}y · {patient.gender}</span>
-                        {!isMyFacility && (
-                          <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800">
-                            Coordination Only
-                          </span>
-                        )}
+                          {ref.triagePriority.toUpperCase()} TRIAGE
+                        </span>
+                        <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                          {ref.patientName} ({ref.patientAge}y &bull; {ref.patientGender})
+                        </span>
+                        <span className="text-[11px] font-mono text-slate-400">
+                          #{ref.tokenCode || ref.id}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-700 dark:text-slate-300 font-medium">
+                        <strong>Reason:</strong> {ref.referralReason}
+                      </p>
+
+                      <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+                        <span>From: <strong className="text-slate-700 dark:text-slate-300">{ref.referringFacility}</strong></span>
+                        <span>&bull;</span>
+                        <span>Specialty: <strong className="text-blue-600 dark:text-blue-400">{ref.specialtyRequired}</strong></span>
                       </div>
                     </div>
 
-                    {/* Origin */}
-                    <div className="hidden md:block w-40 shrink-0">
-                      <div className="text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1 truncate">
-                        <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                        <span className="truncate">{ref.referringFacility}</span>
-                      </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5 truncate">{ref.targetFacility}</div>
-                    </div>
-
-                    {/* Status badge */}
-                    <div className="shrink-0">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${
-                        ref.status === 'ACCEPTED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                        ref.status === 'ADMITTED' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
-                        ref.status === 'COMPLETED' ? 'bg-slate-100 text-slate-600 border border-slate-200' :
-                        ref.status === 'CANCELLED' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
-                        'bg-amber-50 text-amber-700 border border-amber-200'
-                      }`}>
-                        {ref.status === 'PENDING' ? 'Pending' :
-                         ref.status === 'ACCEPTED' ? 'Accepted' :
-                         ref.status === 'ADMITTED' ? 'Admitted' :
-                         ref.status === 'COMPLETED' ? 'Done' :
-                         ref.status === 'CANCELLED' ? 'Cancelled' :
-                         ref.status === 'ESCALATED' ? 'Escalated' :
-                         ref.status}
-                      </span>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button onClick={() => onOpenReferralToken(ref)} className="px-2.5 py-1.5 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-700 dark:text-slate-200 rounded-lg shadow-sm transition-all">
-                        QR
+                    <div className="shrink-0 flex items-center gap-2">
+                      <button
+                        onClick={() => setReviewReferral(ref)}
+                        className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Review &amp; Accept / Reject</span>
                       </button>
-                      {isMyFacility ? (
-                        <button onClick={() => setTreatmentModalRef(ref)} className="px-2.5 py-1.5 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-lg shadow-sm transition-all">
-                          Open
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => setTreatmentModalRef(ref)}
-                          className="px-2.5 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 rounded-lg transition-all"
-                          title="View coordination summary"
-                        >
-                          Summary
-                        </button>
-                      )}
                     </div>
                   </div>
                 );
-              })}
-            </div>
-          )}
+              })
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {treatmentModalRef && (
-        <SpecialistTreatmentModal 
-          referral={treatmentModalRef} 
-          patient={getPatientForReferral(treatmentModalRef.patientId)!} 
-          onClose={() => setTreatmentModalRef(null)} 
-          updateReferralStatus={updateReferralStatus} 
+      {/* ── 6. FEATURE 3: DEPARTMENT BED MATRIX ── */}
+      {activeTab === 'beds' && (
+        <DepartmentBedMatrixView
+          hospitalName={currentHospitalName}
+          bedSlots={bedSlots}
+          onSelectBed={(bed) => {
+            // Open direct admission modal with empty patient template
+            setAdmissionTarget({
+              patientName: 'Emergency Inpatient Intake',
+              triagePriority: 'yellow',
+              chiefComplaint: `Bed allocation under ${bed.department}`,
+            });
+          }}
+          onInitiateDischarge={(bed) => setDischargeTargetBed(bed)}
+        />
+      )}
+
+      {/* ── 7. FEATURE 4: SPECIALIST ON-CALL ROSTER ── */}
+      {activeTab === 'roster' && (
+        <SpecialistRosterView
+          hospitalName={currentHospitalName}
+          specialists={specialistsOnDuty}
+        />
+      )}
+
+      {/* ── 8. ACTIVE ADMISSIONS & INPATIENT MANAGEMENT ── */}
+      {activeTab === 'admitted' && (
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
+                  <Activity className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                    Active Inpatients Under Care
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Currently admitted patients in ICU, General Wards, Maternity &amp; Casualty Bays.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {bedSlots
+              .filter((b) => b.status === 'OCCUPIED' && b.patientName)
+              .map((bed) => (
+                <div
+                  key={bed.bedId}
+                  className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:border-purple-400 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                >
+                  <div className="space-y-2 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-300 border border-purple-500/30 text-[10px] font-black uppercase">
+                        {bed.bedNumber} ({bed.department})
+                      </span>
+                      {bed.triagePriority && (
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                            bed.triagePriority === 'red' ? 'bg-rose-500 text-white' : 'bg-amber-500 text-slate-950'
+                          }`}
+                        >
+                          {bed.triagePriority}
+                        </span>
+                      )}
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                        {bed.patientName}
+                      </h4>
+                      <span className="text-[11px] font-mono text-slate-400">
+                        ABHA: {bed.patientAbha || 'ABDM-VERIFIED'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3 text-xs text-slate-600 dark:text-slate-400 flex-wrap">
+                      <span>Ward: <strong>{bed.wardName}</strong></span>
+                      <span>&bull;</span>
+                      <span>Attending: <strong className="text-indigo-600 dark:text-indigo-400">{bed.attendingSpecialist || 'Dr. Ananya Kulkarni'}</strong></span>
+                      {bed.assignedAt && (
+                        <>
+                          <span>&bull;</span>
+                          <span className="font-mono text-[11px]">
+                            Admitted: {new Date(bed.assignedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="shrink-0 flex items-center gap-2">
+                    <button
+                      onClick={() => setDischargeTargetBed(bed)}
+                      className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Discharge &amp; Refer Back</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── 9. FEATURE 6: DISCHARGE & REFER-BACK CARE-CONTINUITY LOOP ── */}
+      {activeTab === 'discharges' && (
+        <div className="space-y-4">
+          <div className="bg-gradient-to-r from-slate-900 via-emerald-950 to-slate-900 border border-emerald-900/40 rounded-3xl p-5 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
+                  <FileCheck className="w-3 h-3 text-emerald-400" />
+                  POST-DISCHARGE CARE-CONTINUITY LOOP
+                </span>
+              </div>
+              <h3 className="text-xl font-black tracking-tight text-white mt-1">
+                Completed Discharges &amp; PHC Counter-Referrals
+              </h3>
+              <p className="text-xs text-emerald-200/80 mt-0.5">
+                Structured clinical discharge summaries routed back down to originating PHCs and community ASHA workers.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {dischargeRecords.map((dis) => (
+              <div
+                key={dis.id}
+                className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3"
+              >
+                <div className="flex items-start justify-between flex-wrap gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-black uppercase">
+                        DISCHARGE #{dis.id}
+                      </span>
+                      <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                        {dis.patientName}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        ABHA: {dis.patientAbha || 'ABDM-VERIFIED'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">
+                      <strong>Diagnosis:</strong> {dis.dischargeDiagnosis}
+                    </div>
+                  </div>
+
+                  <span className="text-[10px] font-mono text-slate-400">
+                    Discharged: {new Date(dis.dischargedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+
+                {/* Refer-Back Routing Box */}
+                <div className="p-3.5 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between text-emerald-800 dark:text-emerald-300 font-bold">
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                      Routed Back To: {dis.referBackFacilityName}
+                    </span>
+                    <span>Follow-Up Due: {dis.followUpDate}</span>
+                  </div>
+                  {dis.ashaWorkerName && (
+                    <div className="text-slate-600 dark:text-slate-400 text-[11px]">
+                      Community ASHA: <strong>{dis.ashaWorkerName}</strong> ({dis.ashaWorkerPhone || 'Assigned'}) &bull; Action: {dis.followUpInstructions}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── 10. FEATURE 7: FACILITY TAMPER-EVIDENT AUDIT TRAIL ── */}
+      {activeTab === 'audit' && (
+        <FacilityTamperAuditView
+          hospitalName={currentHospitalName}
+          blocks={tamperBlocks}
+        />
+      )}
+
+      {/* ── 11. FEATURES 8 & 9: BLOOD BANK, DRUGS & SLA ── */}
+      {activeTab === 'inventory_sla' && (
+        <FacilityBloodDrugWidget
+          hospitalName={currentHospitalName}
+          bloodStock={bloodStock}
+          drugStocks={myHospitalDrugStocks}
+          referrals={myHospitalReferrals}
+        />
+      )}
+
+      {/* ── 12. OVERLAY MODALS ── */}
+
+      {/* Referral Review Modal (Feature 2 & 4) */}
+      {reviewReferral && (
+        <SpecialistReferralReviewModal
+          referral={reviewReferral}
+          patient={patients.find((p) => p.id === reviewReferral.patientId)}
+          specialistsOnDuty={specialistsOnDuty}
+          bloodStock={bloodStock}
+          onClose={() => setReviewReferral(null)}
+          onAccept={handleAcceptReferral}
+          onReject={handleRejectReferral}
+        />
+      )}
+
+      {/* Patient Admission & Bed Assignment Modal (Feature 5) */}
+      {admissionTarget && (
+        <PatientAdmissionModal
+          patientName={admissionTarget.patientName}
+          patientAge={admissionTarget.patientAge}
+          patientGender={admissionTarget.patientGender}
+          patientAbha={admissionTarget.patientAbha}
+          triagePriority={admissionTarget.triagePriority}
+          chiefComplaint={admissionTarget.chiefComplaint}
+          specialtyRequired={admissionTarget.specialtyRequired}
+          referralId={admissionTarget.referralId}
+          walkInId={admissionTarget.walkInId}
+          bedSlots={bedSlots}
+          attendingSpecialistName={user?.name || 'Dr. Ananya Kulkarni'}
+          onClose={() => setAdmissionTarget(null)}
+          onConfirmAdmission={handleConfirmAdmission}
+        />
+      )}
+
+      {/* Patient Discharge & Refer-Back Modal (Feature 6) */}
+      {dischargeTargetBed && (
+        <PatientDischargeModal
+          bedSlot={dischargeTargetBed}
+          dischargingDoctorName={user?.name || 'Dr. Ananya Kulkarni'}
+          dischargingDoctorId={user?.id || 'user-spec-01'}
+          onClose={() => setDischargeTargetBed(null)}
+          onConfirmDischarge={handleConfirmDischarge}
         />
       )}
     </div>

@@ -18,9 +18,10 @@ import {
 interface ReferralTokenModalProps {
   referral: Referral | null;
   onClose: () => void;
+  onOpenInDistrict?: (referral: Referral) => void;
 }
 
-export function ReferralTokenModal({ referral, onClose }: ReferralTokenModalProps) {
+export function ReferralTokenModal({ referral, onClose, onOpenInDistrict }: ReferralTokenModalProps) {
   const { language, t } = useLanguage();
   const [qrUrl, setQrUrl] = useState<string>('');
 
@@ -148,6 +149,24 @@ export function ReferralTokenModal({ referral, onClose }: ReferralTokenModalProp
               )}
             </div>
 
+            {/* Live routing banner */}
+            <div className="p-3 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-200 dark:border-blue-800/60 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-xs">
+                <Building2 className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                <span className="text-slate-700 dark:text-slate-200 font-medium">
+                  Dispatched to <strong>{referral.targetFacility}</strong> Casualty Queue
+                </span>
+              </div>
+              {onOpenInDistrict && (
+                <button
+                  onClick={() => onOpenInDistrict(referral)}
+                  className="px-2.5 py-1 text-[11px] font-bold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all shrink-0 cursor-pointer shadow-xs"
+                >
+                  View in District &rarr;
+                </button>
+              )}
+            </div>
+
             {/* Doctor Signature & Timestamp */}
             <div className="text-[11px] text-slate-600 dark:text-slate-300 flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-700">
               <div>
@@ -163,20 +182,34 @@ export function ReferralTokenModal({ referral, onClose }: ReferralTokenModalProp
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 rounded-lg transition-colors"
-          >
-            {language === 'mr' ? 'पूर्ण झाले' : 'Done'}
-          </button>
-          <button
-            onClick={handlePrint}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-blue-900 hover:bg-blue-950 text-white rounded-lg shadow transition-colors"
-          >
-            <Printer className="w-4 h-4 text-teal-300" />
-            <span>{language === 'mr' ? 'पावती प्रिंट करा' : 'Print Slip'}</span>
-          </button>
+        <div className="px-6 py-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {onOpenInDistrict && (
+              <button
+                onClick={() => onOpenInDistrict(referral)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl shadow-md shadow-blue-500/20 transition-all cursor-pointer hover:scale-102"
+              >
+                <Building2 className="w-4 h-4" />
+                <span>Open in District Specialist Queue &rarr;</span>
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 rounded-lg transition-colors cursor-pointer"
+            >
+              {language === 'mr' ? 'पूर्ण झाले' : 'Done'}
+            </button>
+            <button
+              onClick={handlePrint}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white rounded-lg shadow-xs transition-colors cursor-pointer"
+            >
+              <Printer className="w-4 h-4 text-teal-300" />
+              <span>{language === 'mr' ? 'पावती प्रिंट करा' : 'Print Slip'}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
