@@ -474,7 +474,7 @@ export function DistrictMahaAushadhiView({ isSpecialist = false }: DistrictMahaA
           medicineName: item.medicineName,
           quantity: item.requestedQuantity,
           unit: item.unit || 'Units',
-          sourceFacilityName: resolveCanonicalFacilityName(sourceFacId || 'fac-phc-nasrapur'),
+          sourceFacilityName: sourceFacId ? resolveCanonicalFacilityName(sourceFacId) : 'Unallocated Supply Donor',
           destinationFacilityName: resolveCanonicalFacilityName(destFacId, req.destinationFacilityName),
           sourceFacilityId: sourceFacId,
           destinationFacilityId: destFacId,

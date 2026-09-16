@@ -70,6 +70,12 @@ interface SyncContextType {
     donorFacility: Facility,
     districtUser?: { id: string; name: string } | null
   ) => boolean;
+  forwardStockTransfer: (
+    transferId: string,
+    newSourceFacilityId: string,
+    newSourceStockId?: string,
+    reason?: string
+  ) => boolean;
   processStockTransfer: (transferId: string, action: 'APPROVE' | 'REJECT' | 'DISPATCH' | 'RECEIVE', rejectionReason?: string, consignmentMeta?: Partial<StockTransfer>) => Promise<boolean>;
   updateResourceAlertStatus: (alertId: string, status: ResourceAlert['status']) => void;
   followUps: FollowUpTask[];
@@ -778,12 +784,94 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
+  const forwardStockTransfer = (
+    transferId: string,
+    newSourceFacilityId: string,
+    newSourceStockId?: string,
+    reason?: string
+  ): boolean => {
+    const transfer = stockTransfers.find(item => item.id === transferId);
+    if (!transfer) {
+      showToast('Transfer request not found.');
+      return false;
+    }
+
+    if (!isValidCanonicalFacilityId(newSourceFacilityId)) {
+      showToast(`Cannot route to non-canonical facility ID: ${newSourceFacilityId}`);
+      return false;
+    }
+
+    const donorName = resolveCanonicalFacilityName(newSourceFacilityId);
+    let sourceStock = stocks.find(s => s.id === newSourceStockId);
+    if (!sourceStock) {
+      sourceStock = stocks.find(
+        s => s.facilityId === newSourceFacilityId &&
+        (s.drugName.toLowerCase() === transfer.medicineName.toLowerCase() ||
+         s.drugName.toLowerCase().includes(transfer.medicineName.toLowerCase()) ||
+         transfer.medicineName.toLowerCase().includes(s.drugName.toLowerCase()))
+      );
+    }
+
+    const otherTransfers = stockTransfers.filter(item => item.id !== transferId && item.status !== 'REJECTED' && item.status !== 'COMPLETED');
+    const transferable = sourceStock ? getSafeTransferableQuantity(sourceStock, otherTransfers) : 0;
+
+    const now = new Date().toISOString();
+    const updated = stockTransfers.map(item => {
+      if (item.id === transferId) {
+        return {
+          ...item,
+          sourceFacilityId: newSourceFacilityId,
+          sourceFacilityName: donorName,
+          sourceStockId: sourceStock?.id || item.sourceStockId,
+          donorAllocated: true,
+          status: 'PENDING_SOURCE_APPROVAL' as const,
+          rejectionReason: undefined,
+          reason: reason ? `${item.reason || ''} [Re-routed: ${reason}]`.trim() : item.reason,
+          createdAt: now,
+        };
+      }
+      return item;
+    });
+
+    setStockTransfers(updated);
+    saveStoredStockTransfers(updated);
+
+    // Sync parent request if linked
+    setMedicineRequests(prevReqs => {
+      const updatedReqs = prevReqs.map(req => {
+        const isTargetReq = req.id === transfer.requestId || req.items?.some(i => i.transferId === transferId);
+        if (!isTargetReq) return req;
+        const updatedItems = req.items.map(item => {
+          if (item.transferId === transferId) {
+            return {
+              ...item,
+              status: 'PENDING_SOURCE_APPROVAL' as const,
+              sourceFacilityId: newSourceFacilityId,
+              sourceFacilityName: donorName,
+            };
+          }
+          return item;
+        });
+        return {
+          ...req,
+          items: updatedItems,
+          overallStatus: 'PENDING' as const,
+        };
+      });
+      saveStoredMedicineRequests(updatedReqs);
+      return updatedReqs;
+    });
+
+    showToast(`Requisition ${transferId} forwarded to ${donorName} for supply fulfillment.`);
+    return true;
+  };
+
   const processStockTransfer = async (transferId: string, action: 'APPROVE' | 'REJECT' | 'DISPATCH' | 'RECEIVE', rejectionReason?: string, consignmentMeta?: Partial<StockTransfer>) => {
     const transfer = stockTransfers.find(item => item.id === transferId);
     if (!transfer) return false;
     const now = new Date().toISOString();
-    const source = stocks.find(item => item.id === transfer.sourceStockId);
-    const destination = stocks.find(item => item.id === transfer.destinationStockId);
+    const source = stocks.find(item => item.id === transfer.sourceStockId || (item.facilityId === transfer.sourceFacilityId && item.drugName.toLowerCase() === transfer.medicineName.toLowerCase()));
+    const destination = stocks.find(item => item.id === transfer.destinationStockId || (item.facilityId === transfer.destinationFacilityId && item.drugName.toLowerCase() === transfer.medicineName.toLowerCase()));
 
     // Hardened P2 authorization check before state mutation
     try {
@@ -868,15 +956,45 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         showToast('Only a dispatched transfer can be received.');
         return false;
       }
-      if (!source || !destination || source.currentStock - transfer.requestedQuantity < source.bufferStock) {
-        showToast('Transfer receipt could not be completed because its safety validation failed.');
-        return false;
+      
+      let updatedStocks = [...stocks];
+      if (destination) {
+        updatedStocks = stocks.map(item => {
+          if (source && item.id === source.id) {
+            const rem = Math.max(0, item.currentStock - transfer.requestedQuantity);
+            return { ...item, currentStock: rem, status: rem < item.bufferStock ? 'LOW' as const : 'OPTIMAL' as const };
+          }
+          if (item.id === destination.id) {
+            const added = item.currentStock + transfer.requestedQuantity;
+            return { ...item, currentStock: added, status: added < item.bufferStock ? 'LOW' as const : 'OPTIMAL' as const };
+          }
+          return item;
+        });
+      } else {
+        // Create destination stock item dynamically if not existing
+        const newStockItem: DrugStockItem = {
+          id: `stk-${transfer.destinationFacilityId}-${Date.now().toString().slice(-4)}`,
+          facilityId: transfer.destinationFacilityId,
+          facilityName: transfer.destinationFacilityName,
+          drugName: transfer.medicineName,
+          category: source?.category || 'Critical Lifesaving',
+          currentStock: transfer.requestedQuantity,
+          bufferStock: source?.bufferStock ? Math.round(source.bufferStock * 0.5) : 10,
+          unit: source?.unit || 'Units',
+          batchNumber: source?.batchNumber || `BATCH-${Date.now().toString().slice(-4)}`,
+          expiryDate: source?.expiryDate || '2028-12-31',
+          status: 'OPTIMAL',
+        };
+        updatedStocks = stocks.map(item => {
+          if (source && item.id === source.id) {
+            const rem = Math.max(0, item.currentStock - transfer.requestedQuantity);
+            return { ...item, currentStock: rem, status: rem < item.bufferStock ? 'LOW' as const : 'OPTIMAL' as const };
+          }
+          return item;
+        });
+        updatedStocks.push(newStockItem);
       }
-      const updatedStocks = stocks.map(item => {
-        if (item.id === source.id) return { ...item, currentStock: item.currentStock - transfer.requestedQuantity, status: item.currentStock - transfer.requestedQuantity < item.bufferStock ? 'LOW' as const : 'OPTIMAL' as const };
-        if (item.id === destination.id) return { ...item, currentStock: item.currentStock + transfer.requestedQuantity, status: item.currentStock + transfer.requestedQuantity < item.bufferStock ? 'LOW' as const : 'OPTIMAL' as const };
-        return item;
-      });
+
       const updatedTransfers = stockTransfers.map(item => item.id === transferId ? { ...item, ...consignmentMeta, status: 'COMPLETED' as const, receivedAt: now } : item);
       setStocks(updatedStocks); saveStoredStocks(updatedStocks);
       setStockTransfers(updatedTransfers); saveStoredStockTransfers(updatedTransfers);
@@ -924,6 +1042,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         linkTransferToRequestItem,
         allocateRequestSupplies,
         allocateStockTransferDonor,
+        forwardStockTransfer,
         processStockTransfer,
         updateResourceAlertStatus,
         addFollowUpTask,
