@@ -255,7 +255,7 @@ export function SpecialistTreatmentModal({ referral, patient, onClose, updateRef
                   </div>
                   <div>
                     <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase font-bold">Triage Priority</span>
-                    <span className={`inline-block font-bold text-[11px] px-2 py-0.5 rounded ${referral.triagePriority === 'red' ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'}`}>
+                    <span className={`inline-block font-bold text-[11px] px-2 py-0.5 rounded ${referral.triagePriority === 'red' ? 'bg-rose-100 text-rose-700 border border-rose-200' : referral.triagePriority === 'yellow' ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'}`}>
                       {referral.triagePriority.toUpperCase()}
                     </span>
                   </div>

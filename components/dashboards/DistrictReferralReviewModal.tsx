@@ -5,7 +5,7 @@ import { Referral, Patient, Facility, DischargeSummary } from '@/lib/types';
 import { useAuth } from '@/context/AuthContext';
 import { useSync } from '@/context/SyncContext';
 import { recordAuditLog } from '@/lib/patientPrivacyService';
-import { getAvailableResource, getFacilityStatus } from '@/lib/resourceManagement';
+import { getAvailableResource, getFacilityStatus, getTriageUrgencyMeta } from '@/lib/resourceManagement';
 import { calculateReferralRiskScore } from '@/lib/dhoIntelligenceEngine';
 import {
   X,
@@ -547,7 +547,7 @@ export function DistrictReferralReviewModal({
                     <span>Clinical Triage</span>
                     <span
                       className={`px-2 py-0.5 rounded-full font-black ${
-                        isCritical ? 'bg-rose-500 text-white' : 'bg-amber-500 text-slate-900'
+                        getTriageUrgencyMeta(referral.triagePriority, referral.urgency).badgeBg
                       }`}
                     >
                       {referral.triagePriority?.toUpperCase() || 'ROUTINE'}

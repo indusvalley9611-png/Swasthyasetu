@@ -212,3 +212,68 @@ export function findHierarchicalSupplySources(
     escalatedToState,
   };
 }
+
+export type TriageUrgencyLevel = 'CRITICAL' | 'URGENT' | 'NORMAL';
+
+export interface TriageUrgencyMeta {
+  level: TriageUrgencyLevel;
+  label: string;
+  badgeBg: string;
+  badgeSoft: string;
+  cardBorder: string;
+  cardBg: string;
+  textAccent: string;
+  ctaBg: string;
+  dotColor: string;
+}
+
+/**
+ * Single source of truth for referral and patient triage colors:
+ * CRITICAL (red) -> RED
+ * URGENT (yellow/amber) -> ORANGE/AMBER
+ * NORMAL (green/routine) -> GREEN/EMERALD
+ */
+export function getTriageUrgencyMeta(triagePriority?: string, urgency?: string): TriageUrgencyMeta {
+  const p = (triagePriority || urgency || '').toLowerCase();
+
+  if (p === 'red' || p === 'critical' || p === 'high' || p === 'emergency') {
+    return {
+      level: 'CRITICAL',
+      label: 'CRITICAL',
+      badgeBg: 'bg-rose-600 text-white font-extrabold',
+      badgeSoft: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 font-extrabold',
+      cardBorder: 'border-rose-200 dark:border-rose-900/50 hover:border-rose-400 dark:hover:border-rose-600',
+      cardBg: 'bg-rose-50/40 dark:bg-rose-950/20',
+      textAccent: 'text-rose-600 dark:text-rose-400',
+      ctaBg: 'bg-rose-600 hover:bg-rose-700 text-white shadow-xs',
+      dotColor: 'bg-rose-500',
+    };
+  }
+
+  if (p === 'yellow' || p === 'urgent' || p === 'medium' || p === 'moderate') {
+    return {
+      level: 'URGENT',
+      label: 'URGENT',
+      badgeBg: 'bg-amber-500 text-slate-950 font-black',
+      badgeSoft: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-extrabold',
+      cardBorder: 'border-amber-200 dark:border-amber-900/50 hover:border-amber-400 dark:hover:border-amber-600',
+      cardBg: 'bg-amber-50/40 dark:bg-amber-950/20',
+      textAccent: 'text-amber-600 dark:text-amber-400',
+      ctaBg: 'bg-amber-600 hover:bg-amber-700 text-white shadow-xs',
+      dotColor: 'bg-amber-500',
+    };
+  }
+
+  // Normal / Green / Routine
+  return {
+    level: 'NORMAL',
+    label: 'NORMAL',
+    badgeBg: 'bg-emerald-600 text-white font-extrabold',
+    badgeSoft: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-extrabold',
+    cardBorder: 'border-emerald-200 dark:border-emerald-900/50 hover:border-emerald-400 dark:hover:border-emerald-600',
+    cardBg: 'bg-emerald-50/40 dark:bg-emerald-950/20',
+    textAccent: 'text-emerald-600 dark:text-emerald-400',
+    ctaBg: 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs',
+    dotColor: 'bg-emerald-500',
+  };
+}

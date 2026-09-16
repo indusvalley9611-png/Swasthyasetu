@@ -641,9 +641,7 @@ export function SpecialistDashboard({
                       <div className="flex items-center gap-2 flex-wrap">
                         <span
                           className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                            ref.triagePriority === 'red'
-                              ? 'bg-rose-500 text-white'
-                              : 'bg-amber-500 text-slate-950'
+                            ref.triagePriority === 'red' ? 'bg-rose-600 text-white' : ref.triagePriority === 'yellow' ? 'bg-amber-500 text-slate-950' : 'bg-emerald-600 text-white'
                           }`}
                         >
                           {ref.triagePriority.toUpperCase()} TRIAGE
@@ -746,7 +744,7 @@ export function SpecialistDashboard({
                       {bed.triagePriority && (
                         <span
                           className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                            bed.triagePriority === 'red' ? 'bg-rose-500 text-white' : 'bg-amber-500 text-slate-950'
+                            bed.triagePriority === 'red' ? 'bg-rose-600 text-white' : bed.triagePriority === 'yellow' ? 'bg-amber-500 text-slate-950' : 'bg-emerald-600 text-white'
                           }`}
                         >
                           {bed.triagePriority}

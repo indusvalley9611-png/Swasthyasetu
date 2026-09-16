@@ -668,7 +668,7 @@ export function DistrictFacilityMapView({
                         <div className="flex justify-between items-center font-bold">
                           <span className="text-slate-900 dark:text-white truncate">{ref.patientName}</span>
                           <span className={`px-1.5 py-0.2 rounded text-[9px] uppercase font-extrabold ${
-                            ref.triagePriority === 'red' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                            ref.triagePriority === 'red' ? 'bg-rose-100 text-rose-800 border border-rose-200' : ref.triagePriority === 'yellow' ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                           }`}>
                             {ref.triagePriority}
                           </span>

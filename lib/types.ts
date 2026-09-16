@@ -211,6 +211,7 @@ export interface Referral {
   specialtyRequired: string;
   referralReason: string;
   triagePriority: TriagePriority;
+  urgency?: 'ROUTINE' | 'URGENT' | 'CRITICAL';
   triageScore: number;
   triageReasons: string[];
   vitalsAtReferral: Vitals;

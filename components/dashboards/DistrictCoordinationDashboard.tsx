@@ -10,6 +10,7 @@ import {
   getAvailableResource,
   getFacilityStatus,
   getDistanceKm,
+  getTriageUrgencyMeta,
 } from '@/lib/resourceManagement';
 import {
   generateSmartReallocationRecommendations,
@@ -641,36 +642,39 @@ export function DistrictCoordinationDashboard({
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {/* 1. Pending Triage Referrals */}
-                {pendingTriageReferrals.slice(0, 2).map((ref) => (
-                  <div
-                    key={ref.id}
-                    className="p-3.5 rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/40 dark:bg-rose-950/20 flex flex-col justify-between gap-3"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase text-slate-500">
-                          {ref.referringFacility}
-                        </span>
-                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-rose-600 text-white">
-                          {ref.triagePriority?.toUpperCase() || 'CRITICAL'}
-                        </span>
-                      </div>
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white mt-1">
-                        {ref.patientName || 'Emergency Patient'}
-                      </h4>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 line-clamp-2">
-                        {ref.referralReason || 'Specialist emergency care required'}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => handleOpenReferral(ref)}
-                      className="w-full py-1.5 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                {pendingTriageReferrals.slice(0, 2).map((ref) => {
+                  const triageMeta = getTriageUrgencyMeta(ref.triagePriority, ref.urgency);
+                  return (
+                    <div
+                      key={ref.id}
+                      className={`p-3.5 rounded-xl border ${triageMeta.cardBorder} ${triageMeta.cardBg} flex flex-col justify-between gap-3`}
                     >
-                      <span>Review &amp; Route</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase text-slate-500">
+                            {ref.referringFacility}
+                          </span>
+                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${triageMeta.badgeBg}`}>
+                            {triageMeta.label}
+                          </span>
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white mt-1">
+                          {ref.patientName || 'Emergency Patient'}
+                        </h4>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 line-clamp-2">
+                          {ref.referralReason || 'Specialist care required'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleOpenReferral(ref)}
+                        className={`w-full py-1.5 px-3 rounded-lg ${triageMeta.ctaBg} text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer`}
+                      >
+                        <span>Review &amp; Route</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
 
                 {/* 2. Critical Medicine Shortage */}
                 {criticalStockItems.slice(0, 2).map((item) => (
@@ -1042,22 +1046,18 @@ export function DistrictCoordinationDashboard({
               </div>
             ) : (
               displayedReferrals.map((ref) => {
-                const isCritical = ref.triagePriority === 'red';
+                const triageMeta = getTriageUrgencyMeta(ref.triagePriority, ref.urgency);
                 return (
                   <div
                     key={ref.id}
-                    className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3"
+                    className={`p-4 rounded-xl bg-white dark:bg-slate-900 border ${triageMeta.cardBorder} shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3`}
                   >
                     <div className="space-y-1.5 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
-                            isCritical
-                              ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
-                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
-                          }`}
+                          className={`px-2.5 py-0.5 rounded text-[10px] font-black uppercase ${triageMeta.badgeSoft}`}
                         >
-                          {ref.triagePriority?.toUpperCase() || 'ROUTINE'}
+                          {triageMeta.label}
                         </span>
                         <span className="text-xs font-black text-slate-900 dark:text-white">
                           {ref.patientName || 'Patient'} ({ref.patientAge}y / {ref.patientGender})
@@ -1076,7 +1076,7 @@ export function DistrictCoordinationDashboard({
 
                     <button
                       onClick={() => handleOpenReferral(ref)}
-                      className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer self-start lg:self-auto"
+                      className={`px-4 py-2 rounded-lg ${triageMeta.ctaBg} text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer self-start lg:self-auto`}
                     >
                       <Eye className="w-3.5 h-3.5" />
                       <span>Review &amp; Coordinate</span>
