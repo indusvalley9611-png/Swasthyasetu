@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { useSync } from '@/context/SyncContext';
@@ -22,12 +22,20 @@ export interface TopHeaderProps {
   onOpenSearch: () => void;
 }
 
+
+function getInitials(name?: string): string {
+  if (!name) return 'U';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 export function TopHeader({
   onToggleSidebar,
   breadcrumbs,
   onOpenSearch,
 }: TopHeaderProps) {
-  const { user, logout } = useAuth();
+    const { user, role, logout } = useAuth();
   const { language } = useLanguage();
   const {
     effectiveOnline,
@@ -38,6 +46,23 @@ export function TopHeader({
 
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const notificationRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setProfileDropdownOpen(false);
+      }
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setNotificationOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   return (
     <header className="sticky top-0 z-30 h-13 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-2xs">
@@ -134,10 +159,10 @@ export function TopHeader({
           </div>
 
           {/* Notifications Bell */}
-          <div className="relative">
+          <div ref={notificationRef} className="relative">
             <button
               onClick={() => setNotificationOpen(!notificationOpen)}
-              className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors relative"
+              className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors relative cursor-pointer"
               title="System Alerts & Notifications"
             >
               <Bell className="w-4 h-4" />
@@ -164,54 +189,75 @@ export function TopHeader({
             )}
           </div>
 
-          {/* User Profile Pill & Dropdown */}
+          {/* Compact Top-Right Doctor Profile Menu (No Sign Out) */}
           {user && (
-            <div className="relative pl-2 border-l border-slate-200 dark:border-slate-800">
+            <div ref={profileMenuRef} className="relative pl-2 border-l border-slate-200 dark:border-slate-800">
               <button
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                className="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                title="Account details"
+                className="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Officer Profile"
               >
-                <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold uppercase">
-                  {user.name.slice(0, 2)}
+                <div className="w-6.5 h-6.5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold uppercase shadow-2xs">
+                  {getInitials(user.name)}
                 </div>
-                <span className="font-bold text-xs text-slate-700 dark:text-slate-200 truncate max-w-[120px] hidden sm:inline">
-                  {user.name.split(' ')[0]}
-                </span>
-                <ChevronDown className="w-3 h-3 text-slate-400" />
+                <div className="hidden sm:flex flex-col text-left leading-none max-w-[140px]">
+                  <span className="font-bold text-xs text-slate-800 dark:text-slate-200 truncate">
+                    {user.name}
+                  </span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium truncate mt-0.5">
+                    {role === 'district_officer'
+                      ? (user.district ? `${user.district} District` : 'District Health')
+                      : (user.facilityName || user.roleTitleEn || 'Health Officer')}
+                  </span>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               </button>
 
-              {/* Profile Dropdown */}
+              {/* Profile Dropdown (Display Only: Avatar, Name, Role, Facility - NO Sign Out) */}
               {profileDropdownOpen && (
                 <div
-                  className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 py-2.5 px-3.5 z-50 animate-in fade-in"
-                  onClick={() => setProfileDropdownOpen(false)}
+                  className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 py-3 px-3.5 z-50 animate-in fade-in slide-in-from-top-1 duration-150"
                 >
-                  <div className="border-b border-slate-100 dark:border-slate-800 pb-2.5 space-y-0.5">
-                    <div className="text-[10px] uppercase font-mono text-slate-400">Signed In As</div>
-                    <div className="text-xs font-black text-slate-900 dark:text-white">{user.name}</div>
-                    <div className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold">{user.roleTitleEn}</div>
-                  </div>
-
-                  <div className="py-2 space-y-1 text-[11px] text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
-                    <div className="flex items-center gap-1.5">
-                      <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
-                      <span className="truncate">{user.facilityName}</span>
+                  <div className="flex items-center gap-2.5 pb-2.5 border-b border-slate-100 dark:border-slate-800">
+                    <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
+                      {getInitials(user.name)}
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <MapPin className="w-3 h-3 text-emerald-500 shrink-0" />
-                      <span className="truncate">{user.district ? `${user.district} District` : 'Maharashtra'}</span>
+                    <div className="overflow-hidden flex-1 min-w-0">
+                      <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                        {user.name}
+                      </div>
+                      <div className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold truncate">
+                        {user.roleTitleEn || user.role}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="pt-2">
-                    <button
-                      onClick={logout}
-                      className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 rounded-lg text-xs font-bold transition-colors"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span>{language === 'mr' ? 'बाहेर पडा' : 'Sign Out'}</span>
-                    </button>
+                  <div className="py-2.5 space-y-2 text-[11px] text-slate-600 dark:text-slate-300">
+                    <div className="flex items-start gap-2">
+                      <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                      <div className="truncate flex-1">
+                        <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">
+                          Facility
+                        </span>
+                        <span className="font-medium truncate block text-slate-800 dark:text-slate-200">
+                          {role === 'district_officer'
+                            ? `${user.district || 'Pune'} District Health`
+                            : (user.facilityName || 'Government Health Facility')}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-2">
+                      <MapPin className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                      <div className="truncate flex-1">
+                        <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">
+                          Jurisdiction
+                        </span>
+                        <span className="font-medium truncate block text-slate-800 dark:text-slate-200">
+                          {user.district ? `${user.district} District, Maharashtra` : 'Maharashtra Public Health'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

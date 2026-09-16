@@ -130,22 +130,6 @@ export function Sidebar({
   onToggleDarkMode,
 }: SidebarProps) {
   const { role, user, logout } = useAuth();
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const profileRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
-        setIsProfileOpen(false);
-      }
-    }
-    if (isProfileOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isProfileOpen]);
   const { language, toggleLanguage } = useLanguage();
   const {
     effectiveOnline,
@@ -783,10 +767,10 @@ export function Sidebar({
           ))}
         </div>
 
-        {/* 3. BOTTOM CONTROLS & PROFILE CARD */}
-        <div className="p-2 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/80 shrink-0 space-y-2">
-          {/* Controls (Dark Mode & Language & Offline Simulation) */}
-          <div className={`flex items-center ${isCollapsed ? 'flex-col gap-1.5' : 'justify-between px-1'}`}>
+        {/* 3. BOTTOM CONTROLS & SIGN OUT */}
+        <div className="p-2 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/80 shrink-0 space-y-1.5">
+          {/* Controls: Theme & Language */}
+          <div className={`flex items-center ${isCollapsed ? 'flex-col gap-1' : 'justify-between px-1'}`}>
             <div className={`flex items-center ${isCollapsed ? 'flex-col gap-1' : 'gap-1'}`}>
               <button
                 onClick={onToggleDarkMode}
@@ -807,113 +791,30 @@ export function Sidebar({
                 {isCollapsed && <NavTooltip text={language === 'en' ? 'मराठी' : 'English'} />}
               </button>
             </div>
+          </div>
 
-            {!isCollapsed && (
+          {/* Sign Out Button Only (Replaces bottom avatar) */}
+          {isCollapsed ? (
+            <div className="flex justify-center pt-0.5">
               <button
-                onClick={toggleSimulatedOffline}
-                className="text-[10px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 underline cursor-pointer"
-                title="Toggle simulated offline mode for field testing"
+                onClick={logout}
+                className="group relative p-2 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer flex items-center justify-center"
+                title={language === 'mr' ? 'बाहेर पडा (Sign Out)' : 'Sign Out'}
               >
-                {isSimulatedOffline ? 'Sim: OFF' : 'Simulate Offline'}
+                <LogOut className="w-4 h-4" />
+                <NavTooltip text={language === 'mr' ? 'बाहेर पडा' : 'Sign Out'} />
               </button>
-            )}
-          </div>
-
-          {/* Clickable Profile Card with Popover */}
-          <div ref={profileRef} className="relative">
+            </div>
+          ) : (
             <button
-              onClick={() => setIsProfileOpen((prev) => !prev)}
-              className={`w-full group flex items-center ${
-                isCollapsed ? 'justify-center p-1.5' : 'gap-2.5 p-2'
-              } rounded-xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800/80 hover:border-blue-400 dark:hover:border-blue-500/50 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all text-left cursor-pointer shadow-xs`}
+              onClick={logout}
+              className="w-full group flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer"
+              title={language === 'mr' ? 'बाहेर पडा' : 'Sign Out'}
             >
-              <div className="relative shrink-0">
-                <div className="w-7 h-7 rounded-full bg-blue-600 text-white font-bold text-[11px] flex items-center justify-center shadow-xs">
-                  {getInitials(user?.name)}
-                </div>
-                <span
-                  className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-white dark:border-slate-950 ${
-                    effectiveOnline ? 'bg-emerald-500' : 'bg-amber-500'
-                  }`}
-                />
-              </div>
-
-              {!isCollapsed && (
-                <div className="overflow-hidden flex-1 min-w-0">
-                  <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                    {user?.name || 'Healthcare Officer'}
-                  </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                    {roleTheme.levelLabel}
-                  </div>
-                </div>
-              )}
-
-              {isCollapsed && <NavTooltip text={user?.name || 'User Profile'} />}
+              <LogOut className="w-4 h-4 shrink-0 transition-transform group-hover:-translate-x-0.5" />
+              <span className="truncate">{language === 'mr' ? 'बाहेर पडा' : 'Sign Out'}</span>
             </button>
-
-            {/* Popover dialog */}
-            {isProfileOpen && (
-              <div
-                className={`absolute bottom-full mb-2 ${
-                  isCollapsed ? 'left-full ml-2 w-64' : 'left-0 right-0'
-                } bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl p-3 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150`}
-              >
-                <div className="flex items-center gap-2.5 pb-2.5 border-b border-slate-100 dark:border-slate-800">
-                  <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
-                    {getInitials(user?.name)}
-                  </div>
-                  <div className="overflow-hidden flex-1 min-w-0">
-                    <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                      {user?.name || 'Healthcare Officer'}
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className={`w-1.5 h-1.5 rounded-full ${roleTheme.dotBg}`} />
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">
-                        {roleTheme.levelLabel}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="py-2 space-y-2 text-[11px]">
-                  <div className="flex items-start gap-2 text-slate-600 dark:text-slate-300">
-                    <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                    <div className="truncate flex-1">
-                      <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">
-                        Facility
-                      </span>
-                      <span className="font-medium truncate block text-slate-800 dark:text-slate-200">
-                        {role === 'district_officer'
-                          ? `${user?.district || 'Pune'} District Health`
-                          : user?.facilityName || 'Government Health Facility'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 dark:border-slate-800/80 text-[10px]">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[9px]">
-                      Session Status
-                    </span>
-                    <span
-                      className={`flex items-center gap-1 font-semibold ${
-                        effectiveOnline
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : 'text-amber-600 dark:text-amber-400'
-                      }`}
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          effectiveOnline ? 'bg-emerald-500' : 'bg-amber-500'
-                        }`}
-                      />
-                      {effectiveOnline ? 'Active (Online)' : 'Offline Mode'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </aside>
     </>
