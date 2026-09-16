@@ -27,6 +27,10 @@ import {
   Phone,
   Flame,
   Siren,
+  ArrowUpRight,
+  Building2,
+  MapPin,
+  Clock3,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -51,7 +55,7 @@ export function AshaDashboard({
   const [selectedPatientForScreening, setSelectedPatientForScreening] = useState<Patient | null>(null);
   const [currentTab, setCurrentTab] = useState<'pending' | 'referrals' | 'sync'>('pending');
   const [isRecording, setIsRecording] = useState(false);
-  const [activeTab, setActiveTab] = useState<'WATCHLIST' | 'FOLLOWUPS'>('WATCHLIST');
+  const [activeTab, setActiveTab] = useState<'WATCHLIST' | 'FOLLOWUPS' | 'REFERRED'>('WATCHLIST');
   const [followups, setFollowups] = useState<FollowUpTask[]>(INITIAL_FOLLOWUPS);
   const [dictationLang, setDictationLang] = useState<'mr-IN' | 'en-IN' | 'hi-IN'>('mr-IN');
 
@@ -64,26 +68,79 @@ export function AshaDashboard({
   const [hemoglobin, setHemoglobin] = useState<number>(11.5);
   const [chiefComplaints, setChiefComplaints] = useState<string>('');
 
+  // Helper to determine if a patient has an active/in-progress referral
+  const isPatientActivelyReferred = (pat: Patient): boolean => {
+    if (pat.activeReferralId) {
+      const ref = referrals.find(
+        (r) => r.id === pat.activeReferralId && !['COMPLETED', 'CANCELLED'].includes(r.status)
+      );
+      if (ref) return true;
+    }
+    return referrals.some(
+      (r) => r.patientId === pat.id && !['COMPLETED', 'CANCELLED'].includes(r.status)
+    );
+  };
+
   // Derive scoped community patients for this ASHA worker
   const communityPatients = useMemo(() => {
     return filterPatientsForUser(user, patients).assignedPatients;
   }, [user, patients]);
 
-  // Filter patients strictly within assigned community scope
-  const filteredPatients = communityPatients.filter((p) => {
-    const q = searchQuery.toLowerCase();
-    return (
-      p.fullName.toLowerCase().includes(q) ||
-      p.abhaId.includes(q) ||
-      p.phone.includes(q) ||
-      p.village.toLowerCase().includes(q)
-    );
-  });
+  // Actively referred community patients
+  const referredPatients = useMemo(() => {
+    return communityPatients.filter(isPatientActivelyReferred);
+  }, [communityPatients, referrals]);
 
-  // High risk patients subset strictly within assigned community scope
-  const highRiskPatients = communityPatients.filter(
-    (p) => p.isHighRiskPregnancy || p.age <= 5 || (p.chronicConditions && p.chronicConditions.length > 0)
-  );
+  const referredPatientIds = useMemo(() => new Set(referredPatients.map((p) => p.id)), [referredPatients]);
+
+  // Active (non-referred) community patients
+  const activeNonReferredPatients = useMemo(() => {
+    return communityPatients.filter((p) => !referredPatientIds.has(p.id));
+  }, [communityPatients, referredPatientIds]);
+
+  // Filtered active patients for Priority Watchlist (strictly non-referred)
+  const filteredActivePatients = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return activeNonReferredPatients.filter((p) => {
+      return (
+        p.fullName.toLowerCase().includes(q) ||
+        p.abhaId.toLowerCase().includes(q) ||
+        p.phone.includes(q) ||
+        p.village.toLowerCase().includes(q)
+      );
+    });
+  }, [activeNonReferredPatients, searchQuery]);
+
+  // Filtered referred patients for Referred List
+  const filteredReferredPatients = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return referredPatients.filter((p) => {
+      const activeRef = referrals.find(
+        (r) => (r.id === p.activeReferralId || r.patientId === p.id) && !['COMPLETED', 'CANCELLED'].includes(r.status)
+      );
+      return (
+        p.fullName.toLowerCase().includes(q) ||
+        p.abhaId.toLowerCase().includes(q) ||
+        p.phone.includes(q) ||
+        p.village.toLowerCase().includes(q) ||
+        (activeRef?.targetFacility && activeRef.targetFacility.toLowerCase().includes(q)) ||
+        (activeRef?.referralReason && activeRef.referralReason.toLowerCase().includes(q)) ||
+        (activeRef?.tokenCode && activeRef.tokenCode.toLowerCase().includes(q))
+      );
+    });
+  }, [referredPatients, referrals, searchQuery]);
+
+  // Active Follow-up tasks (excluding patients with active referrals)
+  const activeFollowups = useMemo(() => {
+    return followups.filter((task) => !referredPatientIds.has(task.patientId));
+  }, [followups, referredPatientIds]);
+
+  // High risk active patients subset (strictly non-referred)
+  const highRiskPatients = useMemo(() => {
+    return activeNonReferredPatients.filter(
+      (p) => p.isHighRiskPregnancy || p.age <= 5 || (p.chronicConditions && p.chronicConditions.length > 0)
+    );
+  }, [activeNonReferredPatients]);
 
   const handleSaveScreening = (e: React.FormEvent) => {
     e.preventDefault();
@@ -244,7 +301,7 @@ export function AshaDashboard({
             {language === 'mr' ? 'अतिधोकादायक गरोदर माता (HRP)' : 'High Risk Pregnancies'}
           </span>
           <span className="text-2xl font-bold text-rose-900 dark:text-rose-200">
-            {communityPatients.filter((p) => p.isHighRiskPregnancy).length}
+            {activeNonReferredPatients.filter((p) => p.isHighRiskPregnancy).length}
           </span>
           <span className="text-[10px] text-rose-700 dark:text-rose-400 block mt-0.5">Priority Monitoring</span>
         </div>
@@ -254,16 +311,16 @@ export function AshaDashboard({
             {language === 'mr' ? 'सक्रिय रेफरल पाठवले' : 'Active Referrals Sent'}
           </span>
           <span className="text-2xl font-bold text-amber-900 dark:text-amber-200">
-            {communityPatients.filter((p) => p.activeReferralId).length}
+            {referredPatients.length}
           </span>
-          <span className="text-[10px] text-amber-700 dark:text-amber-400 block mt-0.5">En route to PHC/RH</span>
+          <span className="text-[10px] text-amber-700 dark:text-amber-400 block mt-0.5">In Hospital Care Cycle</span>
         </div>
 
         <div className="bg-blue-50/70 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-200 dark:border-blue-800 shadow-sm">
           <span className="text-[11px] text-blue-800 dark:text-blue-300 block font-medium">
             {language === 'mr' ? 'ऑफलाइन रांगेत नोंदी' : 'Offline Sync Outbox'}
           </span>
-          <span className="text-2xl font-bold text-blue-950 dark:text-blue-100 dark:text-blue-100">{syncQueue.length}</span>
+          <span className="text-2xl font-bold text-blue-950 dark:text-blue-100">{syncQueue.length}</span>
           <span className="text-[10px] text-blue-700 dark:text-blue-400 block mt-0.5">Auto-sync on reconnect</span>
         </div>
       </div>
@@ -293,7 +350,11 @@ export function AshaDashboard({
                 <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
                 <input
                   type="text"
-                  placeholder={language === 'mr' ? 'नाव किंवा आभा आयडी शोधा...' : 'Search name or ABHA...'}
+                  placeholder={
+                    activeTab === 'REFERRED'
+                      ? (language === 'mr' ? 'रेफरल किंवा रुग्ण शोधा...' : 'Search referred patient or facility...')
+                      : (language === 'mr' ? 'नाव किंवा आभा आयडी शोधा...' : 'Search name or ABHA...')
+                  }
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-9 pr-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-teal-500 focus:outline-hidden dark:bg-slate-800 dark:text-white"
@@ -302,193 +363,314 @@ export function AshaDashboard({
             </div>
 
             {/* Tab Selector */}
-            <div className="flex border-b border-slate-200 dark:border-slate-700 mb-4 text-xs font-semibold">
+            <div className="flex border-b border-slate-200 dark:border-slate-700 mb-4 text-xs font-semibold overflow-x-auto gap-1">
               <button
                 type="button"
                 onClick={() => setActiveTab('WATCHLIST')}
-                className={`pb-2 px-3 border-b-2 transition-colors ${
+                className={`pb-2 px-3 border-b-2 transition-colors shrink-0 ${
                   activeTab === 'WATCHLIST'
                     ? 'border-teal-600 text-teal-900 dark:text-teal-200 font-bold'
                     : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100'
                 }`}
               >
-                {language === 'mr' ? 'प्राधान्य रुग्ण यादी' : 'Priority Patient Watchlist'} ({filteredPatients.length})
+                {language === 'mr' ? 'प्राधान्य रुग्ण यादी' : 'Priority Patient Watchlist'} ({filteredActivePatients.length})
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab('FOLLOWUPS')}
-                className={`pb-2 px-3 border-b-2 transition-colors flex items-center gap-1.5 ${
+                className={`pb-2 px-3 border-b-2 transition-colors flex items-center gap-1.5 shrink-0 ${
                   activeTab === 'FOLLOWUPS'
                     ? 'border-rose-600 text-rose-900 dark:text-rose-200 font-bold'
                     : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100'
                 }`}
               >
                 <BellRing className="w-3.5 h-3.5 text-rose-600" />
-                <span>{language === 'mr' ? 'फॉलो-अप व लसीकरण स्मरणपत्रे' : 'Follow-up & Continuity Alerts'}</span>
+                <span>{language === 'mr' ? 'फॉलो-अप व स्मरणपत्रे' : 'Follow-up & Continuity Alerts'}</span>
                 <span className="bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-300 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
-                  {followups.filter((f) => f.status === 'OVERDUE').length} Overdue
+                  {activeFollowups.filter((f) => f.status === 'OVERDUE').length} Overdue
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('REFERRED')}
+                className={`pb-2 px-3 border-b-2 transition-colors flex items-center gap-1.5 shrink-0 ${
+                  activeTab === 'REFERRED'
+                    ? 'border-amber-600 text-amber-900 dark:text-amber-200 font-bold'
+                    : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100'
+                }`}
+              >
+                <ArrowUpRight className="w-3.5 h-3.5 text-amber-600" />
+                <span>{language === 'mr' ? 'रेफर केलेली यादी' : 'Referred List'}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  referredPatients.length > 0
+                    ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                }`}>
+                  {referredPatients.length}
                 </span>
               </button>
             </div>
 
             {/* Content for Follow-ups Tab */}
-            {activeTab === 'FOLLOWUPS' ? (
+            {activeTab === 'FOLLOWUPS' && (
               <div className="space-y-3">
-                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 rounded-xl text-xs text-amber-950 dark:text-amber-100 dark:text-amber-100 flex items-center gap-2">
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 rounded-xl text-xs text-amber-950 dark:text-amber-100 flex items-center gap-2">
                   <CalendarCheck className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" />
                   <span>
                     <strong>Continuity of Care Engine:</strong> Automated SMS reminders sent to registered mobile numbers. Flagged for village doorstep visit.
                   </span>
                 </div>
 
-                {followups.map((task) => (
-                  <div
-                    key={task.id}
-                    className={`p-3.5 rounded-xl border flex flex-wrap justify-between items-center gap-2 ${
-                      task.status === 'OVERDUE'
-                        ? 'bg-rose-50/70 dark:bg-rose-900/20 border-rose-300 dark:border-rose-700'
-                        : task.status === 'COMPLETED'
-                        ? 'bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700'
-                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'
-                    }`}
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-900 dark:text-white text-xs">{task.patientName}</span>
-                        <span
-                          className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                            task.status === 'OVERDUE'
-                              ? 'bg-rose-600 dark:bg-rose-500/20 text-white dark:text-rose-300 animate-pulse'
-                              : task.status === 'COMPLETED'
-                              ? 'bg-emerald-600 dark:bg-emerald-500/20 text-white dark:text-emerald-300'
-                              : 'bg-amber-500 dark:bg-amber-500/20 text-slate-950 dark:text-amber-300'
-                          }`}
-                        >
-                          {task.status}
-                        </span>
-                        <span className="text-[10px] bg-slate-100 dark:bg-slate-950 px-2 py-0.5 rounded text-slate-700 dark:text-slate-200 font-medium">
-                          {task.category}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-slate-600 dark:text-slate-300">{task.notes}</div>
-                      <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-                        Due: {task.dueDate} &bull; Phone: {task.patientPhone} &bull; Assigned: {task.assignedAshaName}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {task.status !== 'COMPLETED' ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setFollowups(
-                              followups.map((f) => (f.id === task.id ? { ...f, status: 'COMPLETED' } : f))
-                            )
-                          }
-                          className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Mark Visited</span>
-                        </button>
-                      ) : (
-                        <span className="text-emerald-700 dark:text-emerald-400 font-bold text-xs flex items-center gap-1">
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Done</span>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-            <div className="space-y-2">
-              {filteredPatients.map((pat) => {
-                const isHrp = pat.isHighRiskPregnancy;
-                const hasReferral = pat.activeReferralId;
-                const hasChronicCondition = pat.chronicConditions && pat.chronicConditions.length > 0;
-
-                return (
-                  <div
-                    key={pat.id}
-                    onClick={() => onOpenPatientTimeline(pat)}
-                    className={`p-3.5 rounded-xl border transition-all cursor-pointer hover:shadow-sm flex items-center justify-between gap-3 ${
-                      isHrp
-                        ? 'bg-rose-50/50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800 hover:border-rose-400'
-                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 hover:border-teal-300 dark:hover:border-teal-700'
-                    }`}
-                  >
-                    {/* Avatar */}
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${
-                      isHrp
-                        ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300'
-                        : 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300'
-                    }`}>
-                      {pat.fullName.charAt(0)}
-                    </div>
-
-                    {/* Core identity — name, age/gender/village */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-sm text-slate-900 dark:text-white truncate">{pat.fullName}</span>
-                        {isHrp && (
-                          <span className="text-[10px] font-bold bg-rose-600 text-white px-1.5 py-0.5 rounded-full shrink-0">HRP</span>
-                        )}
-                        {hasReferral && (
-                          <span className="text-[10px] font-bold bg-amber-500 text-slate-950 px-1.5 py-0.5 rounded-full shrink-0">Referred</span>
-                        )}
-                        {hasChronicCondition && !isHrp && (
-                          <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 px-1.5 py-0.5 rounded-full shrink-0">Chronic</span>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        {pat.age}y · {pat.gender}
-                        {pat.isPregnant && <span className="ml-1 text-rose-700 dark:text-rose-300 font-semibold">· Wk {pat.gestationalWeeks}</span>}
-                        {' · '}{pat.village}
-                      </div>
-                    </div>
-
-                    {/* Compact action row */}
-                    <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => setSelectedPatientForScreening(pat)}
-                        className="px-2.5 py-1.5 text-xs font-bold bg-teal-700 hover:bg-teal-800 text-white rounded-lg shadow transition-colors flex items-center gap-1"
-                        title="Record Vitals"
-                      >
-                        <Stethoscope className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">{language === 'mr' ? 'तपासणी' : 'Screen'}</span>
-                      </button>
-                      {Boolean(
-                        pat.activeReferralId ||
-                        referrals.some(r => r.patientId === pat.id && !['COMPLETED', 'CANCELLED'].includes(r.status))
-                      ) ? (
-                        <div className="flex items-center gap-1">
-                          <span className="px-2 py-1 text-[11px] font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 rounded-lg border border-amber-200 dark:border-amber-800 flex items-center gap-1">
-                            <CheckCircle2 className="w-3 h-3 text-amber-600" />
-                            <span>{language === 'mr' ? 'रेफर केलेले' : 'Referred'}</span>
+                {activeFollowups.length > 0 ? (
+                  activeFollowups.map((task) => (
+                    <div
+                      key={task.id}
+                      className={`p-3.5 rounded-xl border flex flex-wrap justify-between items-center gap-2 ${
+                        task.status === 'OVERDUE'
+                          ? 'bg-rose-50/70 dark:bg-rose-900/20 border-rose-300 dark:border-rose-700'
+                          : task.status === 'COMPLETED'
+                          ? 'bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700'
+                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900 dark:text-white text-xs">{task.patientName}</span>
+                          <span
+                            className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                              task.status === 'OVERDUE'
+                                ? 'bg-rose-600 dark:bg-rose-500/20 text-white dark:text-rose-300 animate-pulse'
+                                : task.status === 'COMPLETED'
+                                ? 'bg-emerald-600 dark:bg-emerald-500/20 text-white dark:text-emerald-300'
+                                : 'bg-amber-500 dark:bg-amber-500/20 text-slate-950 dark:text-amber-300'
+                            }`}
+                          >
+                            {task.status}
                           </span>
+                          <span className="text-[10px] bg-slate-100 dark:bg-slate-950 px-2 py-0.5 rounded text-slate-700 dark:text-slate-200 font-medium">
+                            {task.category}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-600 dark:text-slate-300">{task.notes}</div>
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                          Due: {task.dueDate} &bull; Phone: {task.patientPhone} &bull; Assigned: {task.assignedAshaName}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {task.status !== 'COMPLETED' ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFollowups(
+                                followups.map((f) => (f.id === task.id ? { ...f, status: 'COMPLETED' } : f))
+                              )
+                            }
+                            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Mark Visited</span>
+                          </button>
+                        ) : (
+                          <span className="text-emerald-700 dark:text-emerald-400 font-bold text-xs flex items-center gap-1">
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Done</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-8 text-center text-xs text-slate-400 dark:text-slate-500">
+                    No active follow-up alerts pending for your catchment area.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Content for Referred List Tab */}
+            {activeTab === 'REFERRED' && (
+              <div className="space-y-2.5">
+                <div className="bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 p-3 rounded-xl text-xs text-amber-950 dark:text-amber-100 flex items-center gap-2">
+                  <ArrowUpRight className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" />
+                  <span>
+                    <strong>Hospital Care Pipeline:</strong> These patients have active referrals under District Hospital / PHC specialist evaluation. ASHA home-screening is paused until counter-referral or discharge.
+                  </span>
+                </div>
+
+                {filteredReferredPatients.length > 0 ? (
+                  filteredReferredPatients.map((pat) => {
+                    const activeRef = referrals.find(
+                      (r) => (r.id === pat.activeReferralId || r.patientId === pat.id) && !['COMPLETED', 'CANCELLED'].includes(r.status)
+                    );
+
+                    const priorityClass =
+                      activeRef?.triagePriority === 'red'
+                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                        : activeRef?.triagePriority === 'yellow'
+                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
+
+                    const priorityLabel =
+                      activeRef?.triagePriority === 'red'
+                        ? 'CRITICAL'
+                        : activeRef?.triagePriority === 'yellow'
+                        ? 'URGENT'
+                        : 'ROUTINE';
+
+                    const statusClass =
+                      activeRef?.status === 'ADMITTED'
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
+                        : activeRef?.status === 'ACCEPTED'
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300 dark:border-blue-700'
+                        : activeRef?.status === 'ESCALATED'
+                        ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300 dark:border-purple-700'
+                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-700';
+
+                    const formattedDate = activeRef?.createdAt
+                      ? new Date(activeRef.createdAt).toLocaleString(language === 'mr' ? 'mr-IN' : 'en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : '—';
+
+                    return (
+                      <div
+                        key={pat.id}
+                        onClick={() => onOpenPatientTimeline(pat)}
+                        className="p-3.5 rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50/30 dark:bg-amber-950/10 hover:border-amber-300 dark:hover:border-amber-700 transition-all cursor-pointer hover:shadow-xs flex items-center justify-between gap-3"
+                      >
+                        {/* Avatar */}
+                        <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200">
+                          {pat.fullName.charAt(0)}
+                        </div>
+
+                        {/* Patient & Referral Information */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-sm text-slate-900 dark:text-white truncate">{pat.fullName}</span>
+                            <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full border ${priorityClass}`}>
+                              {priorityLabel}
+                            </span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusClass}`}>
+                              {activeRef?.status || 'PENDING'}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-2">
+                            <span>{pat.age}y · {pat.gender} · {pat.village}</span>
+                            <span>&bull;</span>
+                            <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                              <Building2 className="w-3 h-3 text-blue-600" />
+                              {activeRef?.targetFacility || 'District Hospital'}
+                            </span>
+                            <span>&bull;</span>
+                            <span className="text-slate-400 font-mono text-[10px]">Ref #{activeRef?.tokenCode || activeRef?.id}</span>
+                          </div>
+                          {activeRef?.referralReason && (
+                            <div className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 truncate">
+                              Reason: {activeRef.referralReason}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Action - View Referral (NO Screen button) */}
+                        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => onOpenPatientTimeline(pat)}
-                            className="px-2 py-1 text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                            className="px-3 py-1.5 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-xs transition-colors flex items-center gap-1"
                           >
-                            <span>{language === 'mr' ? 'पहा' : 'View'}</span>
+                            <span>{language === 'mr' ? 'रेफरल पहा' : 'View Referral'}</span>
+                            <ArrowUpRight className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                      ) : (
-                        <button
-                          onClick={() => onOpenReferral(pat)}
-                          className="px-2.5 py-1.5 text-xs font-bold bg-rose-700 hover:bg-rose-800 text-white rounded-lg shadow transition-colors flex items-center gap-1"
-                          title="Refer Patient"
-                        >
-                          <Send className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">{language === 'mr' ? 'रेफर' : 'Refer'}</span>
-                        </button>
-                      )}
-                    </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="p-8 text-center text-xs text-slate-400 dark:text-slate-500">
+                    No active referrals currently in progress from your catchment area.
                   </div>
-                );
-              })}
-            </div>
+                )}
+              </div>
+            )}
+
+            {/* Content for Priority Watchlist Tab (strictly non-referred active patients) */}
+            {activeTab === 'WATCHLIST' && (
+              <div className="space-y-2">
+                {filteredActivePatients.length > 0 ? (
+                  filteredActivePatients.map((pat) => {
+                    const isHrp = pat.isHighRiskPregnancy;
+                    const hasChronicCondition = pat.chronicConditions && pat.chronicConditions.length > 0;
+
+                    return (
+                      <div
+                        key={pat.id}
+                        onClick={() => onOpenPatientTimeline(pat)}
+                        className={`p-3.5 rounded-xl border transition-all cursor-pointer hover:shadow-sm flex items-center justify-between gap-3 ${
+                          isHrp
+                            ? 'bg-rose-50/50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800 hover:border-rose-400'
+                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 hover:border-teal-300 dark:hover:border-teal-700'
+                        }`}
+                      >
+                        {/* Avatar */}
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${
+                          isHrp
+                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300'
+                            : 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300'
+                        }`}>
+                          {pat.fullName.charAt(0)}
+                        </div>
+
+                        {/* Core identity — name, age/gender/village */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-sm text-slate-900 dark:text-white truncate">{pat.fullName}</span>
+                            {isHrp && (
+                              <span className="text-[10px] font-bold bg-rose-600 text-white px-1.5 py-0.5 rounded-full shrink-0">HRP</span>
+                            )}
+                            {hasChronicCondition && !isHrp && (
+                              <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 px-1.5 py-0.5 rounded-full shrink-0">Chronic</span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            {pat.age}y · {pat.gender}
+                            {pat.isPregnant && <span className="ml-1 text-rose-700 dark:text-rose-300 font-semibold">· Wk {pat.gestationalWeeks}</span>}
+                            {' · '}{pat.village}
+                          </div>
+                        </div>
+
+                        {/* Action buttons for active patients: Screen & Refer */}
+                        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => setSelectedPatientForScreening(pat)}
+                            className="px-2.5 py-1.5 text-xs font-bold bg-teal-700 hover:bg-teal-800 text-white rounded-lg shadow transition-colors flex items-center gap-1"
+                            title="Record Vitals"
+                          >
+                            <Stethoscope className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">{language === 'mr' ? 'तपासणी' : 'Screen'}</span>
+                          </button>
+                          <button
+                            onClick={() => onOpenReferral(pat)}
+                            className="px-2.5 py-1.5 text-xs font-bold bg-rose-700 hover:bg-rose-800 text-white rounded-lg shadow transition-colors flex items-center gap-1"
+                            title="Refer Patient"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">{language === 'mr' ? 'रेफर' : 'Refer'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="p-8 text-center text-xs text-slate-400 dark:text-slate-500">
+                    No active patients matching your search query.
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
