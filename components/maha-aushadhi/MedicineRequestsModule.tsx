@@ -25,7 +25,6 @@ import {
   Send,
   PlusCircle,
   KeyRound,
-  Copy,
   RotateCcw,
   Share2,
   Search,
@@ -35,13 +34,18 @@ import {
   Ban,
   Activity,
   Layers,
+  Eye,
+  Info,
+  AlertOctagon,
 } from 'lucide-react';
+
+export type MedicineModuleTab = 'NEEDS_ACTION' | 'IN_TRANSIT' | 'COMPLETED' | 'ALL_HISTORY';
 
 export function TransferProgressTrackerMini({ status }: { status: RequestStatus }) {
   const steps = [
     { key: 'REQUESTED', label: 'Requested' },
     { key: 'APPROVED', label: 'Approved' },
-    { key: 'ON_THE_WAY', label: 'On the Way' },
+    { key: 'ON_THE_WAY', label: 'In Transit' },
     { key: 'RECEIVED', label: 'Received' },
   ];
 
@@ -71,7 +75,7 @@ export function TransferProgressTrackerMini({ status }: { status: RequestStatus 
             <span
               className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-tight ${
                 isCurrent
-                  ? 'bg-blue-600 text-white font-extrabold shadow-2xs animate-pulse'
+                  ? 'bg-blue-600 text-white font-extrabold shadow-2xs'
                   : isDone
                   ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
                   : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
@@ -109,16 +113,17 @@ export function MedicineRequestsModule() {
   );
   const userDistrict = currentFacilityObj?.district || user?.district || 'Pune';
 
-  // Primary 2-tab navigation: 'INCOMING' vs 'HISTORY'
-  const [activeTab, setActiveTab] = useState<'INCOMING' | 'HISTORY'>('INCOMING');
+  // 4 Primary Functional Tabs
+  const [activeTab, setActiveTab] = useState<MedicineModuleTab>('NEEDS_ACTION');
 
-  // History sub-filters
+  // History sub-filters & search
   const [historyScope, setHistoryScope] = useState<'ALL' | 'REQUESTED_BY_US' | 'SUPPLIED_BY_US'>('ALL');
   const [historyStatusFilter, setHistoryStatusFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Modals
   const [selectedIncomingRequest, setSelectedIncomingRequest] = useState<StockTransfer | null>(null);
+  const [viewDetailsTransfer, setViewDetailsTransfer] = useState<StockTransfer | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
 
@@ -140,10 +145,9 @@ export function MedicineRequestsModule() {
   const [reqReason, setReqReason] = useState('');
   const [reqSourceFacilityId, setReqSourceFacilityId] = useState('');
 
-  // 1. INCOMING REQUESTS: OTHER FACILITIES -> THIS PHC
-  // (Source is THIS PHC, Destination is another facility)
-  const incomingRequests = useMemo(() => {
-    return stockTransfers.filter((t) => {
+  // 1. ALL INBOUND REQUESTS WHERE THIS FACILITY IS THE SUPPLIER
+  const allSuppliedTransfers = useMemo(() => {
+    return (stockTransfers || []).filter((t) => {
       const isSourceThis =
         t.sourceFacilityId === currentFacilityId ||
         (t.sourceFacilityName && currentFacilityName && t.sourceFacilityName.toLowerCase().includes(currentFacilityName.toLowerCase()));
@@ -154,9 +158,45 @@ export function MedicineRequestsModule() {
     });
   }, [stockTransfers, currentFacilityId, currentFacilityName]);
 
-  // 2. COMPLETE REQUEST HISTORY FOR THIS PHC (Requests Made + Requests Sent/Supplied)
+  // 2. ACTIVE INCOMING REQUESTS (ONLY REQUESTED / APPROVED)
+  const activeIncomingRequests = useMemo(() => {
+    return allSuppliedTransfers.filter(
+      (t) => t.status === 'PENDING' || t.status === 'PENDING_SOURCE_APPROVAL' || t.status === 'APPROVED'
+    ).sort((a, b) => {
+      const priorityOrder: Record<string, number> = { CRITICAL: 3, URGENT: 2, ROUTINE: 1 };
+      const diffPriority = (priorityOrder[b.urgency] || 1) - (priorityOrder[a.urgency] || 1);
+      if (diffPriority !== 0) return diffPriority;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [allSuppliedTransfers]);
+
+  // 3. IN TRANSIT REQUESTS (DISPATCHED, either outbound or inbound)
+  const inTransitTransfers = useMemo(() => {
+    return (stockTransfers || []).filter((t) => {
+      const isRelevant =
+        t.sourceFacilityId === currentFacilityId ||
+        t.destinationFacilityId === currentFacilityId ||
+        (t.sourceFacilityName && currentFacilityName && t.sourceFacilityName.toLowerCase().includes(currentFacilityName.toLowerCase())) ||
+        (t.destinationFacilityName && currentFacilityName && t.destinationFacilityName.toLowerCase().includes(currentFacilityName.toLowerCase()));
+      return isRelevant && t.status === 'DISPATCHED';
+    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [stockTransfers, currentFacilityId, currentFacilityName]);
+
+  // 4. COMPLETED REQUESTS (RECEIVED / FULFILLED)
+  const completedTransfers = useMemo(() => {
+    return (stockTransfers || []).filter((t) => {
+      const isRelevant =
+        t.sourceFacilityId === currentFacilityId ||
+        t.destinationFacilityId === currentFacilityId ||
+        (t.sourceFacilityName && currentFacilityName && t.sourceFacilityName.toLowerCase().includes(currentFacilityName.toLowerCase())) ||
+        (t.destinationFacilityName && currentFacilityName && t.destinationFacilityName.toLowerCase().includes(currentFacilityName.toLowerCase()));
+      return isRelevant && t.status === 'COMPLETED';
+    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [stockTransfers, currentFacilityId, currentFacilityName]);
+
+  // 5. ALL HISTORY TRANSFERS
   const allHistoryTransfers = useMemo(() => {
-    return stockTransfers.filter((t) => {
+    return (stockTransfers || []).filter((t) => {
       const isSourceThis =
         t.sourceFacilityId === currentFacilityId ||
         (t.sourceFacilityName && currentFacilityName && t.sourceFacilityName.toLowerCase().includes(currentFacilityName.toLowerCase()));
@@ -164,7 +204,7 @@ export function MedicineRequestsModule() {
         t.destinationFacilityId === currentFacilityId ||
         (t.destinationFacilityName && currentFacilityName && t.destinationFacilityName.toLowerCase().includes(currentFacilityName.toLowerCase()));
       return isSourceThis || isDestThis;
-    });
+    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [stockTransfers, currentFacilityId, currentFacilityName]);
 
   // Filtered History list
@@ -336,13 +376,9 @@ export function MedicineRequestsModule() {
     setReqDrugName('');
     setReqQuantity('');
     setReqReason('');
-    setActiveTab('HISTORY');
+    setActiveTab('ALL_HISTORY');
     setHistoryScope('REQUESTED_BY_US');
   };
-
-  const pendingIncomingCount = incomingRequests.filter(
-    (r) => r.status === 'PENDING_SOURCE_APPROVAL' || r.status === 'PENDING'
-  ).length;
 
   return (
     <div className="flex flex-col h-full space-y-3 animate-in fade-in duration-300">
@@ -358,11 +394,11 @@ export function MedicineRequestsModule() {
               <span>{language === 'mr' ? 'औषध मागण्या व रसद व्यवस्थापन' : 'Medicine Requests & Inter-Facility Supply'}</span>
             </h1>
             <span className="text-[10px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-              {currentFacilityName}
+              {currentFacilityName} (Supplier Queue)
             </span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Manage incoming medicine demands from peer facilities and track complete requisition lifecycle history for {currentFacilityName}.
+            Review incoming medicine demands, verify statutory safety buffers, and authorize stock dispatches across the district network.
           </p>
         </div>
 
@@ -378,43 +414,73 @@ export function MedicineRequestsModule() {
         </button>
       </div>
 
-      {/* 2. TAB TOGGLE BUTTONS */}
-      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-1">
+      {/* 2. TAB TOGGLE BUTTONS (4 DEDICATED OPERATIONAL TABS) */}
+      <div className="flex items-center gap-1.5 border-b border-slate-200 dark:border-slate-800 pb-1 overflow-x-auto">
         
-        {/* Tab 1: Incoming Requests */}
+        {/* Tab 1: Needs Action (Active Inbound Demands) */}
         <button
-          onClick={() => setActiveTab('INCOMING')}
-          className={`px-4 py-2 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-            activeTab === 'INCOMING'
+          onClick={() => setActiveTab('NEEDS_ACTION')}
+          className={`px-3.5 py-2 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+            activeTab === 'NEEDS_ACTION'
               ? 'bg-white dark:bg-slate-900 border-t-2 border-t-purple-600 border-x border-slate-200 dark:border-slate-800 text-purple-700 dark:text-purple-300 shadow-2xs font-black'
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
           }`}
         >
           <ArrowDownLeft className="w-4 h-4 text-purple-500" />
-          <span>1. Incoming Requests</span>
-          {pendingIncomingCount > 0 ? (
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-purple-600 text-white font-black animate-pulse">
-              {pendingIncomingCount}
-            </span>
-          ) : (
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-              {incomingRequests.length}
-            </span>
-          )}
+          <span>Needs Action</span>
+          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${
+            activeIncomingRequests.length > 0
+              ? 'bg-purple-600 text-white animate-pulse'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+          }`}>
+            {activeIncomingRequests.length}
+          </span>
         </button>
 
-        {/* Tab 2: Request History */}
+        {/* Tab 2: In Transit */}
         <button
-          onClick={() => setActiveTab('HISTORY')}
-          className={`px-4 py-2 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-            activeTab === 'HISTORY'
+          onClick={() => setActiveTab('IN_TRANSIT')}
+          className={`px-3.5 py-2 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+            activeTab === 'IN_TRANSIT'
               ? 'bg-white dark:bg-slate-900 border-t-2 border-t-blue-600 border-x border-slate-200 dark:border-slate-800 text-blue-700 dark:text-blue-300 shadow-2xs font-black'
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
           }`}
         >
-          <History className="w-4 h-4 text-blue-500" />
-          <span>2. Request History</span>
-          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold">
+          <Truck className="w-4 h-4 text-blue-500" />
+          <span>In Transit</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-mono font-bold">
+            {inTransitTransfers.length}
+          </span>
+        </button>
+
+        {/* Tab 3: Completed */}
+        <button
+          onClick={() => setActiveTab('COMPLETED')}
+          className={`px-3.5 py-2 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+            activeTab === 'COMPLETED'
+              ? 'bg-white dark:bg-slate-900 border-t-2 border-t-emerald-600 border-x border-slate-200 dark:border-slate-800 text-emerald-700 dark:text-emerald-300 shadow-2xs font-black'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+          }`}
+        >
+          <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+          <span>Completed</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-mono font-bold">
+            {completedTransfers.length}
+          </span>
+        </button>
+
+        {/* Tab 4: All History */}
+        <button
+          onClick={() => setActiveTab('ALL_HISTORY')}
+          className={`px-3.5 py-2 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+            activeTab === 'ALL_HISTORY'
+              ? 'bg-white dark:bg-slate-900 border-t-2 border-t-slate-600 border-x border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 shadow-2xs font-black'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+          }`}
+        >
+          <History className="w-4 h-4 text-slate-500" />
+          <span>All History</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-mono font-bold">
             {allHistoryTransfers.length}
           </span>
         </button>
@@ -422,9 +488,9 @@ export function MedicineRequestsModule() {
       </div>
 
       {/* ============================================================== */}
-      {/* 3. TAB 1: INCOMING REQUESTS (OTHER PHCs -> THIS PHC) */}
+      {/* 3. TAB 1: NEEDS ACTION (ACTIVE INCOMING REQUESTS: OTHER PHCs -> THIS PHC) */}
       {/* ============================================================== */}
-      {activeTab === 'INCOMING' && (
+      {activeTab === 'NEEDS_ACTION' && (
         <div className="flex-1 flex flex-col space-y-3">
           
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 shadow-2xs flex flex-col sm:flex-row justify-between sm:items-center gap-2">
@@ -433,11 +499,11 @@ export function MedicineRequestsModule() {
                 Active Inbound Demands Requiring Action by {currentFacilityName}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Review on-hand stock and statutory buffer thresholds before dispatching consignments.
+                Incoming requisitions awaiting supplier buffer review, approval, and consignment dispatch.
               </p>
             </div>
-            <span className="text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2.5 py-1 rounded-lg border border-purple-200 dark:border-purple-800 self-start sm:self-auto">
-              {incomingRequests.length} Total Received
+            <span className="text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2.5 py-1 rounded-lg border border-purple-200 dark:border-purple-800 self-start sm:self-auto font-mono">
+              {activeIncomingRequests.length} Actionable Demands
             </span>
           </div>
 
@@ -458,8 +524,8 @@ export function MedicineRequestsModule() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-                  {incomingRequests.length > 0 ? (
-                    incomingRequests.map((req) => {
+                  {activeIncomingRequests.length > 0 ? (
+                    activeIncomingRequests.map((req) => {
                       const analysis = getSafetyAnalysis(req);
 
                       return (
@@ -468,7 +534,7 @@ export function MedicineRequestsModule() {
                           {/* Request ID */}
                           <td className="px-4 py-2.5">
                             <div className="font-mono text-xs font-bold text-purple-700 dark:text-purple-300">
-                              {req.id}
+                              #{req.id}
                             </div>
                             {req.consignmentCode && (
                               <div className="text-[10px] font-mono text-slate-400">
@@ -546,7 +612,7 @@ export function MedicineRequestsModule() {
                               {req.status === 'PENDING_SOURCE_APPROVAL' || req.status === 'PENDING' ? (
                                 <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
                                   <Clock className="w-3 h-3" />
-                                  <span>Pending</span>
+                                  <span>Requested</span>
                                 </span>
                               ) : req.status === 'APPROVED' ? (
                                 <span className="text-blue-600 dark:text-blue-400 flex items-center gap-1">
@@ -556,35 +622,54 @@ export function MedicineRequestsModule() {
                               ) : req.status === 'DISPATCHED' ? (
                                 <span className="text-purple-600 dark:text-purple-400 flex items-center gap-1">
                                   <Truck className="w-3 h-3" />
-                                  <span>On the Way</span>
-                                </span>
-                              ) : req.status === 'COMPLETED' ? (
-                                <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  <span>Received</span>
+                                  <span>In Transit</span>
                                 </span>
                               ) : (
-                                <span className="text-rose-600 dark:text-rose-400 flex items-center gap-1">
-                                  <XCircle className="w-3 h-3" />
-                                  <span>Rejected</span>
-                                </span>
+                                <span className="text-slate-400">{req.status}</span>
                               )}
                             </span>
                           </td>
 
-                          {/* Action Buttons */}
+                          {/* Status-Based Action Buttons */}
                           <td className="px-4 py-2.5 text-right">
-                            <button
-                              onClick={() => {
-                                setSelectedIncomingRequest(req);
-                                setShowRejectInput(false);
-                                setRejectReason('');
-                              }}
-                              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer inline-flex items-center gap-1"
-                            >
-                              <Shield className="w-3.5 h-3.5" />
-                              <span>Review & Fulfill</span>
-                            </button>
+                            {req.status === 'PENDING_SOURCE_APPROVAL' || req.status === 'PENDING' ? (
+                              <button
+                                onClick={() => {
+                                  setSelectedIncomingRequest(req);
+                                  setShowRejectInput(false);
+                                  setRejectReason('');
+                                }}
+                                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer inline-flex items-center gap-1"
+                              >
+                                <Shield className="w-3.5 h-3.5" />
+                                <span>Review &amp; Approve</span>
+                              </button>
+                            ) : req.status === 'APPROVED' ? (
+                              <button
+                                onClick={async () => {
+                                  await processStockTransfer(req.id, 'DISPATCH', undefined, {
+                                    transportMode: req.urgency === 'CRITICAL' ? '108_AMBULANCE' : 'DISTRICT_MEDICAL_COURIER',
+                                  });
+                                }}
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer inline-flex items-center gap-1"
+                              >
+                                <Truck className="w-3.5 h-3.5" />
+                                <span>Dispatch</span>
+                              </button>
+                            ) : req.status === 'DISPATCHED' ? (
+                              <span className="text-purple-600 dark:text-purple-400 font-bold text-xs inline-flex items-center gap-1">
+                                <Truck className="w-3 h-3" />
+                                <span>Awaiting Receipt</span>
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => setViewDetailsTransfer(req)}
+                                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span>View Details</span>
+                              </button>
+                            )}
                           </td>
 
                         </tr>
@@ -593,7 +678,7 @@ export function MedicineRequestsModule() {
                   ) : (
                     <tr>
                       <td colSpan={9} className="px-4 py-8 text-center text-slate-400 text-xs">
-                        No pending incoming medicine requests for {currentFacilityName}.
+                        No pending inbound demands requiring action by {currentFacilityName}.
                       </td>
                     </tr>
                   )}
@@ -606,9 +691,201 @@ export function MedicineRequestsModule() {
       )}
 
       {/* ============================================================== */}
-      {/* 4. TAB 2: REQUEST HISTORY (ALL INBOUND + OUTBOUND) */}
+      {/* 4. TAB 2: IN TRANSIT (CONSIGNMENTS ACTIVELY EN ROUTE) */}
       {/* ============================================================== */}
-      {activeTab === 'HISTORY' && (
+      {activeTab === 'IN_TRANSIT' && (
+        <div className="flex-1 flex flex-col space-y-3">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 shadow-2xs flex justify-between items-center">
+            <div>
+              <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                Active Consignments in Transit
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Dispatched medicine consignments en route between district facilities.
+              </p>
+            </div>
+            <span className="text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-lg border border-blue-200 dark:border-blue-800 font-mono">
+              {inTransitTransfers.length} In Transit
+            </span>
+          </div>
+
+          <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs overflow-hidden flex flex-col">
+            <div className="overflow-x-auto flex-1">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
+                    <th className="px-4 py-2.5">Transfer ID</th>
+                    <th className="px-4 py-2.5">Flow Direction</th>
+                    <th className="px-4 py-2.5">Supplier Facility</th>
+                    <th className="px-4 py-2.5">Destination Facility</th>
+                    <th className="px-4 py-2.5">Medicine &amp; Qty</th>
+                    <th className="px-4 py-2.5">Transport Mode</th>
+                    <th className="px-4 py-2.5 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                  {inTransitTransfers.length > 0 ? (
+                    inTransitTransfers.map((t) => {
+                      const isRequestedByUs =
+                        t.destinationFacilityId === currentFacilityId ||
+                        (t.destinationFacilityName && currentFacilityName && t.destinationFacilityName.toLowerCase().includes(currentFacilityName.toLowerCase()));
+
+                      return (
+                        <tr key={t.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="px-4 py-2.5 font-mono font-bold text-blue-600 dark:text-blue-400">
+                            #{t.id}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            {isRequestedByUs ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                <ArrowUpRight className="w-3 h-3 text-blue-500" />
+                                <span>Inbound to Us</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                <ArrowDownLeft className="w-3 h-3 text-purple-500" />
+                                <span>Outbound from Us</span>
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">
+                            {t.sourceFacilityName || 'Supplier Facility'}
+                          </td>
+                          <td className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">
+                            {t.destinationFacilityName}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <div className="font-bold text-slate-900 dark:text-white">{t.medicineName}</div>
+                            <div className="text-[10px] text-slate-400 font-mono font-bold">{t.requestedQuantity} Units</div>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                              <Truck className="w-3 h-3" />
+                              <span>{t.transportMode ? t.transportMode.replace(/_/g, ' ') : 'COURIER EN ROUTE'}</span>
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            {isRequestedByUs ? (
+                              <button
+                                onClick={() => {
+                                  setReceivingTransfer(t);
+                                  setInputOtp('');
+                                  setOtpError('');
+                                }}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer inline-flex items-center gap-1"
+                              >
+                                <KeyRound className="w-3 h-3" />
+                                <span>Receive Stock</span>
+                              </button>
+                            ) : (
+                              <span className="text-slate-500 font-medium text-xs">Awaiting Destination Receipt</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-8 text-center text-slate-400 text-xs">
+                        No active consignments currently in transit.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 5. TAB 3: COMPLETED (RECEIVED / FULFILLED REQUISITIONS) */}
+      {/* ============================================================== */}
+      {activeTab === 'COMPLETED' && (
+        <div className="flex-1 flex flex-col space-y-3">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 shadow-2xs flex justify-between items-center">
+            <div>
+              <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                Completed &amp; Reconciled Requisitions
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Successfully delivered and inventory-credited transfers for {currentFacilityName}.
+              </p>
+            </div>
+            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 font-mono">
+              {completedTransfers.length} Completed
+            </span>
+          </div>
+
+          <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs overflow-hidden flex flex-col">
+            <div className="overflow-x-auto flex-1">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
+                    <th className="px-4 py-2.5">Transfer ID</th>
+                    <th className="px-4 py-2.5">Date</th>
+                    <th className="px-4 py-2.5">Supplier Facility</th>
+                    <th className="px-4 py-2.5">Destination Facility</th>
+                    <th className="px-4 py-2.5">Medicine &amp; Qty</th>
+                    <th className="px-4 py-2.5">Status</th>
+                    <th className="px-4 py-2.5 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                  {completedTransfers.length > 0 ? (
+                    completedTransfers.map((t) => (
+                      <tr key={t.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="px-4 py-2.5 font-mono font-bold text-slate-900 dark:text-white">
+                          #{t.id}
+                        </td>
+                        <td className="px-4 py-2.5 text-slate-500 font-mono text-[11px]">
+                          {new Date(t.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                        </td>
+                        <td className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">
+                          {t.sourceFacilityName}
+                        </td>
+                        <td className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">
+                          {t.destinationFacilityName}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <div className="font-bold text-slate-900 dark:text-white">{t.medicineName}</div>
+                          <div className="text-[10px] text-slate-400 font-mono font-bold">{t.requestedQuantity} Units</div>
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Stock Credited</span>
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <button
+                            onClick={() => setViewDetailsTransfer(t)}
+                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>View Details</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-8 text-center text-slate-400 text-xs">
+                        No completed transfers recorded yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 6. TAB 4: ALL HISTORY (FULL AUDIT LEDGER) */}
+      {/* ============================================================== */}
+      {activeTab === 'ALL_HISTORY' && (
         <div className="flex-1 flex flex-col space-y-3">
           
           {/* Controls & Sub-Filters Bar */}
@@ -656,7 +933,7 @@ export function MedicineRequestsModule() {
                 <option value="ALL">All Statuses</option>
                 <option value="PENDING">Requested / Pending</option>
                 <option value="APPROVED">Approved</option>
-                <option value="DISPATCHED">On the Way</option>
+                <option value="DISPATCHED">In Transit</option>
                 <option value="COMPLETED">Received</option>
                 <option value="REJECTED">Rejected</option>
               </select>
@@ -672,9 +949,9 @@ export function MedicineRequestsModule() {
                   <tr className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
                     <th className="px-4 py-2.5">ID / Date</th>
                     <th className="px-4 py-2.5">Flow Direction</th>
-                    <th className="px-4 py-2.5">Source Facility</th>
+                    <th className="px-4 py-2.5">Supplier Facility</th>
                     <th className="px-4 py-2.5">Destination Facility</th>
-                    <th className="px-4 py-2.5">Medicine & Qty</th>
+                    <th className="px-4 py-2.5">Medicine &amp; Qty</th>
                     <th className="px-4 py-2.5">Progress / Status</th>
                     <th className="px-4 py-2.5 text-right">Action</th>
                   </tr>
@@ -692,7 +969,7 @@ export function MedicineRequestsModule() {
                           {/* ID / Date */}
                           <td className="px-4 py-2.5">
                             <div className="font-mono text-xs font-bold text-slate-900 dark:text-white">
-                              {req.id}
+                              #{req.id}
                             </div>
                             <div className="text-[10px] text-slate-400">
                               {new Date(req.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
@@ -737,80 +1014,13 @@ export function MedicineRequestsModule() {
 
                           {/* Action */}
                           <td className="px-4 py-2.5 text-right">
-                            {isRequestedByUs ? (
-                              req.status === 'DISPATCHED' ? (
-                                <button
-                                  onClick={() => {
-                                    setReceivingTransfer(req);
-                                    setInputOtp('');
-                                    setOtpError('');
-                                  }}
-                                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer inline-flex items-center gap-1"
-                                >
-                                  <KeyRound className="w-3 h-3" />
-                                  <span>Receive (OTP)</span>
-                                </button>
-                              ) : req.status === 'REJECTED' ? (
-                                <button
-                                  onClick={() => {
-                                    setForwardingTransfer(req);
-                                    setForwardReason('Re-routing after previous donor rejection');
-                                    setSelectedAlternateFacilityId(eligibleDonorFacilities[0]?.id || '');
-                                  }}
-                                  className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer inline-flex items-center gap-1"
-                                >
-                                  <RotateCcw className="w-3 h-3" />
-                                  <span>Find Alternate Supply</span>
-                                </button>
-                              ) : req.status === 'COMPLETED' ? (
-                                <span className="text-emerald-700 dark:text-emerald-400 font-bold text-xs inline-flex items-center gap-1">
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  <span>Reconciled</span>
-                                </span>
-                              ) : (
-                                <span className="text-blue-600 dark:text-blue-400 font-bold text-xs inline-flex items-center gap-1">
-                                  <Clock className="w-3 h-3" />
-                                  <span>Tracked Request</span>
-                                </span>
-                              )
-                            ) : (
-                              /* We are the Supplying / Donor Facility */
-                              req.status === 'PENDING' || req.status === 'PENDING_SOURCE_APPROVAL' ? (
-                                <button
-                                  onClick={() => {
-                                    setSelectedIncomingRequest(req);
-                                    setShowRejectInput(false);
-                                    setRejectReason('');
-                                  }}
-                                  className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer inline-flex items-center gap-1"
-                                >
-                                  <Shield className="w-3 h-3" />
-                                  <span>Review &amp; Approve</span>
-                                </button>
-                              ) : req.status === 'APPROVED' ? (
-                                <button
-                                  onClick={() => {
-                                    setSelectedIncomingRequest(req);
-                                  }}
-                                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer inline-flex items-center gap-1"
-                                >
-                                  <Truck className="w-3 h-3" />
-                                  <span>Dispatch</span>
-                                </button>
-                              ) : req.status === 'DISPATCHED' ? (
-                                <span className="text-purple-600 dark:text-purple-400 font-bold text-xs inline-flex items-center gap-1">
-                                  <Truck className="w-3 h-3" />
-                                  <span>In Transit</span>
-                                </span>
-                              ) : req.status === 'COMPLETED' ? (
-                                <span className="text-emerald-700 dark:text-emerald-400 font-bold text-xs inline-flex items-center gap-1">
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  <span>Fulfilled</span>
-                                </span>
-                              ) : (
-                                <span className="text-slate-400 text-xs font-mono">{req.status}</span>
-                              )
-                            )}
+                            <button
+                              onClick={() => setViewDetailsTransfer(req)}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>View Details</span>
+                            </button>
                           </td>
 
                         </tr>
@@ -832,7 +1042,7 @@ export function MedicineRequestsModule() {
       )}
 
       {/* ============================================================== */}
-      {/* 5. MODAL: BUFFER SAFETY CHECK FOR INCOMING REQUESTS */}
+      {/* 7. MODAL: BUFFER SAFETY CHECK FOR INCOMING REQUESTS */}
       {/* ============================================================== */}
       {selectedIncomingRequest && (() => {
         const analysis = getSafetyAnalysis(selectedIncomingRequest);
@@ -842,7 +1052,7 @@ export function MedicineRequestsModule() {
           <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
               
-              <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850/50 flex items-center justify-between">
+              <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-855 flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4 text-purple-600 dark:text-purple-400" />
@@ -851,7 +1061,7 @@ export function MedicineRequestsModule() {
                     </h3>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Request ID: <span className="font-mono font-bold text-purple-600 dark:text-purple-400">{selectedIncomingRequest.id}</span>
+                    Request ID: <span className="font-mono font-bold text-purple-600 dark:text-purple-400">#{selectedIncomingRequest.id}</span>
                   </p>
                 </div>
                 <button
@@ -929,7 +1139,7 @@ export function MedicineRequestsModule() {
                       ? 'border-rose-200 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-950/20'
                       : 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20'
                   }`}>
-                    <div className="text-[10px] uppercase font-bold text-slate-400">Remaining Stock</div>
+                    <div className="text-[10px] uppercase font-bold text-slate-400">Stock After Dispatch</div>
                     <div className={`text-xl font-black mt-1 ${
                       remainingStock < minimumBuffer ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
                     }`}>
@@ -955,7 +1165,7 @@ export function MedicineRequestsModule() {
                       </span>
                     </div>
                     <p className="text-xs text-emerald-800 dark:text-emerald-300 font-medium">
-                      Remaining stock ({remainingStock} {unit}) is at or above the minimum buffer ({minimumBuffer} {unit}). Approving this transfer will not breach {currentFacilityName} emergency reserves.
+                      Remaining stock ({remainingStock} {unit}) is at or above the statutory buffer ({minimumBuffer} {unit}). Approving this transfer preserves emergency reserves.
                     </p>
                   </div>
                 ) : (
@@ -963,11 +1173,11 @@ export function MedicineRequestsModule() {
                     <div className="flex items-center gap-2">
                       <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />
                       <span className="font-black text-sm text-rose-900 dark:text-rose-200">
-                        🔴 BUFFER BREACH
+                        🔴 BUFFER BREACH CONSTRAINT
                       </span>
                     </div>
                     <p className="text-xs text-rose-800 dark:text-rose-300 font-medium">
-                      Remaining stock ({remainingStock} {unit}) would fall below statutory buffer ({minimumBuffer} {unit}). You may forward this request to an alternate facility.
+                      Remaining stock ({remainingStock} {unit}) would fall below statutory buffer ({minimumBuffer} {unit}). You can forward this request to an alternate supplier with available surplus.
                     </p>
                   </div>
                 )}
@@ -980,7 +1190,7 @@ export function MedicineRequestsModule() {
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Statutory buffer breach at source facility..."
+                      placeholder="e.g. Statutory buffer constraint at supplier facility..."
                       value={rejectReason}
                       onChange={(e) => setRejectReason(e.target.value)}
                       className="w-full px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-900 dark:text-white"
@@ -990,7 +1200,7 @@ export function MedicineRequestsModule() {
 
               </div>
 
-              <div className="px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850/50 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+              <div className="px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
                 <button
                   onClick={() => setSelectedIncomingRequest(null)}
                   className="px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
@@ -1017,7 +1227,7 @@ export function MedicineRequestsModule() {
                         <button
                           onClick={() => {
                             setShowRejectInput(true);
-                            setRejectReason(isBufferBreach ? `Statutory buffer breach at ${currentFacilityName}` : 'Unavailable for transfer');
+                            setRejectReason(isBufferBreach ? `Statutory buffer constraint at ${currentFacilityName}` : 'Unavailable for transfer');
                           }}
                           className="px-3 py-1.5 border border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-bold text-xs rounded-xl transition-colors cursor-pointer"
                         >
@@ -1044,7 +1254,7 @@ export function MedicineRequestsModule() {
                           className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
                         >
                           <Check className="w-4 h-4" />
-                          <span>Approve Transfer</span>
+                          <span>Approve Request</span>
                         </button>
                       ) : (
                         <button
@@ -1052,7 +1262,7 @@ export function MedicineRequestsModule() {
                           className="px-4 py-1.5 bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-bold text-xs rounded-xl cursor-not-allowed flex items-center gap-1.5 opacity-80"
                         >
                           <Ban className="w-4 h-4 text-rose-500" />
-                          <span>Approval Blocked</span>
+                          <span>Approval Blocked (Buffer Breach)</span>
                         </button>
                       )}
                     </>
@@ -1079,17 +1289,80 @@ export function MedicineRequestsModule() {
       })()}
 
       {/* ============================================================== */}
-      {/* 6. MODAL: FIND ALTERNATE SUPPLY & FORWARD REQUISITION */}
+      {/* 8. MODAL: READ-ONLY VIEW DETAILS MODAL */}
+      {/* ============================================================== */}
+      {viewDetailsTransfer && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Package className="w-4 h-4 text-blue-600" />
+                <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                  Requisition Record Details
+                </h3>
+              </div>
+              <button
+                onClick={() => setViewDetailsTransfer(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs bg-slate-50 dark:bg-slate-850 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Request ID:</span>
+                <span className="font-mono font-bold text-slate-900 dark:text-white">#{viewDetailsTransfer.id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Medicine:</span>
+                <strong className="text-slate-900 dark:text-white">{viewDetailsTransfer.medicineName}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Quantity:</span>
+                <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{viewDetailsTransfer.requestedQuantity} Units</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Supplier Facility:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{viewDetailsTransfer.sourceFacilityName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Requesting Facility:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{viewDetailsTransfer.destinationFacilityName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Current Status:</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">{viewDetailsTransfer.status}</span>
+              </div>
+              {viewDetailsTransfer.reason && (
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-700 text-slate-500 italic">
+                  &ldquo;{viewDetailsTransfer.reason}&rdquo;
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setViewDetailsTransfer(null)}
+              className="w-full py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 9. MODAL: FIND ALTERNATE SUPPLY & FORWARD REQUISITION */}
       {/* ============================================================== */}
       {forwardingTransfer && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
             
-            <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850/50 flex items-center justify-between">
+            <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <RotateCcw className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
-                  Find Alternate Supply & Forward Requisition
+                  Find Alternate Supply &amp; Forward Requisition
                 </h3>
               </div>
               <button
@@ -1103,7 +1376,7 @@ export function MedicineRequestsModule() {
             <div className="p-5 space-y-4 overflow-y-auto max-h-[75vh]">
               <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 space-y-1">
                 <div className="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                  ID: {forwardingTransfer.id} &bull; {forwardingTransfer.urgency}
+                  ID: #{forwardingTransfer.id} &bull; {forwardingTransfer.urgency}
                 </div>
                 <div className="text-sm font-black text-slate-900 dark:text-white">
                   {forwardingTransfer.medicineName} &bull; {forwardingTransfer.requestedQuantity} Units
@@ -1116,7 +1389,7 @@ export function MedicineRequestsModule() {
               <div className="space-y-2">
                 <label className="text-xs font-black text-slate-900 dark:text-white flex items-center justify-between">
                   <span>Available Alternate Facilities with Surplus:</span>
-                  <span className="text-[10px] text-slate-400 font-normal">Ranked by surplus & distance</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Ranked by surplus &amp; distance</span>
                 </label>
 
                 <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
@@ -1153,36 +1426,34 @@ export function MedicineRequestsModule() {
                 </div>
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                  Forwarding Note:
+                  Forwarding Rationale (Logged to Audit Trail):
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Re-routing due to source buffer deficit"
+                  placeholder="e.g. Forwarding to nearby facility due to local statutory reserve preservation..."
                   value={forwardReason}
                   onChange={(e) => setForwardReason(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-900 dark:text-white"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-white"
                 />
               </div>
-
             </div>
 
-            <div className="px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850/50 flex items-center justify-between gap-2.5">
+            <div className="px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850 flex items-center justify-end gap-2">
               <button
                 onClick={() => setForwardingTransfer(null)}
                 className="px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
               >
                 Cancel
               </button>
-
               <button
-                onClick={handleForwardToAlternate}
                 disabled={!selectedAlternateFacilityId}
+                onClick={handleForwardToAlternate}
                 className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
               >
-                <Send className="w-4 h-4" />
-                <span>Forward Requisition</span>
+                <Send className="w-3.5 h-3.5" />
+                <span>Transmit Requisition</span>
               </button>
             </div>
 
@@ -1191,261 +1462,192 @@ export function MedicineRequestsModule() {
       )}
 
       {/* ============================================================== */}
-      {/* 7. MODAL: OTP RECEIPT VERIFICATION */}
+      {/* 10. MODAL: RECEIVING OTP CONFIRMATION */}
       {/* ============================================================== */}
       {receivingTransfer && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
-            
-            <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850/50 flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
-                <KeyRound className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
-                  Verify OTP & Receive Consignment
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                  Confirm Stock Receipt &amp; Credit Inventory
                 </h3>
               </div>
               <button
                 onClick={() => setReceivingTransfer(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-5 space-y-4">
-              <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 space-y-1.5">
-                <div className="text-[10px] uppercase font-bold text-slate-400">Consignment Details</div>
-                <div className="text-sm font-black text-slate-900 dark:text-white">
-                  {receivingTransfer.requestedQuantity} Units &bull; {receivingTransfer.medicineName}
-                </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">
-                  From: <strong>{receivingTransfer.sourceFacilityName}</strong> &rarr; To: <strong>{receivingTransfer.destinationFacilityName}</strong>
-                </div>
-                <div className="font-mono text-xs text-purple-600 dark:text-purple-400 font-bold mt-1">
-                  Tracking Code: {receivingTransfer.consignmentCode || receivingTransfer.id}
-                </div>
+            <div className="p-3 bg-slate-50 dark:bg-slate-850 rounded-xl space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Medicine:</span>
+                <strong className="text-slate-900 dark:text-white">{receivingTransfer.medicineName}</strong>
               </div>
-
-              {/* Demo OTP Helper */}
-              <div className="p-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/80 dark:bg-emerald-950/40 flex items-center justify-between gap-2">
-                <div>
-                  <div className="text-[10px] uppercase font-bold text-emerald-800 dark:text-emerald-300">
-                    MahaAushadhi Demo OTP Helper
-                  </div>
-                  <div className="font-mono text-base font-black text-emerald-950 dark:text-emerald-200 tracking-widest mt-0.5">
-                    4482
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setInputOtp('4482')}
-                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center gap-1"
-                >
-                  <Copy className="w-3 h-3" />
-                  <span>Use OTP</span>
-                </button>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Quantity:</span>
+                <strong className="text-emerald-600 dark:text-emerald-400">{receivingTransfer.requestedQuantity} Units</strong>
               </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                  Enter 4-Digit Receipt OTP from Courier / Ambulance:
-                </label>
-                <input
-                  type="text"
-                  maxLength={6}
-                  placeholder="Enter OTP (e.g. 4482)"
-                  value={inputOtp}
-                  onChange={(e) => {
-                    setInputOtp(e.target.value);
-                    setOtpError('');
-                  }}
-                  className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-mono text-base font-bold text-center tracking-widest text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
-                />
-                {otpError && <p className="text-xs font-bold text-rose-600 dark:text-rose-400">{otpError}</p>}
+              <div className="flex justify-between">
+                <span className="text-slate-400">Source PHC:</span>
+                <span className="text-slate-700 dark:text-slate-300">{receivingTransfer.sourceFacilityName}</span>
               </div>
             </div>
 
-            <div className="px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850/50 flex items-center justify-between gap-2.5">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                Enter Consignment Verification PIN (Demo: 4482)
+              </label>
+              <input
+                type="text"
+                maxLength={4}
+                value={inputOtp}
+                onChange={(e) => {
+                  setInputOtp(e.target.value);
+                  setOtpError('');
+                }}
+                placeholder="4482"
+                className="w-full text-center text-lg font-mono font-black tracking-widest py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-hidden"
+              />
+              {otpError && (
+                <p className="text-[11px] text-rose-500 font-bold">{otpError}</p>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
               <button
                 onClick={() => setReceivingTransfer(null)}
-                className="px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl"
               >
                 Cancel
               </button>
-
               <button
                 onClick={handleConfirmReceipt}
-                className="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-black text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Check className="w-4 h-4" />
-                <span>Confirm Receipt & Reconcile Stock</span>
+                <span>Confirm &amp; Credit Stock</span>
               </button>
             </div>
-
           </div>
         </div>
       )}
 
       {/* ============================================================== */}
-      {/* 8. MODAL: CREATE NEW REPLENISHMENT REQUISITION */}
+      {/* 11. MODAL: CREATE NEW REQUISITION */}
       {/* ============================================================== */}
       {isNewReqOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
-            
-            <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850/50 flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
-                <PlusCircle className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
-                  New Medicine Requisition
+                <PlusCircle className="w-5 h-5 text-blue-600" />
+                <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                  Create Medicine Requisition
                 </h3>
               </div>
               <button
                 onClick={() => setIsNewReqOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-5 space-y-3.5 overflow-y-auto max-h-[75vh]">
-              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-xs">
-                <div className="text-[10px] uppercase font-bold text-slate-400">Requesting Facility (Recipient)</div>
-                <div className="font-bold text-slate-900 dark:text-white mt-0.5">{currentFacilityName}</div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                  Select Medicine:
-                </label>
-                <select
-                  value={reqDrugName}
-                  onChange={(e) => setReqDrugName(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                >
-                  <option value="Anti-Snake Venom (ASV Polyvalent Lyophilized)">Anti-Snake Venom (ASV Polyvalent Lyophilized)</option>
-                  <option value="Anti-Rabies Vaccine (ARV Purified Vero Cell)">Anti-Rabies Vaccine (ARV Purified Vero Cell)</option>
-                  <option value="Oxytocin Injection IP (10 IU/ml)">Oxytocin Injection IP (10 IU/ml)</option>
-                  <option value="Magnesium Sulphate 50% Inj">Magnesium Sulphate 50% Inj</option>
-                  <option value="Adrenaline Injection IP (1 mg/ml)">Adrenaline Injection IP (1 mg/ml)</option>
-                  <option value="Ceftriaxone 1g Injection">Ceftriaxone 1g Injection</option>
-                  <option value="Paracetamol 500mg Tablets">Paracetamol 500mg Tablets</option>
-                  <option value="Oral Rehydration Salts (ORS IP)">Oral Rehydration Salts (ORS IP)</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                  Requisition Quantity:
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Medicine Name:
                 </label>
                 <input
-                  type="number"
-                  placeholder="e.g. 25"
-                  value={reqQuantity}
-                  onChange={(e) => setReqQuantity(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                  type="text"
+                  value={reqDrugName}
+                  onChange={(e) => setReqDrugName(e.target.value)}
+                  placeholder="e.g. Paracetamol 500mg, Anti-Snake Venom..."
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold"
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                  Select Supplying Facility (Any PHC or Hospital in Network):
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Requested Quantity:
+                  </label>
+                  <input
+                    type="number"
+                    value={reqQuantity}
+                    onChange={(e) => setReqQuantity(e.target.value)}
+                    placeholder="10"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Priority:
+                  </label>
+                  <select
+                    value={reqUrgency}
+                    onChange={(e) => setReqUrgency(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold"
+                  >
+                    <option value="CRITICAL">🔴 Critical</option>
+                    <option value="URGENT">🟠 Urgent</option>
+                    <option value="ROUTINE">🟢 Routine</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Target Supplier Facility:
                 </label>
                 <select
                   value={reqSourceFacilityId}
                   onChange={(e) => setReqSourceFacilityId(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold"
                 >
-                  {eligibleDonorFacilities.map((fac) => {
-                    const donorStock = stocks.find(
-                      (s) =>
-                        s.facilityId === fac.id &&
-                        reqDrugName &&
-                        (s.drugName.toLowerCase() === reqDrugName.toLowerCase() || s.drugName.toLowerCase().includes(reqDrugName.toLowerCase()))
-                    );
-                    const surplus = donorStock ? Math.max(0, donorStock.currentStock - donorStock.bufferStock) : 0;
-                    return (
-                      <option key={fac.id} value={fac.id}>
-                        {fac.name} ({fac.type}) {donorStock ? `• Surplus: +${surplus}` : ''}
-                      </option>
-                    );
-                  })}
+                  <option value="">Auto-Detect Surplus PHC / Depot</option>
+                  {eligibleDonorFacilities.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name} ({f.type})
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                  Priority Tier:
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Clinical / Buffer Rationale:
                 </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setReqUrgency('ROUTINE')}
-                    className={`py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
-                      reqUrgency === 'ROUTINE'
-                        ? 'bg-blue-50 border-blue-500 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
-                        : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
-                    }`}
-                  >
-                    ROUTINE
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setReqUrgency('URGENT')}
-                    className={`py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
-                      reqUrgency === 'URGENT'
-                        ? 'bg-amber-50 border-amber-500 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
-                        : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
-                    }`}
-                  >
-                    URGENT
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setReqUrgency('CRITICAL')}
-                    className={`py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
-                      reqUrgency === 'CRITICAL'
-                        ? 'bg-rose-50 border-rose-500 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
-                        : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
-                    }`}
-                  >
-                    CRITICAL (108)
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                  Clinical Indication / Reason:
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Emergency buffer replenishment"
+                <textarea
                   value={reqReason}
                   onChange={(e) => setReqReason(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                  rows={2}
+                  placeholder="e.g. Critical stock deficit, high seasonal demand..."
+                  className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs"
                 />
               </div>
             </div>
 
-            <div className="px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850/50 flex items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2 pt-2">
               <button
                 onClick={() => setIsNewReqOpen(false)}
-                className="px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl"
               >
                 Cancel
               </button>
-
               <button
                 onClick={handleCreateRequisition}
-                disabled={!reqDrugName.trim() || !reqQuantity}
-                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-black text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <Send className="w-4 h-4" />
-                <span>Submit Requisition</span>
+                <Send className="w-3.5 h-3.5" />
+                <span>Create Requisition</span>
               </button>
             </div>
-
           </div>
         </div>
       )}
