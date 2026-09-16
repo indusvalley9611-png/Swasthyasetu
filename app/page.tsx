@@ -170,8 +170,8 @@ export default function Home() {
     return (
       <div suppressHydrationWarning className="min-h-screen flex flex-col lg:flex-row bg-white dark:bg-slate-950 font-sans">
 
-        {/* ── LEFT SIDE ─ Product Introduction ── */}
-        <div suppressHydrationWarning className="lg:w-[38%] shrink-0 text-white flex flex-col justify-between p-8 lg:py-10 lg:px-10 relative overflow-hidden bg-slate-900">
+        {/* ── LEFT SIDE ─ Product Introduction (Desktop Only) ── */}
+        <div suppressHydrationWarning className="hidden lg:flex lg:w-[38%] shrink-0 text-white flex-col justify-between p-8 lg:py-10 lg:px-10 relative overflow-hidden bg-slate-900">
           {/* Subtle background texture */}
           <div className="absolute inset-0 z-0 opacity-[0.06]" style={{
             backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
@@ -248,8 +248,47 @@ export default function Home() {
         {/* ── RIGHT SIDE ─ Sign In + Emergency ── */}
         <div className="flex-1 bg-slate-50 dark:bg-slate-950 flex flex-col relative transition-colors duration-300">
 
-          {/* Language & Theme Switcher */}
-          <div className="absolute top-5 right-5 sm:top-6 sm:right-8 flex gap-2 z-50">
+          {/* Mobile Native App Top Bar (Mobile Only) */}
+          <div className="lg:hidden bg-slate-900 text-white px-4 py-3 flex items-center justify-between border-b border-slate-800 sticky top-0 z-40 shadow-sm">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 bg-teal-500 rounded-lg flex items-center justify-center shrink-0 shadow-xs">
+                <HeartPulse className="w-4.5 h-4.5 text-white" />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h1 className="text-base font-black tracking-tight leading-none text-white">
+                    Swasthya<span className="text-teal-400">Setu</span>
+                  </h1>
+                  <span className="text-[9px] bg-teal-500/20 text-teal-300 px-1.5 py-0.2 rounded font-bold">
+                    v2.4
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 font-medium leading-none mt-0.5">
+                  Govt. of Maharashtra · ABDM
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={toggleDarkMode}
+                className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+                aria-label="Toggle theme"
+              >
+                {isDarkMode ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5" />}
+              </button>
+              <button
+                onClick={toggleLanguage}
+                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1 transition-colors"
+              >
+                <Languages className="w-3 h-3 text-teal-400" />
+                <span>{language === 'en' ? 'मराठी' : 'EN'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Desktop Language & Theme Switcher (Desktop Only) */}
+          <div className="hidden lg:flex absolute top-5 right-5 sm:top-6 sm:right-8 gap-2 z-50">
             <button
               onClick={toggleDarkMode}
               className="inline-flex items-center justify-center bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 transition-all"
@@ -266,7 +305,7 @@ export default function Home() {
           </div>
 
           {/* Main content area — full width of right panel */}
-          <div className="flex-1 flex flex-col px-6 sm:px-10 lg:px-12 xl:px-16 pt-14 lg:pt-16 pb-8">
+          <div className="flex-1 flex flex-col px-4 sm:px-8 lg:px-12 xl:px-16 pt-4 lg:pt-16 pb-8">
 
             {/* Header */}
             <div className="mb-7">
