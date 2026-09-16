@@ -19,24 +19,38 @@ const statusConfig = {
 
 function CapacityCard({ icon: Icon, label, available, total, accent }: { icon: React.ElementType; label: string; available: number; total: number; accent: string }) {
   const ratio = total > 0 ? available / total : 0;
+  const pct = Math.round(ratio * 100);
   const barColor = ratio > 0.5 ? 'bg-emerald-500' : ratio > 0.2 ? 'bg-amber-500' : 'bg-rose-500';
 
   return (
-    <div className={`rounded-2xl border p-5 ${accent} transition-shadow hover:shadow-md`}>
-      <div className="flex items-center gap-3 mb-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/80 dark:bg-slate-800/80 shadow-sm">
+    <div className={`rounded-2xl border p-5 ${accent} transition-shadow hover:shadow-md flex flex-col`}>
+      {/* Row 1: Icon + Label */}
+      <div className="flex items-center gap-2.5 mb-4">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/80 dark:bg-slate-800/80 shadow-sm">
           <Icon className="h-4.5 w-4.5 text-slate-600 dark:text-slate-300" />
         </div>
-        <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 leading-tight">{label}</p>
       </div>
-      <div className="flex items-baseline gap-1.5">
-        <span className="text-3xl font-black text-slate-900 dark:text-white">{available}</span>
-        <span className="text-sm font-semibold text-slate-400">Available</span>
-        <span className="text-sm text-slate-300 dark:text-slate-600 mx-0.5">/</span>
-        <span className="text-sm font-semibold text-slate-400">{total} Total</span>
+
+      {/* Row 2: Large available number */}
+      <p className="text-4xl font-black text-slate-900 dark:text-white leading-none">{available}</p>
+
+      {/* Row 3: "Available" label */}
+      <p className="mt-1 text-xs font-semibold text-slate-400">Available</p>
+
+      {/* Row 4: Separator + Total */}
+      <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+        <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
+          {total} <span className="font-semibold text-slate-400">Total</span>
+        </p>
       </div>
-      <div className="mt-3 h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-        <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${Math.min(100, ratio * 100)}%` }} />
+
+      {/* Row 5: Progress bar */}
+      <div className="mt-3 w-full">
+        <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+          <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${Math.min(100, pct)}%` }} />
+        </div>
+        <p className="mt-1.5 text-[11px] font-bold text-slate-400">{pct}% available</p>
       </div>
     </div>
   );
