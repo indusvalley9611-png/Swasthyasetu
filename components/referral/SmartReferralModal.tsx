@@ -142,9 +142,34 @@ export function SmartReferralModal({
 
   const handleSubmit = () => {
     const selectedFacName = targetFacility?.name || 'District Hospital Aundh, Pune';
+    const refId = 'REF-' + Date.now().toString().slice(-6);
+    const tokenCode = 'MH-REF-' + Date.now().toString().slice(-4);
+    const createdAt = new Date().toISOString();
+
+    const payloadObj = {
+      type: 'SWASTHYASETU_REFERRAL',
+      tokenCode,
+      referralId: refId,
+      patientId: patient.id,
+      patientName: patient.fullName,
+      patientAbha: patient.abhaId,
+      patientAge: patient.age,
+      patientGender: patient.gender,
+      referringFacility: user?.facilityName || originFacility?.name || 'Velhe Primary Health Centre (PHC)',
+      referringFacilityId: user?.facilityId || originFacility?.id || 'fac-phc-velhe',
+      referringDoctorName: user?.name || 'Dr. Rajesh Deshmukh',
+      targetFacility: selectedFacName,
+      targetFacilityId: targetFacility?.id || 'fac-dh-pune',
+      specialtyRequired: selectedSpecialty,
+      triagePriority: (priority === 'high' ? 'red' : 'green') as 'red' | 'yellow' | 'green',
+      triageScore: priority === 'high' ? 8 : 2,
+      referralReason: reason || 'Specialist Evaluation & Inpatient Management',
+      createdAt,
+    };
+
     const newRef: Referral = {
-      id: 'REF-' + Date.now().toString().slice(-6),
-      tokenCode: 'MH-REF-' + Date.now().toString().slice(-4),
+      id: refId,
+      tokenCode,
       patientId: patient.id,
       patientName: patient.fullName,
       patientAbha: patient.abhaId,
@@ -168,12 +193,12 @@ export function SmartReferralModal({
         respiratoryRate: 16,
         temperature: 37.0,
         consciousLevel: 'alert',
-        recordedAt: new Date().toISOString()
+        recordedAt: createdAt,
       },
-      qrPayload: 'https://swasthyasetu.gov.in/verify/MH-REF-' + Date.now().toString().slice(-4),
-      referralReason: reason,
+      qrPayload: JSON.stringify(payloadObj),
+      referralReason: reason || 'Specialist Evaluation & Inpatient Management',
       status: 'PENDING',
-      createdAt: new Date().toISOString(),
+      createdAt,
     };
     createReferral(newRef);
 

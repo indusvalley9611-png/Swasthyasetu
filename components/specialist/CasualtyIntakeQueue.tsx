@@ -20,7 +20,9 @@ import {
   Building2,
   MapPin,
   Eye,
+  QrCode,
 } from 'lucide-react';
+import { DistrictQRScannerModal } from './DistrictQRScannerModal';
 
 interface CasualtyIntakeQueueProps {
   hospitalName: string;
@@ -43,6 +45,7 @@ export function CasualtyIntakeQueue({
 }: CasualtyIntakeQueueProps) {
   const [filterType, setFilterType] = useState<'ALL' | 'CRITICAL' | 'URGENT' | 'ROUTINE' | 'WALK_INS' | 'REFERRALS'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   // Unified intake queue combining walk-ins and incoming referrals
   const intakeItems = useMemo(() => {
@@ -167,7 +170,15 @@ export function CasualtyIntakeQueue({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setIsScannerOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-teal-950/50 cursor-pointer hover:scale-102"
+          >
+            <QrCode className="w-3.5 h-3.5 text-teal-200" />
+            <span>Scan / Verify QR Pass</span>
+          </button>
+
           {onRegisterWalkIn && (
             <button
               onClick={onRegisterWalkIn}
@@ -359,6 +370,20 @@ export function CasualtyIntakeQueue({
           })
         )}
       </div>
+
+      {/* QR Scanner & Verification Modal */}
+      {isScannerOpen && (
+        <DistrictQRScannerModal
+          hospitalName={hospitalName}
+          referrals={incomingReferrals}
+          patients={patients}
+          onClose={() => setIsScannerOpen(false)}
+          onSelectReferral={(ref) => {
+            setIsScannerOpen(false);
+            onReviewReferral(ref);
+          }}
+        />
+      )}
     </div>
   );
 }

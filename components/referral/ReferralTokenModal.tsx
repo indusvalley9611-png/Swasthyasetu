@@ -18,17 +18,40 @@ import {
 interface ReferralTokenModalProps {
   referral: Referral | null;
   onClose: () => void;
-  onOpenInDistrict?: (referral: Referral) => void;
 }
 
-export function ReferralTokenModal({ referral, onClose, onOpenInDistrict }: ReferralTokenModalProps) {
+export function ReferralTokenModal({ referral, onClose }: ReferralTokenModalProps) {
   const { language, t } = useLanguage();
   const [qrUrl, setQrUrl] = useState<string>('');
 
   useEffect(() => {
     if (referral) {
-      QRCode.toDataURL(referral.qrPayload || referral.tokenCode, {
-        width: 220,
+      // Build canonical structured JSON payload encoding the real referral record
+      const qrData =
+        referral.qrPayload && referral.qrPayload.startsWith('{')
+          ? referral.qrPayload
+          : JSON.stringify({
+              type: 'SWASTHYASETU_REFERRAL',
+              tokenCode: referral.tokenCode,
+              referralId: referral.id,
+              patientId: referral.patientId,
+              patientName: referral.patientName,
+              patientAbha: referral.patientAbha,
+              patientAge: referral.patientAge,
+              patientGender: referral.patientGender,
+              referringFacility: referral.referringFacility,
+              referringFacilityId: referral.referringFacilityId,
+              targetFacility: referral.targetFacility,
+              targetFacilityId: referral.targetFacilityId,
+              specialtyRequired: referral.specialtyRequired,
+              triagePriority: referral.triagePriority,
+              triageScore: referral.triageScore,
+              referralReason: referral.referralReason,
+              createdAt: referral.createdAt,
+            });
+
+      QRCode.toDataURL(qrData, {
+        width: 240,
         margin: 1,
         color: {
           dark: referral.triagePriority === 'red' ? '#881337' : '#0f172a',
@@ -157,14 +180,9 @@ export function ReferralTokenModal({ referral, onClose, onOpenInDistrict }: Refe
                   Dispatched to <strong>{referral.targetFacility}</strong> Casualty Queue
                 </span>
               </div>
-              {onOpenInDistrict && (
-                <button
-                  onClick={() => onOpenInDistrict(referral)}
-                  className="px-2.5 py-1 text-[11px] font-bold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all shrink-0 cursor-pointer shadow-xs"
-                >
-                  View in District &rarr;
-                </button>
-              )}
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200 font-bold">
+                Awaiting Casualty Scan
+              </span>
             </div>
 
             {/* Doctor Signature & Timestamp */}
@@ -182,34 +200,20 @@ export function ReferralTokenModal({ referral, onClose, onOpenInDistrict }: Refe
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            {onOpenInDistrict && (
-              <button
-                onClick={() => onOpenInDistrict(referral)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl shadow-md shadow-blue-500/20 transition-all cursor-pointer hover:scale-102"
-              >
-                <Building2 className="w-4 h-4" />
-                <span>Open in District Specialist Queue &rarr;</span>
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 rounded-lg transition-colors cursor-pointer"
-            >
-              {language === 'mr' ? 'पूर्ण झाले' : 'Done'}
-            </button>
-            <button
-              onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white rounded-lg shadow-xs transition-colors cursor-pointer"
-            >
-              <Printer className="w-4 h-4 text-teal-300" />
-              <span>{language === 'mr' ? 'पावती प्रिंट करा' : 'Print Slip'}</span>
-            </button>
-          </div>
+        <div className="px-6 py-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-950 rounded-lg transition-colors cursor-pointer"
+          >
+            {language === 'mr' ? 'पूर्ण झाले' : 'Done'}
+          </button>
+          <button
+            onClick={handlePrint}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white rounded-lg shadow-xs transition-colors cursor-pointer"
+          >
+            <Printer className="w-4 h-4 text-teal-300" />
+            <span>{language === 'mr' ? 'पावती प्रिंट करा' : 'Print Slip'}</span>
+          </button>
         </div>
       </div>
     </div>

@@ -495,11 +495,6 @@ export default function Home() {
         <ReferralTokenModal
           referral={referralToken}
           onClose={() => setReferralToken(null)}
-          onOpenInDistrict={(ref) => {
-            setReferralToken(null);
-            switchRole('specialist');
-            setActiveNavItem('incoming');
-          }}
         />
       )}
 

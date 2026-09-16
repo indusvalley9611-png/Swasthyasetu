@@ -33,6 +33,7 @@ import { PatientAdmissionModal } from '../specialist/PatientAdmissionModal';
 import { PatientDischargeModal } from '../specialist/PatientDischargeModal';
 import { FacilityTamperAuditView } from '../specialist/FacilityTamperAuditView';
 import { FacilityBloodDrugWidget } from '../specialist/FacilityBloodDrugWidget';
+import { DistrictQRScannerModal } from '../specialist/DistrictQRScannerModal';
 import {
   Users,
   Stethoscope,
@@ -53,6 +54,7 @@ import {
   Plus,
   Radio,
   FileText,
+  QrCode,
 } from 'lucide-react';
 
 export interface SpecialistDashboardProps {
@@ -125,6 +127,7 @@ export function SpecialistDashboard({
     walkInId?: string;
   } | null>(null);
   const [dischargeTargetBed, setDischargeTargetBed] = useState<HospitalBedSlot | null>(null);
+  const [isScanModalOpen, setIsScanModalOpen] = useState(false);
 
   // STRICT SINGLE-FACILITY DATA SCOPING (No district-wide leaks)
   const myHospitalReferrals = useMemo(() => {
@@ -400,6 +403,14 @@ export function SpecialistDashboard({
 
         {/* Quick Actions */}
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setIsScanModalOpen(true)}
+            className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-teal-950/40 cursor-pointer hover:scale-102"
+          >
+            <QrCode className="w-4 h-4 text-teal-200" />
+            <span>Scan QR Pass</span>
+          </button>
+
           {onOpenNewPatient && (
             <button
               onClick={onOpenNewPatient}
@@ -964,6 +975,20 @@ export function SpecialistDashboard({
           dischargingDoctorId={user?.id || 'user-spec-01'}
           onClose={() => setDischargeTargetBed(null)}
           onConfirmDischarge={handleConfirmDischarge}
+        />
+      )}
+
+      {/* District QR Pass Scanner Modal */}
+      {isScanModalOpen && (
+        <DistrictQRScannerModal
+          hospitalName={currentHospitalName}
+          referrals={myHospitalReferrals}
+          patients={patients}
+          onClose={() => setIsScanModalOpen(false)}
+          onSelectReferral={(ref) => {
+            setIsScanModalOpen(false);
+            setReviewReferral(ref);
+          }}
         />
       )}
     </div>
