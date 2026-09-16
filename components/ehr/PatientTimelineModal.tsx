@@ -30,6 +30,7 @@ import {
   FileLock,
   Stethoscope,
   Info,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface PatientTimelineModalProps {
@@ -69,6 +70,11 @@ export function PatientTimelineModal({
   });
 
   const effectivePatient = maskPatientForUnauthorizedView(patient, decision);
+
+  const activeReferral = referrals.find(
+    r => r.patientId === patient.id && !['COMPLETED', 'CANCELLED'].includes(r.status)
+  ) || (patient.activeReferralId ? referrals.find(r => r.id === patient.activeReferralId && !['COMPLETED', 'CANCELLED'].includes(r.status)) : null);
+  const hasActiveReferral = Boolean(activeReferral || (patient?.activeReferralId && !['COMPLETED', 'CANCELLED'].includes(referrals.find(r => r.id === patient?.activeReferralId)?.status || '')));
 
   const hasRoleTimelineAccess =
     decision.allowed ||
@@ -237,15 +243,21 @@ export function PatientTimelineModal({
             >
               <CreditCard className="w-3.5 h-3.5 text-indigo-500" /> ABHA Profile
             </button>
-            <button
-              onClick={() => {
-                onClose();
-                onOpenReferral(patient);
-              }}
-              className="px-3 py-1.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-xs transition-all flex items-center gap-1.5"
-            >
-              <Send className="w-3.5 h-3.5" /> Refer
-            </button>
+            {hasActiveReferral ? (
+              <span className="px-2.5 py-1.5 text-xs font-bold text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-amber-600" /> Referred
+              </span>
+            ) : (
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenReferral(patient);
+                }}
+                className="px-3 py-1.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-xs transition-all flex items-center gap-1.5"
+              >
+                <Send className="w-3.5 h-3.5" /> Refer
+              </button>
+            )}
             <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
             <button
               onClick={onClose}

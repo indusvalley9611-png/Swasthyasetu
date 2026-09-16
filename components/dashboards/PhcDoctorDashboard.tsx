@@ -100,6 +100,13 @@ export function PhcDoctorDashboard({
     ? maskPatientForUnauthorizedView(selectedPatient, accessDecision)
     : selectedPatient;
 
+  const activeReferral = selectedPatient
+    ? referrals.find(
+        r => r.patientId === selectedPatient.id && !['COMPLETED', 'CANCELLED'].includes(r.status)
+      ) || (selectedPatient.activeReferralId ? referrals.find(r => r.id === selectedPatient.activeReferralId && !['COMPLETED', 'CANCELLED'].includes(r.status)) : null)
+    : null;
+  const hasActiveReferral = Boolean(activeReferral || (selectedPatient?.activeReferralId && !['COMPLETED', 'CANCELLED'].includes(referrals.find(r => r.id === selectedPatient?.activeReferralId)?.status || '')));
+
   // Audit logging for access attempts
   const lastLoggedRef = React.useRef<string>('');
   React.useEffect(() => {
@@ -496,13 +503,29 @@ export function PhcDoctorDashboard({
                   <Activity className="w-3.5 h-3.5" />
                   <span>EHR Timeline</span>
                 </button>
-                <button
-                  onClick={() => onOpenReferral(selectedPatient)}
-                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs hover:shadow-md transition-all flex items-center gap-1.5"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Create Referral</span>
-                </button>
+                {hasActiveReferral ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-2.5 py-1.5 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 font-bold text-xs rounded-lg border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Referred</span>
+                    </span>
+                    <button
+                      onClick={() => onOpenPatientTimeline(selectedPatient)}
+                      className="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-bold rounded-lg border border-blue-200 dark:border-blue-800 transition-colors flex items-center gap-1.5"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>View Referral</span>
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => onOpenReferral(selectedPatient)}
+                    className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs hover:shadow-md transition-all flex items-center gap-1.5"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Create Referral</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -521,12 +544,26 @@ export function PhcDoctorDashboard({
                     </p>
                   </div>
                   {effectivePatient.isHighRiskPregnancy && (
-                    <button
-                      onClick={() => onOpenReferral(selectedPatient)}
-                      className="text-[11px] font-bold text-amber-900 dark:text-amber-300 hover:underline shrink-0"
-                    >
-                      Refer Patient &rarr;
-                    </button>
+                    hasActiveReferral ? (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="px-2 py-0.5 bg-amber-200/60 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 font-bold text-[11px] rounded">
+                          Referred
+                        </span>
+                        <button
+                          onClick={() => onOpenPatientTimeline(selectedPatient)}
+                          className="text-[11px] font-bold text-amber-900 dark:text-amber-300 hover:underline shrink-0"
+                        >
+                          View Referral &rarr;
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => onOpenReferral(selectedPatient)}
+                        className="text-[11px] font-bold text-amber-900 dark:text-amber-300 hover:underline shrink-0"
+                      >
+                        Refer Patient &rarr;
+                      </button>
+                    )
                   )}
                 </div>
 
@@ -581,17 +618,33 @@ export function PhcDoctorDashboard({
                         <span className="text-[10px] text-slate-400 font-medium">District Coordination</span>
                       </div>
 
-                      {effectivePatient.activeReferralId ? (
-                        <div className="p-3 rounded-lg border border-amber-200 dark:border-amber-900/40 bg-amber-50/40 dark:bg-amber-950/20 space-y-1.5">
+                      {hasActiveReferral && activeReferral ? (
+                        <div className="p-3 rounded-lg border border-amber-200 dark:border-amber-900/40 bg-amber-50/40 dark:bg-amber-950/20 space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="font-bold text-xs text-amber-900 dark:text-amber-200">Active Casualty Referral</span>
-                            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">EN ROUTE</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="px-2 py-0.5 rounded-md bg-amber-200/80 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 font-extrabold text-[10px]">
+                                Referred
+                              </span>
+                              <span className="font-bold text-xs text-amber-900 dark:text-amber-200">Active Casualty Referral</span>
+                            </div>
+                            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 uppercase">
+                              {activeReferral.status || 'EN ROUTE'}
+                            </span>
                           </div>
                           <p className="text-[11px] text-slate-600 dark:text-slate-300">
-                            Referred to: <strong>District Hospital Aundh</strong> (Obstetrics & Gynecology)
+                            Referred to: <strong>{activeReferral.targetFacility}</strong> ({activeReferral.specialtyRequired})
                           </p>
-                          <div className="text-[10px] text-slate-400">
-                            Token: <span className="font-mono font-bold">{effectivePatient.activeReferralId}</span>
+                          <div className="flex items-center justify-between pt-1 border-t border-amber-200/50 dark:border-amber-900/30">
+                            <div className="text-[10px] text-slate-400 font-mono font-bold">
+                              Token: {activeReferral.tokenCode || activeReferral.id}
+                            </div>
+                            <button
+                              onClick={() => onOpenPatientTimeline(selectedPatient)}
+                              className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold rounded-md shadow-2xs transition-colors flex items-center gap-1"
+                            >
+                              <Eye className="w-3 h-3" />
+                              View Referral
+                            </button>
                           </div>
                         </div>
                       ) : (

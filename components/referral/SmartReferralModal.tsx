@@ -23,7 +23,11 @@ export function SmartReferralModal({
 }: SmartReferralModalProps) {
   const { language } = useLanguage();
   const { user } = useAuth();
-  const { createReferral } = useSync();
+  const { referrals, createReferral } = useSync();
+
+  const existingActiveReferral = referrals.find(
+    r => r.patientId === patient.id && !['COMPLETED', 'CANCELLED'].includes(r.status)
+  ) || (patient.activeReferralId ? referrals.find(r => r.id === patient.activeReferralId && !['COMPLETED', 'CANCELLED'].includes(r.status)) : null);
 
   const [step, setStep] = useState<1 | 2>(1);
 
@@ -31,6 +35,67 @@ export function SmartReferralModal({
   const [selectedFacility, setSelectedFacility] = useState('District Hospital Aundh, Pune');
   const [priority, setPriority] = useState<'routine' | 'high'>(patient.isHighRiskPregnancy ? 'high' : 'routine');
   const [reason, setReason] = useState(patient.isHighRiskPregnancy ? 'High risk pregnancy with severe anemia. Needs immediate secondary care observation.' : '');
+
+  if (existingActiveReferral) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 sm:p-6 animate-in fade-in duration-300">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl max-w-lg w-full flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700 p-6 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div className="flex items-center gap-2.5">
+              <span className="px-2.5 py-1 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 font-bold text-xs rounded-lg border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-amber-600" />
+                Referred
+              </span>
+              <h3 className="font-black text-slate-900 dark:text-white text-base">Active Referral In Progress</h3>
+            </div>
+            <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-2xl p-4 space-y-2.5">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-slate-500 font-semibold">Patient:</span>
+              <span className="font-bold text-slate-900 dark:text-white">{patient.fullName}</span>
+            </div>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-slate-500 font-semibold">ABHA ID:</span>
+              <span className="font-mono text-slate-700 dark:text-slate-300">{patient.abhaId}</span>
+            </div>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-slate-500 font-semibold">Referral Token:</span>
+              <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{existingActiveReferral.tokenCode || existingActiveReferral.id}</span>
+            </div>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-slate-500 font-semibold">Target Facility:</span>
+              <span className="font-bold text-slate-900 dark:text-white">{existingActiveReferral.targetFacility}</span>
+            </div>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-slate-500 font-semibold">Specialty:</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">{existingActiveReferral.specialtyRequired}</span>
+            </div>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-slate-500 font-semibold">Status:</span>
+              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 font-extrabold text-[10px] uppercase">
+                {existingActiveReferral.status}
+              </span>
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
+            This patient already has an active referral. The system prevents duplicate active referrals for the same patient.
+          </p>
+
+          <button
+            onClick={onClose}
+            className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const handleSubmit = () => {
     const newRef: Referral = {

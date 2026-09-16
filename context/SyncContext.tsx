@@ -281,7 +281,10 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
   const createReferral = (newRef: Referral) => {
     const patient = patients.find(p => p.id === newRef.patientId);
-    if (patient?.activeReferralId) {
+    const existingActiveReferral = referrals.find(
+      r => r.patientId === newRef.patientId && !['COMPLETED', 'CANCELLED'].includes(r.status)
+    );
+    if (patient?.activeReferralId || existingActiveReferral) {
       showToast('Patient already has an active referral.');
       return;
     }

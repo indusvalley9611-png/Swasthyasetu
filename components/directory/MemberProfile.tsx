@@ -25,7 +25,9 @@ export default function MemberProfile({ patient, role, onBack, onOpenAction }: M
   const [isCancelModalOpen, setIsCancelModalOpen] = React.useState(false);
   const [cancelReason, setCancelReason] = React.useState('');
   
-  const activeReferral = patient.activeReferralId ? referrals.find(r => r.id === patient.activeReferralId) : null;
+  const activeReferral = referrals.find(
+    r => r.patientId === patient.id && !['COMPLETED', 'CANCELLED'].includes(r.status)
+  ) || (patient.activeReferralId ? referrals.find(r => r.id === patient.activeReferralId && !['COMPLETED', 'CANCELLED'].includes(r.status)) : null);
   const isAdmitted = activeReferral?.status === 'ADMITTED';
   const isLocked = !!activeReferral && (role === 'asha' || role === 'phc_doctor'); // Strict RBAC lock: referring workers cannot edit if referral is actively in flight
 
@@ -398,12 +400,18 @@ export default function MemberProfile({ patient, role, onBack, onOpenAction }: M
           </button>
           
           {activeReferral ? (
-            <button 
-              onClick={() => onOpenAction('REFERRAL_STATUS')}
-              className="px-6 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm font-bold rounded-xl transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-2"
-            >
-              <Activity className="w-4 h-4" /> View Referral Status
-            </button>
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-2 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 text-xs font-bold rounded-xl border border-amber-200 dark:border-amber-800 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                Referred
+              </span>
+              <button 
+                onClick={() => onOpenAction('REFERRAL_STATUS')}
+                className="px-5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm font-bold rounded-xl transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-2"
+              >
+                <Activity className="w-4 h-4 text-blue-600" /> View Referral
+              </button>
+            </div>
           ) : (
             <button 
               onClick={() => onOpenAction('REFERRAL')}

@@ -45,7 +45,7 @@ export function AshaDashboard({
 }: AshaDashboardProps) {
   const { language, t } = useLanguage();
   const { user } = useAuth();
-  const { patients, addClinicalEncounter, isSimulatedOffline, syncQueue } = useSync();
+  const { patients, referrals, addClinicalEncounter, isSimulatedOffline, syncQueue } = useSync();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPatientForScreening, setSelectedPatientForScreening] = useState<Patient | null>(null);
@@ -458,14 +458,32 @@ export function AshaDashboard({
                         <Stethoscope className="w-3.5 h-3.5" />
                         <span className="hidden sm:inline">{language === 'mr' ? 'तपासणी' : 'Screen'}</span>
                       </button>
-                      <button
-                        onClick={() => onOpenReferral(pat)}
-                        className="px-2.5 py-1.5 text-xs font-bold bg-rose-700 hover:bg-rose-800 text-white rounded-lg shadow transition-colors flex items-center gap-1"
-                        title="Refer Patient"
-                      >
-                        <Send className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">{language === 'mr' ? 'रेफर' : 'Refer'}</span>
-                      </button>
+                      {Boolean(
+                        pat.activeReferralId ||
+                        referrals.some(r => r.patientId === pat.id && !['COMPLETED', 'CANCELLED'].includes(r.status))
+                      ) ? (
+                        <div className="flex items-center gap-1">
+                          <span className="px-2 py-1 text-[11px] font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 rounded-lg border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-amber-600" />
+                            <span>{language === 'mr' ? 'रेफर केलेले' : 'Referred'}</span>
+                          </span>
+                          <button
+                            onClick={() => onOpenPatientTimeline(pat)}
+                            className="px-2 py-1 text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                          >
+                            <span>{language === 'mr' ? 'पहा' : 'View'}</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => onOpenReferral(pat)}
+                          className="px-2.5 py-1.5 text-xs font-bold bg-rose-700 hover:bg-rose-800 text-white rounded-lg shadow transition-colors flex items-center gap-1"
+                          title="Refer Patient"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">{language === 'mr' ? 'रेफर' : 'Refer'}</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 );

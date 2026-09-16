@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import { useSync } from '@/context/SyncContext';
 import { Patient } from '@/lib/types';
-import { Search, X, CreditCard, History, Send, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Search, X, CreditCard, History, Send, ShieldCheck, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 interface GlobalPatientSearchModalProps {
   onClose: () => void;
@@ -20,7 +20,7 @@ export function GlobalPatientSearchModal({
   onOpenReferral,
 }: GlobalPatientSearchModalProps) {
   const { language, t } = useLanguage();
-  const { patients } = useSync();
+  const { patients, referrals } = useSync();
   const [searchTerm, setSearchTerm] = useState('');
 
   const filtered = patients.filter((p) => {
@@ -120,16 +120,37 @@ export function GlobalPatientSearchModal({
                     <span>View EHR</span>
                   </button>
 
-                  <button
-                    onClick={() => {
-                      onOpenReferral(patient);
-                      onClose();
-                    }}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-rose-700 hover:bg-rose-800 text-white rounded-lg shadow-xs transition-colors"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>Refer</span>
-                  </button>
+                  {Boolean(
+                    patient.activeReferralId ||
+                    referrals.some(r => r.patientId === patient.id && !['COMPLETED', 'CANCELLED'].includes(r.status))
+                  ) ? (
+                    <div className="inline-flex items-center gap-1.5">
+                      <span className="px-2.5 py-1.5 text-xs font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 rounded-lg border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Referred</span>
+                      </span>
+                      <button
+                        onClick={() => {
+                          onOpenPatientTimeline(patient);
+                          onClose();
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                      >
+                        <span>View Referral</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        onOpenReferral(patient);
+                        onClose();
+                      }}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-rose-700 hover:bg-rose-800 text-white rounded-lg shadow-xs transition-colors"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Refer</span>
+                    </button>
+                  )}
                 </div>
               </div>
             ))
