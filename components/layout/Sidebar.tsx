@@ -319,8 +319,8 @@ export function Sidebar({
       case 'pharmacist':
         return [
           {
-            titleEn: 'Workspace',
-            titleMr: 'कार्यक्षेत्र',
+            titleEn: 'Pharmacy Workspace',
+            titleMr: 'औषधालय कार्यक्षेत्र',
             items: [
               {
                 id: 'dashboard',
@@ -329,34 +329,10 @@ export function Sidebar({
                 icon: Pill,
               },
               {
-                id: 'action:stock',
+                id: 'medicine_inventory',
                 labelEn: 'Medicine Inventory',
                 labelMr: 'औषध साठा नोंदवही',
                 icon: Package,
-                isAction: true,
-                actionKey: 'stock',
-              },
-              {
-                id: 'directory',
-                labelEn: 'Prescriptions Register',
-                labelMr: 'औषध वितरण यादी',
-                icon: ClipboardList,
-              },
-            ],
-          },
-          {
-            titleEn: 'Resources',
-            titleMr: 'संसाधने',
-            items: [
-              {
-                id: 'link:maha_aushadhi',
-                labelEn: 'MahaAushadhi',
-                labelMr: 'महा औषधी',
-                icon: Flame,
-                isExternalLink: true,
-                href: '/maha-aushadhi',
-                badge: activeEmergencyTransfersCount > 0 ? activeEmergencyTransfersCount : undefined,
-                badgeColor: 'bg-rose-600 text-white animate-pulse',
               },
               {
                 id: 'medicine_requests',

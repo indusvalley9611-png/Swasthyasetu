@@ -132,6 +132,8 @@ export function AppShell({
           return language === 'mr' ? 'महा औषधी आपत्कालीन नेटवर्क' : 'MahaAushadhi Emergency Network';
         case 'medicine_requests':
           return language === 'mr' ? 'औषध मागण्या' : 'Medicine Requests';
+        case 'medicine_inventory':
+          return language === 'mr' ? 'औषध साठा नोंदवही' : 'Medicine Inventory';
         default:
           return 'Dashboard';
       }

@@ -15,6 +15,7 @@ import { AshaDashboard } from '@/components/dashboards/AshaDashboard';
 import { NurseDashboard } from '@/components/dashboards/NurseDashboard';
 import { PharmacistDashboard } from '@/components/dashboards/PharmacistDashboard';
 import { MedicineRequestsModule } from '@/components/maha-aushadhi/MedicineRequestsModule';
+import { MedicineInventoryView } from '@/components/inventory/MedicineInventoryView';
 import { Users, Stethoscope, ClipboardList, ShieldCheck, Flame } from 'lucide-react';
 
 interface WorkerWorkspaceProps {
@@ -25,8 +26,8 @@ interface WorkerWorkspaceProps {
   onOpenReferral: (patient: Patient) => void;
   onOpenReferralToken?: (referral: Referral) => void;
   onOpenRapidScreening?: (patient: Patient) => void;
-  activeSubView?: 'directory' | 'dashboard' | 'medicine_requests';
-  onSubViewChange?: (view: 'directory' | 'dashboard' | 'medicine_requests') => void;
+  activeSubView?: 'directory' | 'dashboard' | 'medicine_requests' | 'medicine_inventory';
+  onSubViewChange?: (view: 'directory' | 'dashboard' | 'medicine_requests' | 'medicine_inventory') => void;
 }
 
 export default function WorkerWorkspace({
@@ -65,12 +66,12 @@ export default function WorkerWorkspace({
 
   const [selectedMember, setSelectedMember] = useState<Patient | null>(null);
   const [isRapidScreeningOpen, setIsRapidScreeningOpen] = useState(false);
-  const [internalSubView, setInternalSubView] = useState<'directory' | 'dashboard' | 'medicine_requests'>(
+  const [internalSubView, setInternalSubView] = useState<'directory' | 'dashboard' | 'medicine_requests' | 'medicine_inventory'>(
     externalSubView || 'directory'
   );
 
   const activeSubView = externalSubView !== undefined ? externalSubView : internalSubView;
-  const setActiveSubView = (v: 'directory' | 'dashboard' | 'medicine_requests') => {
+  const setActiveSubView = (v: 'directory' | 'dashboard' | 'medicine_requests' | 'medicine_inventory') => {
     setInternalSubView(v);
     if (onSubViewChange) onSubViewChange(v);
   };
@@ -176,6 +177,11 @@ export default function WorkerWorkspace({
       {/* Medicine Requests Module — Inter-facility medicine request management */}
       {activeSubView === 'medicine_requests' && (
         <MedicineRequestsModule />
+      )}
+
+      {/* Medicine Inventory View — Comprehensive stock ledger, buffer, batch, expiry, refill/supply */}
+      {activeSubView === 'medicine_inventory' && (
+        <MedicineInventoryView />
       )}
 
     </div>
