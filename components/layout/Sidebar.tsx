@@ -1,46 +1,33 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { useSync } from '@/context/SyncContext';
 import { Role } from '@/lib/types';
 import {
-  HeartPulse,
-  Users,
-  Stethoscope,
-  Building2,
-  BarChart3,
-  Activity,
-  ClipboardList,
-  Search,
-  PlusCircle,
-  Pill,
-  ShieldAlert,
-  Flame,
-  Globe,
-  Compass,
-  Clock,
-  FolderCheck,
-  Share2,
-  X,
-  LogOut,
-  Moon,
-  Sun,
-  Languages,
-  Wifi,
-  WifiOff,
-  RefreshCw,
+  FolderHeart,
+  HeartHandshake,
+  Baby,
+  BedDouble,
+  Syringe,
+  Tablets,
+  ShieldCheck,
+  Siren,
+  ArrowLeftRight,
+  FileClock,
+  LayoutDashboard,
+  Hospital,
   MapPin,
-  FileText,
-  AlertTriangle,
-  Package,
-  Award,
   Sparkles,
   Radio,
-  Milestone,
-  Inbox,
+  Pill,
+  Sun,
+  Moon,
+  Languages,
+  LogOut,
+  X,
 } from 'lucide-react';
 
 export interface SidebarProps {
@@ -78,35 +65,46 @@ interface NavGroupDef {
   items: NavItemDef[];
 }
 
-
 const heartbeatKeyframes = `
-@keyframes heartbeat {
+@keyframes dualSystoleHeartbeat {
   0% { transform: scale(1); }
-  14% { transform: scale(1.14); }
-  28% { transform: scale(1); }
-  42% { transform: scale(1.08); }
+  14% { transform: scale(1.15); }
+  28% { transform: scale(1.02); }
+  42% { transform: scale(1.10); }
   70% { transform: scale(1); }
   100% { transform: scale(1); }
 }
 @media (prefers-reduced-motion: no-preference) {
   .animate-heartbeat {
-    animation: heartbeat 2.2s ease-in-out infinite;
+    animation: dualSystoleHeartbeat 2.2s ease-in-out infinite;
   }
 }
 `;
 
-function getInitials(name?: string): string {
-  if (!name) return 'U';
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+function MedicalHeartbeatIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      {/* Heart Contour */}
+      <path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572" opacity="0.35" />
+      {/* Active P-Q-R-S-T ECG Live Trace */}
+      <path d="M3 12h3.5l1.5-3 2 6 2-7.5 2 9 1.5-4.5h4.5" strokeWidth="2.2" />
+    </svg>
+  );
 }
 
 function NavTooltip({ text }: { text: string }) {
   return (
     <div
       role="tooltip"
-      className="pointer-events-none absolute left-full ml-2.5 px-2.5 py-1 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-xs font-semibold rounded-md shadow-lg whitespace-nowrap opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 z-50 flex items-center"
+      className="pointer-events-none absolute left-full ml-3 px-2.5 py-1.5 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-semibold rounded-lg shadow-xl whitespace-nowrap opacity-0 -translate-x-1.5 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 z-50 flex items-center border border-slate-700/50 dark:border-slate-200"
     >
       <span className="absolute -left-1 top-1/2 -translate-y-1/2 border-4 border-transparent border-r-slate-900 dark:border-r-slate-100" />
       {text}
@@ -133,11 +131,8 @@ export function Sidebar({
   const { language, toggleLanguage } = useLanguage();
   const {
     effectiveOnline,
-    isSimulatedOffline,
-    toggleSimulatedOffline,
     isSyncing,
     syncQueue,
-    triggerManualSync,
     referrals,
     stockTransfers,
   } = useSync();
@@ -214,63 +209,62 @@ export function Sidebar({
 
   const roleTheme = getRoleTheme(role);
 
-  // Generate standardized, uncluttered navigation hierarchy per role
+  // Generate standardized navigation hierarchy with full feature names and modern healthcare icons
   const getNavGroups = (): NavGroupDef[] => {
     switch (role) {
       case 'asha':
         return [
           {
-            titleEn: 'Workspace',
-            titleMr: 'कार्यक्षेत्र',
+            titleEn: 'Community Health',
+            titleMr: 'समुदाय आरोग्य',
             items: [
               {
                 id: 'directory',
-                labelEn: 'Community Patients',
-                labelMr: 'गाव समुदाय सदस्य',
-                icon: Users,
+                labelEn: 'Community Patients & EHR',
+                labelMr: 'गाव समुदाय सदस्य व EHR',
+                icon: FolderHeart,
               },
               {
                 id: 'dashboard',
-                labelEn: 'High-Risk Mothers',
-                labelMr: 'HRP वॉचलिस्ट',
-                icon: ClipboardList,
+                labelEn: 'Maternal Health & Screening',
+                labelMr: 'HRP माता आरोग्य तपासणी',
+                icon: Baby,
               },
             ],
           },
         ];
 
-
       case 'phc_doctor':
         return [
           {
-            titleEn: 'Workspace',
-            titleMr: 'कार्यक्षेत्र',
+            titleEn: 'Clinical Workspace',
+            titleMr: 'क्लिनिकल कार्यक्षेत्र',
             items: [
               {
                 id: 'directory',
-                labelEn: 'Patients Directory',
-                labelMr: 'रुग्ण निर्देशिका',
-                icon: Stethoscope,
+                labelEn: 'Patients Directory & EHR',
+                labelMr: 'रुग्ण निर्देशिका व EHR',
+                icon: FolderHeart,
               },
             ],
           },
           {
-            titleEn: 'Resources',
-            titleMr: 'संसाधने',
+            titleEn: 'Hospital Resources',
+            titleMr: 'रुग्णालय संसाधने',
             items: [
               {
                 id: 'action:beds',
-                labelEn: 'Hospital Capacity',
-                labelMr: 'रुग्णालय खाटा क्षमता',
-                icon: Building2,
+                labelEn: 'Hospital Capacity & Beds',
+                labelMr: 'रुग्णालय खाटा व ICU क्षमता',
+                icon: BedDouble,
                 isAction: true,
                 actionKey: 'beds',
               },
               {
                 id: 'link:maha_aushadhi',
-                labelEn: 'MahaAushadhi',
-                labelMr: 'महा औषधी',
-                icon: Flame,
+                labelEn: 'MahaAushadhi Emergency',
+                labelMr: 'महा औषधी आपत्कालीन नेटवर्क',
+                icon: Syringe,
                 isExternalLink: true,
                 href: '/maha-aushadhi',
                 badge: activeEmergencyTransfersCount > 0 ? activeEmergencyTransfersCount : undefined,
@@ -278,23 +272,23 @@ export function Sidebar({
               },
               {
                 id: 'medicine_requests',
-                labelEn: 'Medicine Requests',
-                labelMr: 'औषध मागण्या',
-                icon: Inbox,
+                labelEn: 'Medicine Requests & Dispatch',
+                labelMr: 'औषध मागण्या व पुरवठा',
+                icon: Tablets,
                 badge: pendingIncomingTransfersCount > 0 ? pendingIncomingTransfersCount : undefined,
                 badgeColor: 'bg-purple-600 text-white animate-pulse',
               },
             ],
           },
           {
-            titleEn: 'Intelligence',
-            titleMr: 'माहिती व सुरक्षा',
+            titleEn: 'Intelligence & Governance',
+            titleMr: 'सुरक्षा व प्रशासन',
             items: [
               {
                 id: 'action:audit',
-                labelEn: 'Audit Trail',
+                labelEn: 'Audit Trail & Compliance',
                 labelMr: 'सुरक्षा व ऑडिट ट्रेल',
-                icon: ShieldAlert,
+                icon: ShieldCheck,
                 isAction: true,
                 actionKey: 'audit',
               },
@@ -302,38 +296,37 @@ export function Sidebar({
           },
         ];
 
-
       case 'nurse':
         return [
           {
-            titleEn: 'Workspace',
-            titleMr: 'कार्यक्षेत्र',
+            titleEn: 'Clinical Workspace',
+            titleMr: 'क्लिनिकल कार्यक्षेत्र',
             items: [
               {
                 id: 'directory',
-                labelEn: 'Patients Directory',
-                labelMr: 'रुग्ण व ट्रायज यादी',
-                icon: Stethoscope,
+                labelEn: 'Patients Directory & EHR',
+                labelMr: 'रुग्ण निर्देशिका व ट्रायज',
+                icon: FolderHeart,
               },
             ],
           },
           {
-            titleEn: 'Resources',
-            titleMr: 'संसाधने',
+            titleEn: 'Hospital Resources',
+            titleMr: 'रुग्णालय संसाधने',
             items: [
               {
                 id: 'action:beds',
-                labelEn: 'Hospital Capacity',
-                labelMr: 'खाटा उपलब्धता',
-                icon: Building2,
+                labelEn: 'Hospital Capacity & Beds',
+                labelMr: 'खाटा व वॉर्ड उपलब्धता',
+                icon: BedDouble,
                 isAction: true,
                 actionKey: 'beds',
               },
               {
                 id: 'link:maha_aushadhi',
-                labelEn: 'MahaAushadhi',
-                labelMr: 'महा औषधी',
-                icon: Pill,
+                labelEn: 'MahaAushadhi Emergency',
+                labelMr: 'महा औषधी आपत्कालीन',
+                icon: Syringe,
                 isExternalLink: true,
                 href: '/maha-aushadhi',
                 badge: activeEmergencyTransfersCount > 0 ? activeEmergencyTransfersCount : undefined,
@@ -341,9 +334,9 @@ export function Sidebar({
               },
               {
                 id: 'medicine_requests',
-                labelEn: 'Medicine Requests',
-                labelMr: 'औषध मागण्या',
-                icon: Inbox,
+                labelEn: 'Medicine Requests & Dispatch',
+                labelMr: 'औषध मागण्या व पुरवठा',
+                icon: Tablets,
                 badge: pendingIncomingTransfersCount > 0 ? pendingIncomingTransfersCount : undefined,
                 badgeColor: 'bg-purple-600 text-white animate-pulse',
               },
@@ -351,30 +344,29 @@ export function Sidebar({
           },
         ];
 
-
       case 'pharmacist':
         return [
           {
-            titleEn: 'Pharmacy Workspace',
+            titleEn: 'Pharmacy Operations',
             titleMr: 'औषधालय कार्यक्षेत्र',
             items: [
               {
                 id: 'dashboard',
-                labelEn: 'Pharmacy Console',
+                labelEn: 'Pharmacy Console & Dispatches',
                 labelMr: 'औषधालय कन्सोल',
-                icon: Pill,
+                icon: Tablets,
               },
               {
                 id: 'medicine_inventory',
-                labelEn: 'Medicine Inventory',
+                labelEn: 'Medicine Inventory & Buffer',
                 labelMr: 'औषध साठा नोंदवही',
-                icon: Package,
+                icon: Syringe,
               },
               {
                 id: 'medicine_requests',
-                labelEn: 'Medicine Requests',
-                labelMr: 'औषध मागण्या',
-                icon: Inbox,
+                labelEn: 'Medicine Requests & Dispatch',
+                labelMr: 'औषध मागण्या व वाटप',
+                icon: ArrowLeftRight,
                 badge: pendingIncomingTransfersCount > 0 ? pendingIncomingTransfersCount : undefined,
                 badgeColor: 'bg-purple-600 text-white animate-pulse',
               },
@@ -385,52 +377,52 @@ export function Sidebar({
       case 'specialist':
         return [
           {
-            titleEn: 'Workspace',
-            titleMr: 'कार्यक्षेत्र',
+            titleEn: 'Clinical Triage & Care',
+            titleMr: 'क्लिनिकल ट्रायज व रुग्णसेवा',
             items: [
               {
                 id: 'incoming',
-                labelEn: 'Casualty Referrals',
-                labelMr: 'आगमन कॅज्युअल्टी संदर्भ',
-                icon: Activity,
+                labelEn: 'Casualty & Inbound Referrals',
+                labelMr: 'कॅज्युअल्टी व आगमन संदर्भ',
+                icon: Siren,
                 badge: pendingSpecialistReferralsCount > 0 ? pendingSpecialistReferralsCount : undefined,
                 badgeColor: 'bg-blue-600 text-white',
               },
               {
                 id: 'admitted',
-                labelEn: 'Inpatient Admissions',
+                labelEn: 'Inpatient Admissions & Wards',
                 labelMr: 'दाखल रुग्ण व वॉर्ड',
-                icon: Users,
+                icon: BedDouble,
               },
               {
                 id: 'escalated',
-                labelEn: 'Tertiary Escalations',
+                labelEn: 'Tertiary State Escalations',
                 labelMr: 'राज्य रुग्णालय संदर्भ',
-                icon: Share2,
+                icon: ArrowLeftRight,
               },
               {
                 id: 'counter_referral',
-                labelEn: 'Counter-Referrals',
+                labelEn: 'Counter-Referrals & Follow-Up',
                 labelMr: 'उलटा संदर्भ व पाठपुरावा',
-                icon: FolderCheck,
+                icon: HeartHandshake,
               },
               {
                 id: 'history',
-                labelEn: 'Case History Archive',
-                labelMr: 'संदर्भ इतिहास',
-                icon: Clock,
+                labelEn: 'Clinical Records & Case History',
+                labelMr: 'संदर्भ व वैद्यकीय इतिहास',
+                icon: FileClock,
               },
             ],
           },
           {
-            titleEn: 'Resources',
-            titleMr: 'संसाधने',
+            titleEn: 'Hospital Resources',
+            titleMr: 'रुग्णालय संसाधने',
             items: [
               {
                 id: 'action:beds',
-                labelEn: 'Hospital Capacity',
+                labelEn: 'Hospital Capacity & Beds',
                 labelMr: 'जिल्हा खाटा व ICU',
-                icon: Building2,
+                icon: Hospital,
                 isAction: true,
                 actionKey: 'beds',
               },
@@ -438,15 +430,15 @@ export function Sidebar({
                 id: 'action:stock',
                 labelEn: 'Critical Drug Buffer',
                 labelMr: 'महत्त्वाचा औषध साठा',
-                icon: Pill,
+                icon: Tablets,
                 isAction: true,
                 actionKey: 'stock',
               },
               {
                 id: 'link:maha_aushadhi',
-                labelEn: 'MahaAushadhi',
-                labelMr: 'महा औषधी',
-                icon: Flame,
+                labelEn: 'MahaAushadhi Emergency',
+                labelMr: 'महा औषधी आपत्कालीन',
+                icon: Syringe,
                 isExternalLink: true,
                 href: '/maha-aushadhi',
                 badge: activeEmergencyTransfersCount > 0 ? activeEmergencyTransfersCount : undefined,
@@ -455,14 +447,14 @@ export function Sidebar({
             ],
           },
           {
-            titleEn: 'Intelligence',
-            titleMr: 'माहिती व सुरक्षा',
+            titleEn: 'Governance & Security',
+            titleMr: 'प्रशासन व सुरक्षा',
             items: [
               {
                 id: 'action:audit',
-                labelEn: 'Audit Trail',
+                labelEn: 'Audit Trail & Compliance',
                 labelMr: 'सुरक्षा व ऑडिट ट्रेल',
-                icon: ShieldAlert,
+                icon: ShieldCheck,
                 isAction: true,
                 actionKey: 'audit',
               },
@@ -478,51 +470,51 @@ export function Sidebar({
             items: [
               {
                 id: 'overview',
-                labelEn: 'Command Center',
-                labelMr: 'नियंत्रण कक्ष आढावा',
-                icon: BarChart3,
+                labelEn: 'District Command Center',
+                labelMr: 'जिल्हा नियंत्रण कक्ष',
+                icon: LayoutDashboard,
               },
               {
                 id: 'map',
-                labelEn: 'Facility Map',
-                labelMr: 'सुविधा नकाशा (GIS)',
+                labelEn: 'Facility & GIS Map',
+                labelMr: 'आरोग्य सुविधा नकाशा (GIS)',
                 icon: MapPin,
               },
               {
                 id: 'capacity',
-                labelEn: 'Hospital Capacity',
+                labelEn: 'Hospital Capacity & Beds',
                 labelMr: 'खाटा व ICU क्षमता',
-                icon: Building2,
+                icon: Hospital,
               },
             ],
           },
           {
-            titleEn: 'Live Tracking',
+            titleEn: 'Live Intelligence Tracking',
             titleMr: 'थेट स्थिती ट्रॅकिंग',
             items: [
               {
                 id: 'track_referrals',
-                labelEn: 'Track Referrals',
+                labelEn: 'Track Referrals & Triage',
                 labelMr: 'रुग्ण संदर्भ ट्रॅकिंग',
-                icon: Users,
+                icon: ArrowLeftRight,
               },
               {
                 id: 'track_patients',
-                labelEn: 'Track Patients',
-                labelMr: 'रुग्ण प्रवास व अहवाल',
-                icon: Activity,
+                labelEn: 'Track Patients & EHR',
+                labelMr: 'रुग्ण प्रवास व EHR',
+                icon: FolderHeart,
               },
               {
                 id: 'track_medicine',
-                labelEn: 'Track Medicine',
+                labelEn: 'Track Medicine & Buffer',
                 labelMr: 'औषध साठा ट्रॅकिंग',
-                icon: Pill,
+                icon: Tablets,
               },
               {
                 id: 'link:maha_aushadhi',
-                labelEn: 'MahaAushadhi',
-                labelMr: 'महा औषधी',
-                icon: Flame,
+                labelEn: 'MahaAushadhi Emergency',
+                labelMr: 'महा औषधी आपत्कालीन',
+                icon: Syringe,
                 isExternalLink: true,
                 href: '/maha-aushadhi',
                 badge: activeEmergencyTransfersCount > 0 ? activeEmergencyTransfersCount : undefined,
@@ -531,14 +523,14 @@ export function Sidebar({
             ],
           },
           {
-            titleEn: 'Operations & Response',
+            titleEn: 'Operations & Escalations',
             titleMr: 'रुग्ण सेवा व रसद',
             items: [
               {
                 id: 'tertiary',
                 labelEn: 'Referral Risk Queue',
                 labelMr: 'रुग्ण संदर्भ व ट्रायज',
-                icon: Users,
+                icon: Siren,
                 badge: (referrals || []).filter((r) => r.status === 'PENDING').length > 0 ? (referrals || []).filter((r) => r.status === 'PENDING').length : undefined,
                 badgeColor: 'bg-blue-600 text-white',
               },
@@ -550,7 +542,7 @@ export function Sidebar({
               },
               {
                 id: 'escalations',
-                labelEn: 'State Escalations',
+                labelEn: 'State Escalation Gateway',
                 labelMr: 'राज्य संदर्भ गेटवे',
                 icon: Radio,
               },
@@ -562,14 +554,13 @@ export function Sidebar({
             items: [
               {
                 id: 'audit',
-                labelEn: 'Tamper Audit Trail',
+                labelEn: 'Audit Trail & Compliance',
                 labelMr: 'सुरक्षा व ऑडिट ट्रेल',
-                icon: ShieldAlert,
+                icon: ShieldCheck,
               },
             ],
           },
         ];
-
 
       default:
         return [];
@@ -614,28 +605,30 @@ export function Sidebar({
         />
       )}
 
-      {/* Unified Compact Left Sidebar (216px expanded, collapses to 68px) */}
+      {/* Unified Left Sidebar (250px expanded, collapses to 72px) */}
       <aside
         className={`fixed top-0 bottom-0 left-0 z-50 flex flex-col bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-100 border-r border-slate-200 dark:border-slate-800 shadow-xl transition-all duration-200 ease-in-out ${
-          isMobileOpen ? 'translate-x-0 w-[240px]' : '-translate-x-full lg:translate-x-0'
-        } ${isCollapsed ? 'lg:w-[72px]' : 'lg:w-[240px]'}`}
+          isMobileOpen ? 'translate-x-0 w-[250px]' : '-translate-x-full lg:translate-x-0'
+        } ${isCollapsed ? 'lg:w-[72px]' : 'lg:w-[250px]'}`}
       >
         <style dangerouslySetInnerHTML={{ __html: heartbeatKeyframes }} />
         {/* Top Government of Maharashtra Tricolor Accent Line */}
         <div className="h-1 bg-gradient-to-r from-orange-500 via-white to-green-600 shrink-0" />
 
-        {/* 1. BRAND HEADER */}
+        {/* 1. BRAND HEADER (Clickable to Toggle Sidebar) */}
         <div
+          onClick={onToggleCollapse}
           className={`h-13 px-3 flex items-center ${
             isCollapsed ? 'justify-center' : 'justify-between'
-          } border-b border-slate-200 dark:border-slate-800/80 shrink-0`}
+          } border-b border-slate-200 dark:border-slate-800/80 shrink-0 cursor-pointer select-none hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors`}
+          title={isCollapsed ? 'Expand Sidebar (☰)' : 'Collapse Sidebar'}
         >
           <div className="flex items-center gap-2.5 overflow-hidden">
             <div
-              className="w-7.5 h-7.5 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-md shadow-blue-500/20 shrink-0"
+              className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold shadow-md shadow-blue-500/25 shrink-0 animate-heartbeat motion-safe:animate-heartbeat"
               title="SwasthyaSetu — Government of Maharashtra"
             >
-              <HeartPulse className="w-4 h-4 text-white animate-heartbeat motion-safe:animate-heartbeat" />
+              <MedicalHeartbeatIcon className="w-5 h-5 text-white" />
             </div>
             {!isCollapsed && (
               <div className="overflow-hidden leading-tight">
@@ -656,7 +649,10 @@ export function Sidebar({
 
           {/* Mobile Close Button */}
           <button
-            onClick={onCloseMobile}
+            onClick={(e) => {
+              e.stopPropagation();
+              onCloseMobile();
+            }}
             className="lg:hidden p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             title="Close navigation drawer"
           >
@@ -665,18 +661,19 @@ export function Sidebar({
         </div>
 
         {/* 2. DYNAMIC NAVIGATION CATEGORIES */}
-        <div className={`flex-1 overflow-y-auto ${isCollapsed ? 'px-1.5' : 'px-2'} py-2.5 space-y-3 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800 scrollbar-track-transparent`}>
+        <div className={`flex-1 ${isCollapsed ? 'overflow-visible' : 'overflow-y-auto'} ${isCollapsed ? 'px-2' : 'px-2.5'} py-3 space-y-3 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800 scrollbar-track-transparent`}>
           {navGroups.map((group, gIdx) => (
-            <div key={gIdx} className="space-y-0.5">
+            <div key={gIdx} className="space-y-1">
               {!isCollapsed ? (
-                <div className="px-2 text-[9px] uppercase tracking-wider font-extrabold text-slate-400 dark:text-slate-500 mb-1">
-                  {language === 'mr' ? group.titleMr : group.titleEn}
+                <div className="flex items-center gap-2 px-2 text-[9px] uppercase tracking-wider font-extrabold text-slate-400 dark:text-slate-500 mb-1.5">
+                  <span className="truncate">{language === 'mr' ? group.titleMr : group.titleEn}</span>
+                  <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
                 </div>
               ) : (
-                <div className="h-px bg-slate-200 dark:bg-slate-800 my-1.5 mx-1" />
+                <div className="h-px bg-slate-200 dark:bg-slate-800 my-2 mx-1.5" />
               )}
 
-              <div className="space-y-0.5">
+              <div className="space-y-1">
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   const isActive = activeNavItem === item.id;
@@ -689,7 +686,7 @@ export function Sidebar({
                         onClick={onCloseMobile}
                         className={`group relative flex items-center min-h-[38px] ${
                           isCollapsed ? 'justify-center p-2' : 'gap-2.5 px-2.5 py-1.5'
-                        } rounded-lg text-xs font-medium transition-colors ${
+                        } rounded-lg text-xs font-medium transition-all duration-150 hover:scale-[1.01] ${
                           item.id.includes('maha_aushadhi')
                             ? 'text-rose-600 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40'
                             : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900'
@@ -710,12 +707,7 @@ export function Sidebar({
                         {isCollapsed && item.badge !== undefined && (
                           <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 animate-ping" />
                         )}
-                        {/* Tooltip on collapsed desktop */}
-                        {isCollapsed && (
-                          <div className="absolute left-full ml-2.5 px-2 py-1 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-xs font-semibold rounded-md shadow-lg whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
-                            {language === 'mr' ? item.labelMr : item.labelEn}
-                          </div>
-                        )}
+                        {isCollapsed && <NavTooltip text={language === 'mr' ? item.labelMr : item.labelEn} />}
                       </Link>
                     );
                   }
@@ -726,9 +718,9 @@ export function Sidebar({
                       onClick={() => handleItemClick(item)}
                       className={`w-full group relative flex items-center min-h-[38px] ${
                         isCollapsed ? 'justify-center p-2' : 'gap-2.5 px-2.5 py-1.5'
-                      } rounded-lg text-xs transition-colors text-left cursor-pointer ${
+                      } rounded-lg text-xs transition-all duration-150 hover:scale-[1.01] text-left cursor-pointer ${
                         isActive
-                          ? 'bg-blue-600 text-white font-bold shadow-xs'
+                          ? 'bg-blue-600 text-white font-bold shadow-md shadow-blue-600/25 scale-[1.01]'
                           : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900 font-medium'
                       }`}
                       title={language === 'mr' ? item.labelMr : item.labelEn}
@@ -753,12 +745,7 @@ export function Sidebar({
                       {isCollapsed && item.badge !== undefined && (
                         <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-500" />
                       )}
-                      {/* Tooltip on collapsed desktop */}
-                      {isCollapsed && (
-                        <div className="absolute left-full ml-2.5 px-2 py-1 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-xs font-semibold rounded-md shadow-lg whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
-                          {language === 'mr' ? item.labelMr : item.labelEn}
-                        </div>
-                      )}
+                      {isCollapsed && <NavTooltip text={language === 'mr' ? item.labelMr : item.labelEn} />}
                     </button>
                   );
                 })}
@@ -768,7 +755,7 @@ export function Sidebar({
         </div>
 
         {/* 3. BOTTOM CONTROLS & SIGN OUT */}
-        <div className="p-2 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/80 shrink-0 space-y-1.5">
+        <div className="p-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/80 shrink-0 space-y-1.5">
           {/* Controls: Theme & Language */}
           <div className={`flex items-center ${isCollapsed ? 'flex-col gap-1' : 'justify-between px-1'}`}>
             <div className={`flex items-center ${isCollapsed ? 'flex-col gap-1' : 'gap-1'}`}>
@@ -793,7 +780,7 @@ export function Sidebar({
             </div>
           </div>
 
-          {/* Sign Out Button Only (Replaces bottom avatar) */}
+          {/* Sign Out Button Only */}
           {isCollapsed ? (
             <div className="flex justify-center pt-0.5">
               <button

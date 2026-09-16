@@ -165,7 +165,7 @@ export function AppShell({
       {/* Main Workspace Wrapper (Adjusts margin based on sidebar state) */}
       <div
         className={`flex-1 flex flex-col min-w-0 transition-all duration-200 ${
-          isSidebarCollapsed ? 'lg:pl-[72px]' : 'lg:pl-[240px]'
+          isSidebarCollapsed ? 'lg:pl-[72px]' : 'lg:pl-[250px]'
         }`}
       >
         {/* Sleek Compact Top Header */}
