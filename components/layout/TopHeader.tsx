@@ -14,6 +14,7 @@ import {
   Bell,
   RefreshCw,
   ChevronDown,
+  ShieldCheck,
 } from 'lucide-react';
 
 export interface TopHeaderProps {
@@ -195,38 +196,38 @@ export function TopHeader({
               <button
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
                 className="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                title="Officer Profile"
+                title="Doctor / Healthcare Officer Profile"
               >
-                <div className="w-6.5 h-6.5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold uppercase shadow-2xs">
+                <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10.5px] font-bold uppercase shadow-2xs">
                   {getInitials(user.name)}
                 </div>
-                <div className="hidden sm:flex flex-col text-left leading-none max-w-[140px]">
+                <div className="hidden sm:flex flex-col text-left leading-tight max-w-[170px]">
                   <span className="font-bold text-xs text-slate-800 dark:text-slate-200 truncate">
                     {user.name}
                   </span>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium truncate mt-0.5">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">
                     {role === 'district_officer'
-                      ? (user.district ? `${user.district} District` : 'District Health')
-                      : (user.facilityName || user.roleTitleEn || 'Health Officer')}
+                      ? `${user.roleTitleEn || 'District Officer'} • ${user.district || 'Pune'}`
+                      : `${user.roleTitleEn || 'Medical Officer'} • ${user.facilityName || 'PHC'}`}
                   </span>
                 </div>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-0.5" />
               </button>
 
-              {/* Profile Dropdown (Display Only: Avatar, Name, Role, Facility - NO Sign Out) */}
+              {/* Profile Dropdown (Avatar, Name, Role, Facility, Jurisdiction, HFR Code - No Sign Out) */}
               {profileDropdownOpen && (
                 <div
-                  className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 py-3 px-3.5 z-50 animate-in fade-in slide-in-from-top-1 duration-150"
+                  className="absolute right-0 mt-2 w-72 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 py-3 px-3.5 z-50 animate-in fade-in slide-in-from-top-1 duration-150"
                 >
                   <div className="flex items-center gap-2.5 pb-2.5 border-b border-slate-100 dark:border-slate-800">
-                    <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
+                    <div className="w-9 h-9 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
                       {getInitials(user.name)}
                     </div>
                     <div className="overflow-hidden flex-1 min-w-0">
-                      <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      <div className="text-xs font-black text-slate-900 dark:text-white truncate">
                         {user.name}
                       </div>
-                      <div className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold truncate">
+                      <div className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold truncate">
                         {user.roleTitleEn || user.role}
                       </div>
                     </div>
@@ -237,11 +238,11 @@ export function TopHeader({
                       <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
                       <div className="truncate flex-1">
                         <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">
-                          Facility
+                          Facility / Hospital
                         </span>
                         <span className="font-medium truncate block text-slate-800 dark:text-slate-200">
                           {role === 'district_officer'
-                            ? `${user.district || 'Pune'} District Health`
+                            ? `${user.district || 'Pune'} District Health Department`
                             : (user.facilityName || 'Government Health Facility')}
                         </span>
                       </div>
@@ -251,10 +252,24 @@ export function TopHeader({
                       <MapPin className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
                       <div className="truncate flex-1">
                         <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">
-                          Jurisdiction
+                          District Jurisdiction
                         </span>
                         <span className="font-medium truncate block text-slate-800 dark:text-slate-200">
-                          {user.district ? `${user.district} District, Maharashtra` : 'Maharashtra Public Health'}
+                          {user.district ? `${user.district} District, Maharashtra` : 'Maharashtra State Public Health'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-2 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+                      <ShieldCheck className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
+                      <div className="truncate flex-1">
+                        <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">
+                          ABDM Healthcare Facility ID
+                        </span>
+                        <span className="font-mono text-[10px] font-semibold text-slate-700 dark:text-slate-300">
+                          {role === 'district_officer'
+                            ? 'HFR-MH-PUN-DHO-01'
+                            : `HFR-MH-${(user.district || 'PUN').slice(0,3).toUpperCase()}-2026-${(user.facilityName || 'PHC').replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase()}`}
                         </span>
                       </div>
                     </div>

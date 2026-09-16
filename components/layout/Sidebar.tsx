@@ -82,15 +82,15 @@ interface NavGroupDef {
 const heartbeatKeyframes = `
 @keyframes heartbeat {
   0% { transform: scale(1); }
-  14% { transform: scale(1.12); }
+  14% { transform: scale(1.14); }
   28% { transform: scale(1); }
-  42% { transform: scale(1.07); }
+  42% { transform: scale(1.08); }
   70% { transform: scale(1); }
   100% { transform: scale(1); }
 }
 @media (prefers-reduced-motion: no-preference) {
   .animate-heartbeat {
-    animation: heartbeat 2s ease-in-out infinite;
+    animation: heartbeat 2.2s ease-in-out infinite;
   }
 }
 `;
@@ -617,8 +617,8 @@ export function Sidebar({
       {/* Unified Compact Left Sidebar (216px expanded, collapses to 68px) */}
       <aside
         className={`fixed top-0 bottom-0 left-0 z-50 flex flex-col bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-100 border-r border-slate-200 dark:border-slate-800 shadow-xl transition-all duration-200 ease-in-out ${
-          isMobileOpen ? 'translate-x-0 w-[216px]' : '-translate-x-full lg:translate-x-0'
-        } ${isCollapsed ? 'lg:w-[68px]' : 'lg:w-[216px]'}`}
+          isMobileOpen ? 'translate-x-0 w-[240px]' : '-translate-x-full lg:translate-x-0'
+        } ${isCollapsed ? 'lg:w-[72px]' : 'lg:w-[240px]'}`}
       >
         <style dangerouslySetInnerHTML={{ __html: heartbeatKeyframes }} />
         {/* Top Government of Maharashtra Tricolor Accent Line */}
