@@ -97,6 +97,13 @@ interface SyncContextType {
     districtUser?: { id: string; name: string } | null,
     specificItemId?: string
   ) => boolean;
+  sourceRequestExternally: (
+    requestId: string,
+    externalSourceName: string,
+    expectedDate: string,
+    specificItemId?: string,
+    dhoUser?: { id: string; name: string } | null
+  ) => boolean;
   escalateRequestToStateProcurement: (
     requestId: string,
     specificItemId?: string,
@@ -1091,6 +1098,91 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     /**
    * Escalate an unallocated/stuck requisition to State Procurement (State Reserve Depot).
    */
+    /**
+   * Source request externally outside MahaAushadhi network.
+   */
+  const sourceRequestExternally = (
+    requestId: string,
+    externalSourceName: string,
+    expectedDate: string,
+    specificItemId?: string,
+    dhoUser?: { id: string; name: string } | null
+  ): boolean => {
+    const req = medicineRequests.find(r => r.id === requestId);
+    if (!req) {
+      showToast('Requisition not found.');
+      return false;
+    }
+
+    const newlyCreatedTransfers: StockTransfer[] = [];
+    const updatedItems = req.items.map((item, idx) => {
+      if (specificItemId && item.id !== specificItemId) return item;
+
+      const transferId = "TRF-2026-" + String(Date.now() + idx).slice(-4);
+      const extTransfer: StockTransfer = {
+        id: transferId,
+        medicineName: item.medicineName,
+        sourceStockId: 'stk-external-' + (idx + 1),
+        destinationStockId: item.stockId || ("stk-" + req.destinationFacilityId + "-" + (idx + 1)),
+        sourceFacilityId: 'fac-external-vendor',
+        sourceFacilityName: externalSourceName + ' (External Procurement)',
+        destinationFacilityId: req.destinationFacilityId,
+        destinationFacilityName: req.destinationFacilityName,
+        requestedQuantity: item.requestedQuantity,
+        urgency: item.urgency,
+        reason: (item.reason || '') + ' [Sourced Externally: ' + externalSourceName + ', Expected: ' + expectedDate + ']',
+        isEmergency: item.urgency === 'CRITICAL',
+        transportMode: 'FACILITY_TRANSPORT',
+        donorAllocated: true,
+        allocatedByDistrictUserId: dhoUser?.id,
+        allocatedByDistrictUserName: dhoUser?.name,
+        allocatedAt: new Date().toISOString(),
+        supplyTier: 'DISTRICT',
+        supplierAvailableSurplus: item.requestedQuantity,
+        requestId: req.id,
+        requestItemId: item.id,
+        createdAt: new Date().toISOString(),
+        status: 'APPROVED',
+        approvedAt: new Date().toISOString(),
+      };
+
+      newlyCreatedTransfers.push(extTransfer);
+
+      return {
+        ...item,
+        status: 'APPROVED' as const,
+        sourceFacilityId: 'fac-external-vendor',
+        sourceFacilityName: externalSourceName + ' (External Procurement)',
+        supplyTier: 'DISTRICT' as const,
+        supplierAvailableSurplus: item.requestedQuantity,
+        transferId: transferId,
+      };
+    });
+
+    if (newlyCreatedTransfers.length > 0) {
+      const updatedTransfers = [...newlyCreatedTransfers, ...stockTransfers];
+      setStockTransfers(updatedTransfers);
+      saveStoredStockTransfers(updatedTransfers);
+
+      const updatedRequests = medicineRequests.map(r => {
+        if (r.id === requestId) {
+          return {
+            ...r,
+            items: updatedItems,
+            overallStatus: deriveOverallStatus(updatedItems),
+          };
+        }
+        return r;
+      });
+      setMedicineRequests(updatedRequests);
+      saveStoredMedicineRequests(updatedRequests);
+
+      showToast("Requisition " + req.id + " marked as Sourced Externally from " + externalSourceName + ".");
+      return true;
+    }
+    return false;
+  };
+
   const escalateRequestToStateProcurement = (
     requestId: string,
     specificItemId?: string,
@@ -1487,6 +1579,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         createReplenishmentRequest,
         linkTransferToRequestItem,
         allocateRequestSupplies,
+        sourceRequestExternally,
         escalateRequestToStateProcurement,
         allocateStockTransferDonor,
         forwardStockTransfer,

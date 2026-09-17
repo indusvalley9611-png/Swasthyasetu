@@ -96,6 +96,7 @@ export function DistrictMahaAushadhiView({ isSpecialist = false }: DistrictMahaA
     createReplenishmentRequest,
     linkTransferToRequestItem,
     allocateRequestSupplies,
+    sourceRequestExternally,
     escalateRequestToStateProcurement,
   } = useSync();
 
@@ -127,6 +128,9 @@ export function DistrictMahaAushadhiView({ isSpecialist = false }: DistrictMahaA
   const [isNewRequestModalOpen, setIsNewRequestModalOpen] = useState(false);
   const [confirmingReceiptTransfer, setConfirmingReceiptTransfer] = useState<StockTransfer | null>(null);
   const [manualAssignItem, setManualAssignItem] = useState<any | null>(null);
+  const [externalSourceItem, setExternalSourceItem] = useState<any | null>(null);
+  const [extSourceName, setExtSourceName] = useState('District Jan Aushadhi Kendra / Direct Tender');
+  const [extExpectedDate, setExtExpectedDate] = useState('2026-09-20');
   const [manualSelectedFacilityId, setManualSelectedFacilityId] = useState<string>('fac-dh-pune');
   const [otpCode, setOtpCode] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1670,6 +1674,91 @@ export function DistrictMahaAushadhiView({ isSpecialist = false }: DistrictMahaA
 
       
       {/* ── MANUAL SOURCE ASSIGNMENT MODAL ── */}
+      
+      {/* ── MODAL: SOURCE EXTERNALLY ── */}
+      {externalSourceItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 dark:bg-amber-950 flex items-center justify-center text-amber-600">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">
+                    Source Externally
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Procure outside MahaAushadhi network
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setExternalSourceItem(null)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl space-y-2 text-xs border border-slate-200 dark:border-slate-700">
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Medicine:</span>
+                <span className="font-bold text-slate-900 dark:text-white">{externalSourceItem.medicineName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Quantity:</span>
+                <span className="font-bold text-purple-600 dark:text-purple-400">{externalSourceItem.quantity} {externalSourceItem.unit}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Recipient PHC:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{externalSourceItem.destinationFacilityName}</span>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700 dark:text-slate-300 block">External Source / Supplier Name:</label>
+                <input
+                  type="text"
+                  value={extSourceName}
+                  onChange={(e) => setExtSourceName(e.target.value)}
+                  placeholder="e.g. District Jan Aushadhi Kendra / Direct Tender"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium focus:ring-2 focus:ring-amber-500 outline-hidden"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700 dark:text-slate-300 block">Expected Delivery Date:</label>
+                <input
+                  type="date"
+                  value={extExpectedDate}
+                  onChange={(e) => setExtExpectedDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium focus:ring-2 focus:ring-amber-500 outline-hidden"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setExternalSourceItem(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const reqId = externalSourceItem.requestId || externalSourceItem.id;
+                  sourceRequestExternally(reqId, extSourceName, extExpectedDate, externalSourceItem.requestItemId, user ? { id: user.id, name: user.name } : null);
+                  setSuccessMessage('Requisition marked as Sourced Externally from ' + extSourceName + '.');
+                  setExternalSourceItem(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md transition-colors cursor-pointer"
+              >
+                Confirm External Source
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {manualAssignItem && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95">
