@@ -85,13 +85,13 @@ export function findHierarchicalSupplySources(
   const destFacility = resolveCanonicalFacility(destination.facilityId) || facilities.find(f => f.id === destination.facilityId && isValidCanonicalFacilityId(f.id));
 
   // Matching drug stocks excluding destination itself — strictly valid canonical facilities only
-  // Use case-insensitive fuzzy matching: either name contains the other
-  const destDrugLower = destination.drugName.toLowerCase();
+  // Use case-insensitive fuzzy matching: either name contains the other or normalized match
+  const destDrugLower = destination.drugName.toLowerCase().trim();
   const matchingStocks = stocks.filter(
     s => {
       if (s.facilityId === destination.facilityId) return false;
       if (!isValidCanonicalFacilityId(s.facilityId)) return false;
-      const srcDrugLower = s.drugName.toLowerCase();
+      const srcDrugLower = s.drugName.toLowerCase().trim();
       return srcDrugLower === destDrugLower ||
              srcDrugLower.includes(destDrugLower) ||
              destDrugLower.includes(srcDrugLower);
@@ -109,9 +109,10 @@ export function findHierarchicalSupplySources(
     const transferable = getSafeTransferableQuantity(stock, transfers);
     const distanceKm = destFacility ? getDistanceKm(facility, destFacility) : null;
     const isSameDistrict = facility.district.toLowerCase() === userDistrict.toLowerCase();
+    const facType = (facility.type || '').toLowerCase();
 
-    // 1. Level 1: PHC / Rural Hospital in same district
-    if (facility && (facility.type === 'PHC' || facility.type === 'Rural Hospital') && isSameDistrict) {
+    // 1. Level 1: Primary Health Centres, Sub-Centres & Rural Hospitals in same district
+    if (facility && (facility.type === 'PHC' || facility.type === 'Rural Hospital' || facType.includes('sub-centre') || facType.includes('primary health')) && isSameDistrict) {
       phcCandidates.push({
         tier: 'PHC',
         tierLabel: 'Facility Surplus',
@@ -123,8 +124,8 @@ export function findHierarchicalSupplySources(
         isAvailable: transferable > 0,
       });
     }
-    // 2. Level 2: District Hospital / Sub-District in same district
-    else if (facility && (facility.type === 'District Hospital' || facility.type === 'Medical College') && isSameDistrict) {
+    // 2. Level 2: District Hospitals, Civil Hospitals & Medical Colleges in same district
+    else if (facility && (facility.type === 'District Hospital' || facility.type === 'Medical College' || facType.includes('civil') || facType.includes('general hospital')) && isSameDistrict) {
       districtCandidates.push({
         tier: 'DISTRICT',
         tierLabel: 'District Supply',
@@ -136,8 +137,8 @@ export function findHierarchicalSupplySources(
         isAvailable: transferable > 0,
       });
     }
-    // 3. Level 3: State Medical Reserve Depot / Tertiary Centres
-    else if (facility && ((facility.type as string) === 'State Medical Reserve' || stock.facilityId === 'fac-state-reserve' || (facility.type as string) === 'Tertiary Hospital')) {
+    // 3. Level 3: State Medical Reserve Depot, Apex, Tertiary Centres, or Out-of-District Hubs
+    else if (facility && ((facility.type as string) === 'State Medical Reserve' || stock.facilityId === 'fac-state-reserve' || facType.includes('tertiary') || !isSameDistrict)) {
       stateCandidates.push({
         tier: 'STATE',
         tierLabel: 'State Reserve',
@@ -156,18 +157,22 @@ export function findHierarchicalSupplySources(
     if (a.distanceKm !== null && b.distanceKm !== null) return a.distanceKm - b.distanceKm;
     return b.transferable - a.transferable;
   });
-  districtCandidates.sort((a, b) => b.transferable - a.transferable);
+  districtCandidates.sort((a, b) => {
+    if (a.distanceKm !== null && b.distanceKm !== null) return a.distanceKm - b.distanceKm;
+    return b.transferable - a.transferable;
+  });
   stateCandidates.sort((a, b) => b.transferable - a.transferable);
 
   const phcAvailableUnits = phcCandidates.reduce((sum, c) => sum + c.transferable, 0);
   const districtAvailableUnits = districtCandidates.reduce((sum, c) => sum + c.transferable, 0);
   const stateAvailableUnits = stateCandidates.reduce((sum, c) => sum + c.transferable, 0);
 
-  // Smart Hierarchy Prioritization:
-  // 1. Prefer PHC that can fulfill requested quantity safely without buffer breach
-  // 2. If PHC has insufficient surplus for requested amount, escalate to District Hospital
-  // 3. If District has insufficient surplus, escalate to State Reserve
-  // 4. Otherwise, pick best available candidate with positive surplus
+  // Smart Unified Multi-Tier Matching:
+  // Check surplus across ALL facility tiers in one pass:
+  // 1. Nearest PHC with surplus >= requestedQuantity
+  // 2. District Hospital with surplus >= requestedQuantity
+  // 3. State Reserve with surplus >= requestedQuantity
+  // 4. Otherwise, facility with highest positive surplus across any tier
   let recommendedCandidate: SupplyCandidate | null = null;
   let escalatedToDistrict = false;
   let escalatedToState = false;

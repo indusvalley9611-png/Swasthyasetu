@@ -1389,7 +1389,9 @@ export function DistrictMahaAushadhiView({ isSpecialist = false }: DistrictMahaA
                               </button>
                             ) : item.isOutgoing ? (
                               <span className="px-3 py-1 rounded-lg text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800">
-                                Awaiting {item.sourceFacilityName} Approval
+                                {item.sourceFacilityName && item.sourceFacilityName !== 'Awaiting Supplier Match'
+                                  ? `Awaiting ${item.sourceFacilityName} Approval`
+                                  : 'Awaiting Supplier Match'}
                               </span>
                             ) : null}
                           </div>
