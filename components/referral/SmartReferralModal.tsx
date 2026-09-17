@@ -227,7 +227,7 @@ export function SmartReferralModal({
         consciousLevel: 'alert',
         recordedAt: createdAt,
       },
-      qrPayload: JSON.stringify(payloadObj),
+      qrPayload: tokenCode,
       referralReason: reason || 'Specialist Evaluation & Inpatient Management',
       status: 'PENDING',
       createdAt,

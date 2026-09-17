@@ -17,11 +17,17 @@ export function AbhaCardModal({ patient, onClose }: AbhaCardModalProps) {
 
   useEffect(() => {
     if (patient) {
-      // If we are on localhost, we use the IP address of the machine so scanning with a phone works if they are on the same wifi.
-      // But since we can't reliably guess the IP in the browser, we just use window.location.origin.
-      const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://swasthyasetu.gov.in';
       const payload = `${baseUrl}/api/patient/${patient.id}/pdf`;
-      QRCode.toDataURL(payload, { width: 160, margin: 1 })
+      QRCode.toDataURL(payload, {
+        width: 200,
+        margin: 2,
+        errorCorrectionLevel: 'H',
+        color: {
+          dark: '#000000',
+          light: '#ffffff',
+        },
+      })
         .then(setQrDataUrl)
         .catch((err) => console.error(err));
     }

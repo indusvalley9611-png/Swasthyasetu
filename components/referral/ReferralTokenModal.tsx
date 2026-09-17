@@ -26,36 +26,17 @@ export function ReferralTokenModal({ referral, onClose }: ReferralTokenModalProp
 
   useEffect(() => {
     if (referral) {
-      // Build canonical structured JSON payload encoding the real referral record
-      const qrData =
-        referral.qrPayload && referral.qrPayload.startsWith('{')
-          ? referral.qrPayload
-          : JSON.stringify({
-              type: 'SWASTHYASETU_REFERRAL',
-              tokenCode: referral.tokenCode,
-              referralId: referral.id,
-              patientId: referral.patientId,
-              patientName: referral.patientName,
-              patientAbha: referral.patientAbha,
-              patientAge: referral.patientAge,
-              patientGender: referral.patientGender,
-              referringFacility: referral.referringFacility,
-              referringFacilityId: referral.referringFacilityId,
-              targetFacility: referral.targetFacility,
-              targetFacilityId: referral.targetFacilityId,
-              specialtyRequired: referral.specialtyRequired,
-              triagePriority: referral.triagePriority,
-              triageScore: referral.triageScore,
-              referralReason: referral.referralReason,
-              createdAt: referral.createdAt,
-            });
+      // Encode ONLY the referral token ID (e.g. "MH-REF-2622") for optimal module density,
+      // high optical contrast, and instant decode on low-end camera sensors.
+      const tokenPayload = referral.tokenCode || referral.id;
 
-      QRCode.toDataURL(qrData, {
-        width: 240,
-        margin: 1,
+      QRCode.toDataURL(tokenPayload, {
+        width: 256,
+        margin: 2,
+        errorCorrectionLevel: 'H', // 30% error recovery for creased/printed paper slips
         color: {
-          dark: referral.triagePriority === 'red' ? '#881337' : '#0f172a',
-          light: '#ffffff',
+          dark: '#000000', // Pure black modules for maximum scanner contrast
+          light: '#ffffff', // Pure white background
         },
       })
         .then(setQrUrl)
@@ -132,11 +113,11 @@ export function ReferralTokenModal({ referral, onClose }: ReferralTokenModalProp
             {/* Scannable QR Code */}
             <div className="flex justify-center py-2">
               {qrUrl ? (
-                <div className="p-2 bg-white dark:bg-slate-900 rounded-xl border-2 border-slate-800 shadow-inner">
-                  <img src={qrUrl} alt="Referral Token QR" className="w-48 h-48" />
+                <div className="p-2.5 bg-white rounded-xl border-2 border-slate-900 shadow-md">
+                  <img src={qrUrl} alt="Referral Token QR" className="w-52 h-52 sm:w-56 sm:h-56 object-contain" />
                 </div>
               ) : (
-                <div className="w-48 h-48 bg-slate-100 dark:bg-slate-950 flex items-center justify-center text-slate-400">
+                <div className="w-52 h-52 sm:w-56 sm:h-56 bg-slate-100 dark:bg-slate-950 flex items-center justify-center text-slate-400 text-xs font-mono">
                   Generating QR...
                 </div>
               )}
