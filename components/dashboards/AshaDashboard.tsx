@@ -41,6 +41,40 @@ interface AshaDashboardProps {
   onOpenReferral: (patient: Patient) => void;
 }
 
+
+/**
+ * Evaluate whether a patient strictly meets high-risk criteria:
+ * 1. Flagged High-Risk Pregnancy (HRP)
+ * 2. Explicit diagnosed chronic condition (non-empty & unmasked)
+ * 3. Screened vitals exceeding clinical safety thresholds (BP >= 140/90, SpO2 < 94%, Hb < 9, Glucose >= 200, Maternal BP >= 135/85)
+ */
+export const isPatientHighRisk = (patient: Patient): boolean => {
+  if (!patient) return false;
+
+  // 1. Explicitly flagged high risk pregnancy
+  if (patient.isHighRiskPregnancy) return true;
+
+  // 2. Explicit diagnosed chronic conditions
+  const validChronic = (patient.chronicConditions || []).filter(
+    (c) => c && c.trim().length > 0 && !c.toLowerCase().includes('[restricted')
+  );
+  if (validChronic.length > 0) return true;
+
+  // 3. Clinical encounters with vitals exceeding risk thresholds
+  const encounters = patient.encounters || [];
+  for (const enc of encounters) {
+    const v = enc.vitals;
+    if (!v) continue;
+    if ((v.systolicBp && v.systolicBp >= 140) || (v.diastolicBp && v.diastolicBp >= 90)) return true;
+    if (patient.isPregnant && ((v.systolicBp && v.systolicBp >= 135) || (v.diastolicBp && v.diastolicBp >= 85))) return true;
+    if (v.hemoglobin && v.hemoglobin < 9.0) return true;
+    if (v.spO2 && v.spO2 < 94) return true;
+    if (v.bloodGlucose && v.bloodGlucose >= 200) return true;
+  }
+
+  return false;
+};
+
 export function AshaDashboard({
   onOpenNewPatient,
   onOpenPatientTimeline,

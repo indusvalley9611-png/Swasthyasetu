@@ -340,8 +340,8 @@ export function NewPatientModal({ onClose, onSuccess }: NewPatientModalProps) {
       isPregnant: formData.isPregnant,
       gestationalWeeks: formData.isPregnant ? formData.gestationalWeeks : undefined,
       isHighRiskPregnancy: formData.isPregnant ? formData.isHighRiskPregnancy : false,
-      chronicConditions: formData.chronicConditions
-        ? formData.chronicConditions.split(',').map((s) => s.trim())
+      chronicConditions: formData.chronicConditions.trim()
+        ? formData.chronicConditions.split(',').map((s) => s.trim()).filter(Boolean)
         : [],
       emergencyContact: {
         name: formData.emergencyName || 'Primary Family Member',
