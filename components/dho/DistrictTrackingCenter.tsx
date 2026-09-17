@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useSync } from '@/context/SyncContext';
 import { useAuth } from '@/context/AuthContext';
+import { useLanguage } from '@/context/LanguageContext';
 import {
   Patient,
   Referral,
@@ -19,6 +20,7 @@ import {
   Clock,
   Truck,
   ArrowRight,
+  ArrowLeftRight,
   Building2,
   Check,
   X,
@@ -26,12 +28,29 @@ import {
   RotateCcw,
   AlertOctagon,
   Info,
+  FolderHeart,
+  Siren,
+  Activity,
+  HeartPulse,
+  UserCheck,
+  Baby,
+  Eye,
+  FileText,
+  Filter,
+  ShieldCheck,
+  ChevronRight,
+  MapPin,
+  Sparkles,
+  Phone,
+  AlertTriangle,
 } from 'lucide-react';
 
 export type MedicineKpiTab = 'ALL' | 'NEEDS_ACTION' | 'AWAITING_APPROVAL' | 'IN_TRANSIT' | 'RECEIVED';
+export type ReferralKpiTab = 'ALL' | 'CRITICAL' | 'PENDING' | 'ACCEPTED' | 'ADMITTED' | 'DISCHARGED';
+export type PatientKpiTab = 'ALL' | 'HIGH_RISK' | 'INPATIENTS' | 'FOLLOW_UP' | 'STABLE';
 
 interface DistrictTrackingCenterProps {
-  initialTab?: string;
+  initialTab?: 'medicine' | 'referrals' | 'patients' | string;
   onOpenPatientTimeline?: (patient: Patient) => void;
   onOpenReferralToken?: (referral: Referral) => void;
   onReviewReferral?: (referral: Referral) => void;
@@ -39,34 +58,55 @@ interface DistrictTrackingCenterProps {
 
 export function DistrictTrackingCenter({
   initialTab = 'medicine',
+  onOpenPatientTimeline,
+  onOpenReferralToken,
+  onReviewReferral,
 }: DistrictTrackingCenterProps) {
   const { user } = useAuth();
+  const { language } = useLanguage();
   const {
     stocks,
     medicineRequests,
     stockTransfers,
     facilities,
+    referrals,
+    patients,
     processStockTransfer,
   } = useSync();
 
-  // Active KPI Tab
-  const [activeKpiTab, setActiveKpiTab] = useState<MedicineKpiTab>('ALL');
+  const isMr = language === 'mr';
 
-  // Search & Detailed Filter States
-  const [searchQuery, setSearchQuery] = useState('');
+  // Active Main View Tab ('medicine' | 'referrals' | 'patients')
+  const [activeViewTab, setActiveViewTab] = useState<'medicine' | 'referrals' | 'patients'>(
+    initialTab === 'referrals' ? 'referrals' : initialTab === 'patients' ? 'patients' : 'medicine'
+  );
+
+  // Sync when initialTab prop updates from sidebar
+  useEffect(() => {
+    if (initialTab === 'referrals' || initialTab === 'patients' || initialTab === 'medicine') {
+      setActiveViewTab(initialTab);
+    }
+  }, [initialTab]);
+
+  // Current district name
+  const currentDistrict = user?.district || 'Pune';
+
+  // =========================================================================
+  // 1. MEDICINE REQUISITIONS & TRANSFER TRACKING STATE & LOGIC
+  // =========================================================================
+  const [medicineKpiTab, setMedicineKpiTab] = useState<MedicineKpiTab>('ALL');
+  const [medSearchQuery, setMedSearchQuery] = useState('');
   const [priorityFilter, setPriorityFilter] = useState<'ALL' | 'CRITICAL' | 'URGENT' | 'ROUTINE'>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [medicineFilter, setMedicineFilter] = useState<string>('ALL');
   const [requestingFacilityFilter, setRequestingFacilityFilter] = useState<string>('ALL');
   const [supplierFacilityFilter, setSupplierFacilityFilter] = useState<string>('ALL');
 
-  // Action Modals State
   const [confirmReceiptTransfer, setConfirmReceiptTransfer] = useState<StockTransfer | null>(null);
   const [rejectingTransfer, setRejectingTransfer] = useState<StockTransfer | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [actionSuccessMsg, setActionSuccessMsg] = useState('');
 
-  // 1. Normalized & Unified Requisition Items (Derived 100% from single source of truth)
   const normalizedRequisitions = useMemo(() => {
     const list: Array<{
       id: string;
@@ -89,7 +129,6 @@ export function DistrictTrackingCenter({
       transferObj?: StockTransfer;
     }> = [];
 
-    // Process from stockTransfers
     (stockTransfers || []).forEach((st) => {
       let displayStatus: 'REQUESTED' | 'APPROVED' | 'DISPATCHED' | 'RECEIVED' | 'REJECTED' = 'REQUESTED';
       if (st.status === 'COMPLETED') displayStatus = 'RECEIVED';
@@ -129,7 +168,6 @@ export function DistrictTrackingCenter({
       });
     });
 
-    // Also include medicineRequests items that don't yet have linked transfer records
     (medicineRequests || []).forEach((req) => {
       (req.items || []).forEach((item: ReplenishmentRequestItem) => {
         if (item.transferId && list.some((it) => it.id === item.transferId)) {
@@ -151,13 +189,13 @@ export function DistrictTrackingCenter({
         );
 
         list.push({
-          id: item.id || `${req.id}-${item.medicineName}`,
+          id: item.id,
           requestId: req.id,
           medicineName: item.medicineName,
           requestedQuantity: item.requestedQuantity,
           unit: item.unit || 'Units',
-          urgency: item.urgency || req.urgency || 'URGENT',
-          rawStatus: item.status as RequestStatus,
+          urgency: item.urgency,
+          rawStatus: item.status,
           displayStatus,
           requestingFacilityId: req.destinationFacilityId,
           requestingFacilityName: req.destinationFacilityName || resolveCanonicalFacilityName(req.destinationFacilityId),
@@ -168,110 +206,52 @@ export function DistrictTrackingCenter({
           supplierAvailableSurplus: item.supplierAvailableSurplus,
           hasEligibleSupplier: hasSupplier,
           supplyTier: item.supplyTier,
-          createdAt: req.createdAt || new Date().toISOString(),
-          reason: item.reason || req.notes,
+          createdAt: req.createdAt,
+          reason: item.reason || "",
         });
       });
     });
 
-    // Canonical Sorting: CRITICAL first, then URGENT, then ROUTINE; then newest timestamp
-    return list.sort((a, b) => {
-      const priorityOrder: Record<string, number> = { CRITICAL: 3, URGENT: 2, ROUTINE: 1 };
-      const diffPriority = (priorityOrder[b.urgency] || 1) - (priorityOrder[a.urgency] || 1);
-      if (diffPriority !== 0) return diffPriority;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
+    return list;
   }, [stockTransfers, medicineRequests]);
 
-  // Distinct Lists for Dynamic Dropdowns
-  const distinctMedicines = useMemo(() => {
-    return Array.from(new Set(normalizedRequisitions.map((r) => r.medicineName))).filter(Boolean).sort();
-  }, [normalizedRequisitions]);
-
-  const distinctRequestingFacilities = useMemo(() => {
-    return Array.from(new Set(normalizedRequisitions.map((r) => r.requestingFacilityName))).filter(Boolean).sort();
-  }, [normalizedRequisitions]);
-
-  const distinctSupplierFacilities = useMemo(() => {
-    return Array.from(
-      new Set(
-        normalizedRequisitions
-          .map((r) => r.supplierFacilityName)
-          .filter((name) => name && !name.toLowerCase().includes('no eligible'))
-      )
-    ).sort();
-  }, [normalizedRequisitions]);
-
-  // 2. Real Derived KPI Counts
-  const kpiCounts = useMemo(() => {
+  const medicineKpiCounts = useMemo(() => {
     const total = normalizedRequisitions.length;
+    const needsAction = normalizedRequisitions.filter(
+      (r) => r.displayStatus === 'REQUESTED' || r.displayStatus === 'DISPATCHED'
+    ).length;
     const awaitingApproval = normalizedRequisitions.filter((r) => r.displayStatus === 'REQUESTED').length;
     const inTransit = normalizedRequisitions.filter((r) => r.displayStatus === 'DISPATCHED').length;
     const received = normalizedRequisitions.filter((r) => r.displayStatus === 'RECEIVED').length;
-    const needsAction = normalizedRequisitions.filter((r) => r.displayStatus === 'REQUESTED' || r.displayStatus === 'DISPATCHED').length;
-
-    return {
-      total,
-      needsAction,
-      awaitingApproval,
-      inTransit,
-      received,
-    };
+    return { total, needsAction, awaitingApproval, inTransit, received };
   }, [normalizedRequisitions]);
 
-  // 3. Filtered Requisitions based on KPI Tabs & Detailed Filters
   const filteredRequisitions = useMemo(() => {
     return normalizedRequisitions.filter((item) => {
-      // KPI Tab filter
-      if (activeKpiTab === 'NEEDS_ACTION') {
-        if (item.displayStatus !== 'REQUESTED' && item.displayStatus !== 'DISPATCHED') return false;
-      } else if (activeKpiTab === 'AWAITING_APPROVAL') {
-        if (item.displayStatus !== 'REQUESTED') return false;
-      } else if (activeKpiTab === 'IN_TRANSIT') {
-        if (item.displayStatus !== 'DISPATCHED') return false;
-      } else if (activeKpiTab === 'RECEIVED') {
-        if (item.displayStatus !== 'RECEIVED') return false;
-      }
+      if (medicineKpiTab === 'NEEDS_ACTION' && !(item.displayStatus === 'REQUESTED' || item.displayStatus === 'DISPATCHED')) return false;
+      if (medicineKpiTab === 'AWAITING_APPROVAL' && item.displayStatus !== 'REQUESTED') return false;
+      if (medicineKpiTab === 'IN_TRANSIT' && item.displayStatus !== 'DISPATCHED') return false;
+      if (medicineKpiTab === 'RECEIVED' && item.displayStatus !== 'RECEIVED') return false;
 
-      // Search Query filter (ID, medicine, facilities)
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
+      if (medSearchQuery.trim()) {
+        const q = medSearchQuery.toLowerCase();
+        const matchesMed = item.medicineName.toLowerCase().includes(q);
+        const matchesReq = item.requestingFacilityName.toLowerCase().includes(q);
+        const matchesSup = item.supplierFacilityName.toLowerCase().includes(q);
         const matchesId = item.id.toLowerCase().includes(q) || item.requestId.toLowerCase().includes(q);
-        const matchesDrug = item.medicineName.toLowerCase().includes(q);
-        const matchesReqFac = item.requestingFacilityName.toLowerCase().includes(q);
-        const matchesSupFac = item.supplierFacilityName.toLowerCase().includes(q);
-        if (!matchesId && !matchesDrug && !matchesReqFac && !matchesSupFac) return false;
+        if (!matchesMed && !matchesReq && !matchesSup && !matchesId) return false;
       }
 
-      // Priority filter
       if (priorityFilter !== 'ALL' && item.urgency !== priorityFilter) return false;
-
-      // Status filter
       if (statusFilter !== 'ALL' && item.displayStatus !== statusFilter) return false;
-
-      // Medicine filter
       if (medicineFilter !== 'ALL' && item.medicineName !== medicineFilter) return false;
-
-      // Requesting Facility filter
       if (requestingFacilityFilter !== 'ALL' && item.requestingFacilityName !== requestingFacilityFilter) return false;
-
-      // Supplier Facility filter
       if (supplierFacilityFilter !== 'ALL' && item.supplierFacilityName !== supplierFacilityFilter) return false;
 
       return true;
     });
-  }, [
-    normalizedRequisitions,
-    activeKpiTab,
-    searchQuery,
-    priorityFilter,
-    statusFilter,
-    medicineFilter,
-    requestingFacilityFilter,
-    supplierFacilityFilter,
-  ]);
+  }, [normalizedRequisitions, medicineKpiTab, medSearchQuery, priorityFilter, statusFilter, medicineFilter, requestingFacilityFilter, supplierFacilityFilter]);
 
-  // Handlers for Supplier Approval, Dispatch, and Requester Receipt
   const handleApprove = async (transferId: string) => {
     const success = await processStockTransfer(transferId, 'APPROVE');
     if (success) {
@@ -292,9 +272,7 @@ export function DistrictTrackingCenter({
     if (!confirmReceiptTransfer) return;
     const success = await processStockTransfer(confirmReceiptTransfer.id, 'RECEIVE');
     if (success) {
-      setActionSuccessMsg(
-        `Consignment #${confirmReceiptTransfer.id} confirmed received! Stock credited to requesting facility.`
-      );
+      setActionSuccessMsg(`Consignment #${confirmReceiptTransfer.id} confirmed received! Stock credited to facility.`);
       setConfirmReceiptTransfer(null);
       setTimeout(() => setActionSuccessMsg(''), 4000);
     }
@@ -311,646 +289,887 @@ export function DistrictTrackingCenter({
     }
   };
 
-  const isFiltersActive =
-    searchQuery.trim() !== '' ||
-    priorityFilter !== 'ALL' ||
-    statusFilter !== 'ALL' ||
-    medicineFilter !== 'ALL' ||
-    requestingFacilityFilter !== 'ALL' ||
-    supplierFacilityFilter !== 'ALL';
+  // =========================================================================
+  // 2. REFERRALS & TRIAGE TRACKING STATE & LOGIC
+  // =========================================================================
+  const [refKpiTab, setRefKpiTab] = useState<ReferralKpiTab>('ALL');
+  const [refSearchQuery, setRefSearchQuery] = useState('');
+  const [refUrgencyFilter, setRefUrgencyFilter] = useState<'ALL' | 'RED' | 'YELLOW' | 'GREEN'>('ALL');
+  const [refSpecialtyFilter, setRefSpecialtyFilter] = useState<string>('ALL');
 
-  const handleResetFilters = () => {
-    setSearchQuery('');
-    setPriorityFilter('ALL');
-    setStatusFilter('ALL');
-    setMedicineFilter('ALL');
-    setRequestingFacilityFilter('ALL');
-    setSupplierFacilityFilter('ALL');
-  };
+  const referralKpiCounts = useMemo(() => {
+    const total = (referrals || []).length;
+    const critical = (referrals || []).filter((r) => r.triagePriority === 'red' || r.triageScore >= 7).length;
+    const pending = (referrals || []).filter((r) => r.status === 'PENDING').length;
+    const accepted = (referrals || []).filter((r) => r.status === 'ACCEPTED').length;
+    const admitted = (referrals || []).filter((r) => r.status === 'ADMITTED').length;
+    const discharged = (referrals || []).filter((r) => r.status === 'COMPLETED' || r.status === 'CANCELLED').length;
+    return { total, critical, pending, accepted, admitted, discharged };
+  }, [referrals]);
+
+  const filteredReferrals = useMemo(() => {
+    return (referrals || []).filter((r) => {
+      if (refKpiTab === 'CRITICAL' && !(r.triagePriority === 'red' || r.triageScore >= 7)) return false;
+      if (refKpiTab === 'PENDING' && r.status !== 'PENDING') return false;
+      if (refKpiTab === 'ACCEPTED' && r.status !== 'ACCEPTED') return false;
+      if (refKpiTab === 'ADMITTED' && !(r.status === 'ADMITTED')) return false;
+      if (refKpiTab === 'DISCHARGED' && !(r.status === 'COMPLETED' || r.status === 'CANCELLED')) return false;
+
+      if (refSearchQuery.trim()) {
+        const q = refSearchQuery.toLowerCase();
+        const matchesName = (r.patientName || '').toLowerCase().includes(q);
+        const matchesAbha = (r.patientAbha || '').toLowerCase().includes(q);
+        const matchesToken = (r.tokenCode || r.id).toLowerCase().includes(q);
+        const matchesFrom = (r.referringFacility || '').toLowerCase().includes(q);
+        const matchesTo = (r.targetFacility || '').toLowerCase().includes(q);
+        if (!matchesName && !matchesAbha && !matchesToken && !matchesFrom && !matchesTo) return false;
+      }
+
+      if (refUrgencyFilter === 'RED' && r.triagePriority !== 'red') return false;
+      if (refUrgencyFilter === 'YELLOW' && r.triagePriority !== 'yellow') return false;
+      if (refUrgencyFilter === 'GREEN' && r.triagePriority !== 'green') return false;
+
+      if (refSpecialtyFilter !== 'ALL' && r.specialtyRequired !== refSpecialtyFilter) return false;
+
+      return true;
+    });
+  }, [referrals, refKpiTab, refSearchQuery, refUrgencyFilter, refSpecialtyFilter]);
+
+  // =========================================================================
+  // 3. PATIENTS & EHR DIRECTORY STATE & LOGIC
+  // =========================================================================
+  const [patKpiTab, setPatKpiTab] = useState<PatientKpiTab>('ALL');
+  const [patSearchQuery, setPatSearchQuery] = useState('');
+  const [patTalukaFilter, setPatTalukaFilter] = useState<string>('ALL');
+  const [patRiskFilter, setPatRiskFilter] = useState<'ALL' | 'HRP' | 'CHRONIC' | 'NORMAL'>('ALL');
+
+  const patientKpiCounts = useMemo(() => {
+    const total = (patients || []).length;
+    const highRisk = (patients || []).filter((p) => p.isHighRiskPregnancy || (p.chronicConditions && p.chronicConditions.length > 0)).length;
+    const inpatients = (patients || []).filter((p) => p.activeCareOwner && p.activeCareOwner.toLowerCase().includes('hospital')).length;
+    const followUp = (patients || []).filter((p) => p.isPregnant || (p.encounters && p.encounters.length > 1)).length;
+    const stable = total - highRisk;
+    return { total, highRisk, inpatients, followUp, stable: Math.max(0, stable) };
+  }, [patients]);
+
+  const filteredPatients = useMemo(() => {
+    return (patients || []).filter((p) => {
+      if (patKpiTab === 'HIGH_RISK' && !p.isHighRiskPregnancy && (!p.chronicConditions || p.chronicConditions.length === 0)) return false;
+      if (patKpiTab === 'INPATIENTS' && (!p.activeCareOwner || !p.activeCareOwner.toLowerCase().includes('hospital'))) return false;
+      if (patKpiTab === 'FOLLOW_UP' && !p.isPregnant && (!p.encounters || p.encounters.length <= 1)) return false;
+      if (patKpiTab === 'STABLE' && (p.isHighRiskPregnancy || (p.chronicConditions && p.chronicConditions.length > 0))) return false;
+
+      if (patSearchQuery.trim()) {
+        const q = patSearchQuery.toLowerCase();
+        const matchesName = (p.fullName || '').toLowerCase().includes(q);
+        const matchesAbha = (p.abhaId || '').toLowerCase().includes(q);
+        const matchesVillage = (p.village || '').toLowerCase().includes(q);
+        const matchesPhone = (p.phone || '').toLowerCase().includes(q);
+        if (!matchesName && !matchesAbha && !matchesVillage && !matchesPhone) return false;
+      }
+
+      if (patTalukaFilter !== 'ALL' && p.taluka !== patTalukaFilter) return false;
+      if (patRiskFilter === 'HRP' && !p.isHighRiskPregnancy) return false;
+      if (patRiskFilter === 'CHRONIC' && (!p.chronicConditions || p.chronicConditions.length === 0)) return false;
+      if (patRiskFilter === 'NORMAL' && (p.isHighRiskPregnancy || (p.chronicConditions && p.chronicConditions.length > 0))) return false;
+
+      return true;
+    });
+  }, [patients, patKpiTab, patSearchQuery, patTalukaFilter, patRiskFilter]);
 
   return (
     <div className="space-y-4">
-      {/* ── 1. HEADER ── */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
-            <Pill className="w-5 h-5 text-amber-400" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-400/30">
-                DISTRICT MEDICINE OPERATIONS
-              </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                MAHAAUSHADHI NETWORK
-              </span>
-            </div>
-            <h1 className="text-base sm:text-lg font-black text-white mt-1 flex items-center gap-2">
-              <span>Medicine Requisition &amp; Transfer Tracking</span>
-            </h1>
-            <p className="text-xs text-slate-400">
-              Inter-facility supply allocations, supplier approvals, dispatch transit, and verified receipt acknowledgments
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="text-left md:text-right">
-            <span className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
-              Live Network State
-            </span>
-            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>{kpiCounts.total} Requisitions Active / Completed</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Success Banner */}
-      {actionSuccessMsg && (
-        <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2 font-bold animate-in fade-in duration-200">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>{actionSuccessMsg}</span>
-        </div>
-      )}
-
-      {/* ── 2. KPI TABS (DERIVED FROM REAL REQUISITIONS) ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+      {/* ── TOP MULTI-VIEW NAVIGATION SWITCHER ── */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-2 shadow-xs flex items-center gap-2 overflow-x-auto">
         {[
           {
-            id: 'ALL' as MedicineKpiTab,
-            label: 'All Demands',
-            count: kpiCounts.total,
-            desc: 'Total formulary requisitions',
-            activeClass: 'border-blue-500 bg-blue-50/60 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300',
-            badgeClass: 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200',
+            id: 'referrals' as const,
+            labelEn: 'Track Referrals & Triage',
+            labelMr: 'रुग्ण संदर्भ व ट्रायज ट्रॅकिंग',
+            icon: ArrowLeftRight,
+            count: referralKpiCounts.total,
+            badgeClass: 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300',
           },
           {
-            id: 'NEEDS_ACTION' as MedicineKpiTab,
-            label: 'Needs Action',
-            count: kpiCounts.needsAction,
-            desc: 'Pending approval or delivery receipt',
-            activeClass: 'border-rose-500 bg-rose-50/60 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300',
-            badgeClass: 'bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200',
-            indicator: kpiCounts.needsAction > 0,
+            id: 'patients' as const,
+            labelEn: 'Track Patients & EHR',
+            labelMr: 'रुग्ण प्रवास व EHR ट्रॅकिंग',
+            icon: FolderHeart,
+            count: patientKpiCounts.total,
+            badgeClass: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300',
           },
           {
-            id: 'AWAITING_APPROVAL' as MedicineKpiTab,
-            label: 'Awaiting Approval',
-            count: kpiCounts.awaitingApproval,
-            desc: 'Requested at supplier facility',
-            activeClass: 'border-amber-500 bg-amber-50/60 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300',
-            badgeClass: 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200',
-          },
-          {
-            id: 'IN_TRANSIT' as MedicineKpiTab,
-            label: 'In Transit',
-            count: kpiCounts.inTransit,
-            desc: 'Dispatched and en route',
-            activeClass: 'border-purple-500 bg-purple-50/60 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300',
-            badgeClass: 'bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-200',
-          },
-          {
-            id: 'RECEIVED' as MedicineKpiTab,
-            label: 'Received',
-            count: kpiCounts.received,
-            desc: 'Delivered & stock credited',
-            activeClass: 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300',
-            badgeClass: 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200',
+            id: 'medicine' as const,
+            labelEn: 'Track Medicine & Buffer',
+            labelMr: 'औषध साठा व रसद ट्रॅकिंग',
+            icon: Pill,
+            count: medicineKpiCounts.total,
+            badgeClass: 'bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300',
           },
         ].map((tab) => {
-          const isActive = activeKpiTab === tab.id;
+          const isActive = activeViewTab === tab.id;
+          const Icon = tab.icon;
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveKpiTab(tab.id)}
-              className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 shadow-xs ${
+              onClick={() => setActiveViewTab(tab.id)}
+              className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                 isActive
-                  ? `${tab.activeClass} ring-2 ring-blue-500/20 font-bold`
-                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-700 dark:text-slate-300'
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
+                  : 'bg-slate-50 dark:bg-slate-850 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
             >
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-black uppercase tracking-wider">{tab.label}</span>
-                {tab.indicator && <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />}
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-xl font-black">{tab.count}</span>
-                <span className="text-[10px] text-slate-400 truncate">{tab.desc}</span>
-              </div>
+              <Icon className="w-4 h-4" />
+              <span>{isMr ? tab.labelMr : tab.labelEn}</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${tab.badgeClass}`}>
+                {tab.count}
+              </span>
             </button>
           );
         })}
       </div>
 
-      {/* ── 3. OPERATIONAL TOOLBAR & FILTERS ── */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 shadow-xs space-y-3">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5">
-          {/* Search bar */}
-          <div className="relative flex-1">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search Request ID (#TRF-...), Medicine, Requesting Facility, or Supplier Facility..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-            />
-          </div>
-
-          {/* Quick Clear Filter Button if active */}
-          {isFiltersActive && (
-            <button
-              onClick={handleResetFilters}
-              className="px-2.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shrink-0"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span>Reset Filters</span>
-            </button>
-          )}
-        </div>
-
-        {/* Filter Dropdowns Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs">
-          {/* Priority */}
-          <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-              Priority
-            </label>
-            <select
-              value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value as any)}
-              className="w-full py-1.5 px-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            >
-              <option value="ALL">All Priorities</option>
-              <option value="CRITICAL">🔴 Critical Priority</option>
-              <option value="URGENT">🟠 Urgent Priority</option>
-              <option value="ROUTINE">🟢 Routine</option>
-            </select>
-          </div>
-
-          {/* Status */}
-          <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-              Lifecycle Status
-            </label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full py-1.5 px-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="REQUESTED">1. Requested (Awaiting Approval)</option>
-              <option value="APPROVED">2. Approved</option>
-              <option value="DISPATCHED">3. Dispatched (In Transit)</option>
-              <option value="RECEIVED">4. Received (Stock Credited)</option>
-              <option value="REJECTED">Rejected</option>
-            </select>
-          </div>
-
-          {/* Medicine */}
-          <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-              Medicine Formulary
-            </label>
-            <select
-              value={medicineFilter}
-              onChange={(e) => setMedicineFilter(e.target.value)}
-              className="w-full py-1.5 px-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            >
-              <option value="ALL">All Medicines ({distinctMedicines.length})</option>
-              {distinctMedicines.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Requesting Facility */}
-          <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-              Requesting Facility
-            </label>
-            <select
-              value={requestingFacilityFilter}
-              onChange={(e) => setRequestingFacilityFilter(e.target.value)}
-              className="w-full py-1.5 px-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            >
-              <option value="ALL">All Requesters ({distinctRequestingFacilities.length})</option>
-              {distinctRequestingFacilities.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Supplier Facility */}
-          <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-              Supplier Facility
-            </label>
-            <select
-              value={supplierFacilityFilter}
-              onChange={(e) => setSupplierFacilityFilter(e.target.value)}
-              className="w-full py-1.5 px-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            >
-              <option value="ALL">All Suppliers ({distinctSupplierFacilities.length})</option>
-              {distinctSupplierFacilities.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* ── 4. REQUISITIONS LIST (COMPACT OPERATIONAL LAYOUT) ── */}
-      {filteredRequisitions.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center space-y-2.5">
-          <Package className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto" />
-          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-            No medicine requisitions match the selected filters
-          </h3>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">
-            {isFiltersActive
-              ? 'Try adjusting your search query or reset dropdown filters to see active consignments.'
-              : 'There are currently no active or historical medicine transfers matching this KPI category.'}
-          </p>
-          {isFiltersActive && (
-            <button
-              onClick={handleResetFilters}
-              className="mt-2 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset Filters</span>
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filteredRequisitions.map((req) => {
-            const isCritical = req.urgency === 'CRITICAL';
-            const isUrgent = req.urgency === 'URGENT';
-
-            const cardBorder =
-              isCritical
-                ? 'border-rose-300 dark:border-rose-900/60 bg-rose-50/20 dark:bg-rose-950/10'
-                : isUrgent
-                ? 'border-amber-300 dark:border-amber-900/60 bg-amber-50/20 dark:bg-amber-950/10'
-                : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900';
-
-            const priorityBadge =
-              isCritical
-                ? 'bg-rose-500 text-white'
-                : isUrgent
-                ? 'bg-amber-500 text-slate-950'
-                : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300';
-
-            // Lifecycle Steps Mapping
-            const stages: Array<'REQUESTED' | 'APPROVED' | 'DISPATCHED' | 'RECEIVED'> = [
-              'REQUESTED',
-              'APPROVED',
-              'DISPATCHED',
-              'RECEIVED',
-            ];
-            const currentStageIndex =
-              req.displayStatus === 'RECEIVED'
-                ? 3
-                : req.displayStatus === 'DISPATCHED'
-                ? 2
-                : req.displayStatus === 'APPROVED'
-                ? 1
-                : 0;
-
-            const isRejected = req.displayStatus === 'REJECTED';
-
-            return (
-              <div
-                key={req.id}
-                className={`p-4 rounded-2xl border ${cardBorder} shadow-xs space-y-3 hover:border-blue-400 transition-all`}
-              >
-                {/* 1. Header Line: ID + Priority + Timestamp */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80 pb-2.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-xs font-black text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
-                      #{req.id}
-                    </span>
-                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${priorityBadge}`}>
-                      {req.urgency} PRIORITY
-                    </span>
-                    {req.supplyTier && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                        Tier: {req.supplyTier}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-3 text-xs text-slate-400 font-mono">
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      <span>{new Date(req.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
-                    </span>
-                  </div>
+      {/* ========================================================================= */}
+      {/* VIEW 1: TRACK REFERRALS & TRIAGE                                          */}
+      {/* ========================================================================= */}
+      {activeViewTab === 'referrals' && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          {/* Header */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center shrink-0">
+                <ArrowLeftRight className="w-5 h-5 text-blue-400" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                    DISTRICT REFERRAL OPERATIONS
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    LIVE TRIAGE QUEUE
+                  </span>
                 </div>
+                <h1 className="text-base sm:text-lg font-black text-white mt-1">
+                  Track Referrals &amp; Emergency Triage
+                </h1>
+                <p className="text-xs text-slate-400">
+                  Inter-facility patient transfers, priority triage scoring, bed admissions, and closed-loop counter-referrals.
+                </p>
+              </div>
+            </div>
 
-                {/* 2. Core Requisition Flow: REQUESTING FACILITY -> SUPPLIER FACILITY -> MEDICINE -> QUANTITY */}
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-                  {/* Requisition Route (Requester -> Supplier) */}
-                  <div className="md:col-span-6 space-y-1.5">
-                    <div className="flex items-center gap-2 text-xs">
-                      <div className="p-1 rounded bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400">
-                        <Building2 className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="truncate">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                          Requesting Facility
-                        </span>
-                        <strong className="text-slate-900 dark:text-white truncate block">
-                          {req.requestingFacilityName}
-                        </strong>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 pl-2 text-slate-400 text-xs">
-                      <ArrowRight className="w-3.5 h-3.5 text-blue-500" />
-                      <div className="truncate">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                          Supplier Facility
-                        </span>
-                        {req.hasEligibleSupplier ? (
-                          <strong className="text-emerald-700 dark:text-emerald-400 truncate block">
-                            {req.supplierFacilityName}
-                          </strong>
-                        ) : (
-                          <span className="text-rose-600 dark:text-rose-400 font-bold truncate block">
-                            No eligible supplier available (Network below buffer)
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Medicine + Quantity + Supplier Surplus */}
-                  <div className="md:col-span-6 space-y-1 bg-slate-50/60 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5">
-                        <Pill className="w-4 h-4 text-amber-500 shrink-0" />
-                        <h4 className="text-sm font-black text-slate-900 dark:text-white">
-                          {req.medicineName}
-                        </h4>
-                      </div>
-                      <span className="font-mono font-black text-sm text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-950 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-900">
-                        {req.requestedQuantity} {req.unit}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-                      {req.hasEligibleSupplier && req.supplierAvailableSurplus !== undefined ? (
-                        <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" />
-                          <span>Supplier Available Surplus: {req.supplierAvailableSurplus} {req.unit}</span>
-                        </span>
-                      ) : (
-                        <span className="text-rose-500 font-semibold">
-                          Buffer preserved &bull; Reallocation queue active
-                        </span>
-                      )}
-
-                      {req.reason && (
-                        <span className="truncate max-w-[180px] italic text-slate-400">
-                          &ldquo;{req.reason}&rdquo;
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. Compact Lifecycle Stepper + Action Buttons */}
-                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  {/* 4-Step Lifecycle Indicator */}
-                  {isRejected ? (
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-3 py-1 rounded-lg border border-rose-200 dark:border-rose-800">
-                      <AlertOctagon className="w-3.5 h-3.5" />
-                      <span>Requisition Rejected by Supplier Facility</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {stages.map((stageName, sIdx) => {
-                        const isDone = sIdx <= currentStageIndex;
-                        const isCurrent = sIdx === currentStageIndex;
-
-                        return (
-                          <React.Fragment key={stageName}>
-                            <div
-                              className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase flex items-center gap-1 transition-all ${
-                                isCurrent
-                                  ? 'bg-blue-600 text-white shadow-2xs'
-                                  : isDone
-                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300'
-                                  : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
-                              }`}
-                            >
-                              {isDone && <Check className="w-2.5 h-2.5" />}
-                              <span>{stageName}</span>
-                            </div>
-                            {sIdx < stages.length - 1 && (
-                              <span className="text-[10px] text-slate-300 dark:text-slate-600 font-bold">&rarr;</span>
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Operational Action CTA Buttons */}
-                  {req.transferObj && (
-                    <div className="flex items-center gap-2 shrink-0">
-                      {/* Step 1: Supplier Approve / Reject */}
-                      {req.displayStatus === 'REQUESTED' && (
-                        <>
-                          <button
-                            onClick={() => {
-                              setRejectingTransfer(req.transferObj!);
-                              setRejectReason('');
-                            }}
-                            className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer border border-rose-200 dark:border-rose-800"
-                          >
-                            <X className="w-3 h-3" />
-                            <span>Reject</span>
-                          </button>
-                          <button
-                            onClick={() => handleApprove(req.transferObj!.id)}
-                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all flex items-center gap-1 shadow-xs cursor-pointer"
-                          >
-                            <Check className="w-3 h-3" />
-                            <span>Approve Request</span>
-                          </button>
-                        </>
-                      )}
-
-                      {/* Step 2: Supplier Dispatch */}
-                      {req.displayStatus === 'APPROVED' && (
-                        <button
-                          onClick={() => handleDispatch(req.transferObj!.id)}
-                          className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
-                        >
-                          <Truck className="w-3.5 h-3.5" />
-                          <span>Dispatch Consignment</span>
-                        </button>
-                      )}
-
-                      {/* Step 3: Requester Confirm Receipt */}
-                      {req.displayStatus === 'DISPATCHED' && (
-                        <button
-                          onClick={() => setConfirmReceiptTransfer(req.transferObj!)}
-                          className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Confirm Receipt &amp; Credit Stock</span>
-                        </button>
-                      )}
-
-                      {/* Step 4: Received badge */}
-                      {req.displayStatus === 'RECEIVED' && (
-                        <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-md border border-emerald-200 dark:border-emerald-800">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Stock Credited</span>
-                        </span>
-                      )}
-                    </div>
-                  )}
+            <div className="flex items-center gap-3">
+              <div className="text-left md:text-right">
+                <span className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
+                  District Scope
+                </span>
+                <div className="text-xs font-bold text-slate-200">
+                  {currentDistrict} Health Network
                 </div>
               </div>
-            );
-          })}
+            </div>
+          </div>
+
+          {/* Referral KPI Tabs */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+            {[
+              { id: 'ALL' as ReferralKpiTab, label: 'All Referrals', count: referralKpiCounts.total, desc: 'Total inter-tier tokens', activeClass: 'border-blue-500 bg-blue-50/60 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300' },
+              { id: 'CRITICAL' as ReferralKpiTab, label: 'Critical / Red', count: referralKpiCounts.critical, desc: 'High triage urgency', activeClass: 'border-rose-500 bg-rose-50/60 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300', indicator: referralKpiCounts.critical > 0 },
+              { id: 'PENDING' as ReferralKpiTab, label: 'Pending Intake', count: referralKpiCounts.pending, desc: 'Awaiting triage intake', activeClass: 'border-amber-500 bg-amber-50/60 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300' },
+              { id: 'ACCEPTED' as ReferralKpiTab, label: 'Accepted', count: referralKpiCounts.accepted, desc: 'En route / Accepted', activeClass: 'border-indigo-500 bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300' },
+              { id: 'ADMITTED' as ReferralKpiTab, label: 'Inpatient Care', count: referralKpiCounts.admitted, desc: 'Bed allocated & active', activeClass: 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300' },
+              { id: 'DISCHARGED' as ReferralKpiTab, label: 'Completed', count: referralKpiCounts.discharged, desc: 'Counter-referred/Done', activeClass: 'border-slate-500 bg-slate-50/60 dark:bg-slate-950/40 text-slate-700 dark:text-slate-300' },
+            ].map((tab) => {
+              const isActive = refKpiTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setRefKpiTab(tab.id)}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 shadow-xs ${
+                    isActive
+                      ? `${tab.activeClass} ring-2 ring-blue-500/20 font-bold`
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase tracking-wider">{tab.label}</span>
+                    {tab.indicator && <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />}
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xl font-black">{tab.count}</span>
+                    <span className="text-[10px] text-slate-400 truncate">{tab.desc}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Search & Filter Toolbar */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 shadow-xs space-y-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search by patient name, ABHA ID, token, referring facility, or hospital..."
+                  value={refSearchQuery}
+                  onChange={(e) => setRefSearchQuery(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <select
+                  value={refUrgencyFilter}
+                  onChange={(e) => setRefUrgencyFilter(e.target.value as any)}
+                  className="px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="ALL">All Triage Urgencies</option>
+                  <option value="RED">🔴 Red / Critical Priority</option>
+                  <option value="YELLOW">🟡 Yellow / Urgent</option>
+                  <option value="GREEN">🟢 Green / Routine</option>
+                </select>
+
+                <select
+                  value={refSpecialtyFilter}
+                  onChange={(e) => setRefSpecialtyFilter(e.target.value)}
+                  className="px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="ALL">All Specialties</option>
+                  <option value="Obstetrics & Gynaecology">Obstetrics &amp; Gynaecology</option>
+                  <option value="Cardiology">Cardiology</option>
+                  <option value="General Medicine">General Medicine</option>
+                  <option value="Pediatrics">Pediatrics</option>
+                  <option value="Trauma & Emergency Care">Trauma &amp; Emergency</option>
+                  <option value="Orthopedics">Orthopedics</option>
+                  <option value="General Surgery">General Surgery</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Referrals Cards Grid */}
+          <div className="space-y-3">
+            {filteredReferrals.length === 0 ? (
+              <div className="p-8 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl">
+                <ArrowLeftRight className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">No referral records match your filters</h4>
+                <p className="text-xs text-slate-400 mt-1">Try resetting search filters or changing the urgency status tab.</p>
+              </div>
+            ) : (
+              filteredReferrals.map((ref) => {
+                const isCritical = ref.triagePriority === 'red' || ref.triageScore >= 7;
+                return (
+                  <div
+                    key={ref.id}
+                    className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-blue-300 dark:hover:border-blue-700 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                  >
+                    <div className="space-y-2 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                          {ref.tokenCode || ref.id}
+                        </span>
+                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border ${
+                          isCritical
+                            ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border-rose-300'
+                            : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-300'
+                        }`}>
+                          {ref.triagePriority === 'red' ? '🔴 RED PRIORITY' : '🟢 ROUTINE PRIORITY'}
+                        </span>
+                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                          {ref.specialtyRequired}
+                        </span>
+                        <span className="text-[10px] text-slate-400 ml-auto lg:ml-0 font-mono">
+                          {new Date(ref.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+                          {ref.patientName}
+                        </h3>
+                        <span className="text-xs text-slate-500 font-mono">
+                          ABHA: {ref.patientAbha}
+                        </span>
+                        <span className="text-xs text-slate-400">
+                          ({ref.patientAge}y, {ref.patientGender})
+                        </span>
+                      </div>
+
+                      {/* Facility Transfer Route */}
+                      <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 flex-wrap">
+                        <span className="flex items-center gap-1 text-slate-600 dark:text-slate-400">
+                          <Building2 className="w-3.5 h-3.5 text-blue-500" />
+                          {ref.referringFacility}
+                        </span>
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="flex items-center gap-1 text-teal-600 dark:text-teal-400 font-bold">
+                          <Building2 className="w-3.5 h-3.5 text-teal-500" />
+                          {ref.targetFacility}
+                        </span>
+                      </div>
+
+                      {ref.referralReason && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1 italic">
+                          &ldquo;{ref.referralReason}&rdquo;
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Right Action Column */}
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      <span className={`text-xs font-black uppercase px-3 py-1.5 rounded-xl border ${
+                        ref.status === 'PENDING'
+                          ? 'bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border-amber-300'
+                          : ref.status === 'ACCEPTED'
+                          ? 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-300'
+                          : ref.status === 'ADMITTED'
+                          ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-300'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300'
+                      }`}>
+                        {ref.status}
+                      </span>
+
+                      {onReviewReferral && (
+                        <button
+                          onClick={() => onReviewReferral(ref)}
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Review &amp; Triage</span>
+                        </button>
+                      )}
+
+                      {onOpenReferralToken && (
+                        <button
+                          onClick={() => onOpenReferralToken(ref)}
+                          className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Token &amp; QR</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       )}
 
-      {/* ── 5. RECEIPT CONFIRMATION MODAL ── */}
+      {/* ========================================================================= */}
+      {/* VIEW 2: TRACK PATIENTS & LONGITUDINAL EHR                                */}
+      {/* ========================================================================= */}
+      {activeViewTab === 'patients' && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          {/* Header */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                <FolderHeart className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                    DISTRICT POPULATION HEALTH
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                    ABDM COMPLIANT EHR
+                  </span>
+                </div>
+                <h1 className="text-base sm:text-lg font-black text-white mt-1">
+                  Track Patients &amp; Longitudinal EHR Registry
+                </h1>
+                <p className="text-xs text-slate-400">
+                  District-level citizen health records, maternal high-risk tracking, continuous vitals, and care ownership.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="text-left md:text-right">
+                <span className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
+                  Registered Population
+                </span>
+                <div className="text-xs font-bold text-slate-200">
+                  {patientKpiCounts.total} Tracked Citizen Records
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Patient KPI Tabs */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+            {[
+              { id: 'ALL' as PatientKpiTab, label: 'All Patients', count: patientKpiCounts.total, desc: 'District population', activeClass: 'border-blue-500 bg-blue-50/60 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300' },
+              { id: 'HIGH_RISK' as PatientKpiTab, label: 'High Risk / HRP', count: patientKpiCounts.highRisk, desc: 'Maternal & chronic alerts', activeClass: 'border-rose-500 bg-rose-50/60 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300', indicator: patientKpiCounts.highRisk > 0 },
+              { id: 'INPATIENTS' as PatientKpiTab, label: 'Active Inpatients', count: patientKpiCounts.inpatients, desc: 'Currently admitted', activeClass: 'border-purple-500 bg-purple-50/60 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300' },
+              { id: 'FOLLOW_UP' as PatientKpiTab, label: 'Follow-up Active', count: patientKpiCounts.followUp, desc: 'ASHA community tracking', activeClass: 'border-amber-500 bg-amber-50/60 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300' },
+              { id: 'STABLE' as PatientKpiTab, label: 'Stable Population', count: patientKpiCounts.stable, desc: 'Routine primary monitoring', activeClass: 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300' },
+            ].map((tab) => {
+              const isActive = patKpiTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setPatKpiTab(tab.id)}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 shadow-xs ${
+                    isActive
+                      ? `${tab.activeClass} ring-2 ring-emerald-500/20 font-bold`
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase tracking-wider">{tab.label}</span>
+                    {tab.indicator && <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />}
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xl font-black">{tab.count}</span>
+                    <span className="text-[10px] text-slate-400 truncate">{tab.desc}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Search & Filter Toolbar */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 shadow-xs space-y-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search by patient name, ABHA ID, village, or phone number..."
+                  value={patSearchQuery}
+                  onChange={(e) => setPatSearchQuery(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <select
+                  value={patRiskFilter}
+                  onChange={(e) => setPatRiskFilter(e.target.value as any)}
+                  className="px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="ALL">All Clinical Categories</option>
+                  <option value="HRP">High-Risk Pregnancy (HRP)</option>
+                  <option value="CHRONIC">Chronic Conditions</option>
+                  <option value="NORMAL">Normal / Stable</option>
+                </select>
+
+                <select
+                  value={patTalukaFilter}
+                  onChange={(e) => setPatTalukaFilter(e.target.value)}
+                  className="px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="ALL">All Talukas</option>
+                  <option value="Velhe">Velhe</option>
+                  <option value="Bhor">Bhor</option>
+                  <option value="Haveli">Haveli</option>
+                  <option value="Pune City">Pune City</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Patients List Cards */}
+          <div className="space-y-3">
+            {filteredPatients.length === 0 ? (
+              <div className="p-8 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl">
+                <FolderHeart className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">No patient records found</h4>
+                <p className="text-xs text-slate-400 mt-1">Check search parameters or select a different category filter.</p>
+              </div>
+            ) : (
+              filteredPatients.map((p) => {
+                const latestEnc = p.encounters && p.encounters.length > 0 ? p.encounters[p.encounters.length - 1] : null;
+                const vitals = latestEnc?.vitals;
+                return (
+                  <div
+                    key={p.id}
+                    className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-emerald-300 dark:hover:border-emerald-700 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                  >
+                    <div className="space-y-2 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-black text-slate-900 dark:text-white">
+                          {p.fullName}
+                        </span>
+                        <span className="text-xs font-mono text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                          ABHA: {p.abhaId}
+                        </span>
+                        <span className="text-xs text-slate-400">
+                          ({p.age}y, {p.gender} • {p.bloodGroup || 'B+'})
+                        </span>
+                        {p.isHighRiskPregnancy && (
+                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300">
+                            HRP (Week {p.gestationalWeeks})
+                          </span>
+                        )}
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200">
+                          Care Owner: {p.activeCareOwner || 'PHC Primary Care'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
+                        <span className="flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                          {p.village}, {p.taluka} Taluka ({p.district || currentDistrict})
+                        </span>
+                        {p.phone && (
+                          <span className="flex items-center gap-1 font-mono">
+                            <Phone className="w-3.5 h-3.5 text-slate-400" />
+                            +91 {p.phone}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Vitals summary strip */}
+                      {vitals && (
+                        <div className="flex items-center gap-2 text-[11px] font-mono bg-slate-50 dark:bg-slate-800/60 p-2 rounded-xl border border-slate-100 dark:border-slate-800 flex-wrap">
+                          <span className="text-slate-500 font-bold">Latest Vitals:</span>
+                          <span className="text-slate-800 dark:text-slate-200">BP: {vitals.systolicBp}/{vitals.diastolicBp} mmHg</span>
+                          <span>•</span>
+                          <span className="text-slate-800 dark:text-slate-200">SpO2: {vitals.spO2}%</span>
+                          <span>•</span>
+                          <span className="text-slate-800 dark:text-slate-200">HR: {vitals.heartRate} bpm</span>
+                          <span>•</span>
+                          <span className="text-slate-800 dark:text-slate-200">Temp: {vitals.temperature}°C</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Right Actions */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {onOpenPatientTimeline && (
+                        <button
+                          onClick={() => onOpenPatientTimeline(p)}
+                          className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Activity className="w-3.5 h-3.5" />
+                          <span>View EHR Timeline</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* VIEW 3: TRACK MEDICINE & BUFFER                                           */}
+      {/* ========================================================================= */}
+      {activeViewTab === 'medicine' && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          {/* ── 1. HEADER ── */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+                <Pill className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                    DISTRICT MEDICINE OPERATIONS
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    MAHAAUSHADHI NETWORK
+                  </span>
+                </div>
+                <h1 className="text-base sm:text-lg font-black text-white mt-1 flex items-center gap-2">
+                  <span>Medicine Requisition &amp; Transfer Tracking</span>
+                </h1>
+                <p className="text-xs text-slate-400">
+                  Inter-facility supply allocations, supplier approvals, dispatch transit, and verified receipt acknowledgments
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="text-left md:text-right">
+                <span className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
+                  Live Network State
+                </span>
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>{medicineKpiCounts.total} Requisitions Active / Completed</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Success Banner */}
+          {actionSuccessMsg && (
+            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2 font-bold animate-in fade-in duration-200">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{actionSuccessMsg}</span>
+            </div>
+          )}
+
+          {/* ── 2. KPI TABS ── */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+            {[
+              {
+                id: 'ALL' as MedicineKpiTab,
+                label: 'All Demands',
+                count: medicineKpiCounts.total,
+                desc: 'Total formulary requisitions',
+                activeClass: 'border-blue-500 bg-blue-50/60 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300',
+                badgeClass: 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200',
+              },
+              {
+                id: 'NEEDS_ACTION' as MedicineKpiTab,
+                label: 'Needs Action',
+                count: medicineKpiCounts.needsAction,
+                desc: 'Pending approval or delivery receipt',
+                activeClass: 'border-rose-500 bg-rose-50/60 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300',
+                badgeClass: 'bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200',
+                indicator: medicineKpiCounts.needsAction > 0,
+              },
+              {
+                id: 'AWAITING_APPROVAL' as MedicineKpiTab,
+                label: 'Awaiting Approval',
+                count: medicineKpiCounts.awaitingApproval,
+                desc: 'Requested at supplier facility',
+                activeClass: 'border-amber-500 bg-amber-50/60 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300',
+                badgeClass: 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200',
+              },
+              {
+                id: 'IN_TRANSIT' as MedicineKpiTab,
+                label: 'In Transit',
+                count: medicineKpiCounts.inTransit,
+                desc: 'Dispatched and en route',
+                activeClass: 'border-purple-500 bg-purple-50/60 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300',
+                badgeClass: 'bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-200',
+              },
+              {
+                id: 'RECEIVED' as MedicineKpiTab,
+                label: 'Received',
+                count: medicineKpiCounts.received,
+                desc: 'Delivered & stock credited',
+                activeClass: 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300',
+                badgeClass: 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200',
+              },
+            ].map((tab) => {
+              const isActive = medicineKpiTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setMedicineKpiTab(tab.id)}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 shadow-xs ${
+                    isActive
+                      ? `${tab.activeClass} ring-2 ring-blue-500/20 font-bold`
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase tracking-wider">{tab.label}</span>
+                    {tab.indicator && <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />}
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xl font-black">{tab.count}</span>
+                    <span className="text-[10px] text-slate-400 truncate">{tab.desc}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* ── 3. OPERATIONAL TOOLBAR & FILTERS ── */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 shadow-xs space-y-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search medicine, requesting PHC/Hospital, supplier facility, ID..."
+                  value={medSearchQuery}
+                  onChange={(e) => setMedSearchQuery(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <select
+                  value={priorityFilter}
+                  onChange={(e) => setPriorityFilter(e.target.value as any)}
+                  className="px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="ALL">All Urgencies</option>
+                  <option value="CRITICAL">🔴 Critical</option>
+                  <option value="URGENT">🟡 Urgent</option>
+                  <option value="ROUTINE">🟢 Routine</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* ── 4. REQUISITIONS LIST ── */}
+          <div className="space-y-3">
+            {filteredRequisitions.length === 0 ? (
+              <div className="p-8 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl">
+                <Package className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">No medicine requisitions found</h4>
+                <p className="text-xs text-slate-400 mt-1">Try resetting search filters.</p>
+              </div>
+            ) : (
+              filteredRequisitions.map((item) => (
+                <div
+                  key={item.id}
+                  className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-purple-300 dark:hover:border-purple-700 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                >
+                  <div className="space-y-2 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                        {item.id}
+                      </span>
+                      <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border ${
+                        item.urgency === 'CRITICAL'
+                          ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border-rose-300'
+                          : item.urgency === 'URGENT'
+                          ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border-amber-300'
+                          : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-300'
+                      }`}>
+                        {item.urgency}
+                      </span>
+                      {item.supplyTier && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                          {item.supplyTier} Tier
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+                        {item.medicineName}
+                      </h3>
+                      <span className="text-xs font-bold text-purple-600 dark:text-purple-400">
+                        ({item.requestedQuantity} {item.unit})
+                      </span>
+                    </div>
+
+                    {/* Route: Requesting Facility -> Supplier Facility */}
+                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 flex-wrap">
+                      <span className="flex items-center gap-1 text-slate-600 dark:text-slate-400">
+                        <Building2 className="w-3.5 h-3.5 text-blue-500" />
+                        {item.requestingFacilityName}
+                      </span>
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+                      <span className={`flex items-center gap-1 font-bold ${
+                        item.hasEligibleSupplier ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'
+                      }`}>
+                        <Building2 className="w-3.5 h-3.5" />
+                        {item.supplierFacilityName}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    <span className={`text-xs font-black uppercase px-3 py-1.5 rounded-xl border ${
+                      item.displayStatus === 'REQUESTED'
+                        ? 'bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border-amber-300'
+                        : item.displayStatus === 'APPROVED'
+                        ? 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-300'
+                        : item.displayStatus === 'DISPATCHED'
+                        ? 'bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border-purple-300'
+                        : item.displayStatus === 'RECEIVED'
+                        ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-300'
+                        : 'bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border-rose-300'
+                    }`}>
+                      {item.displayStatus}
+                    </span>
+
+                    {item.transferObj && item.displayStatus === 'REQUESTED' && (
+                      <button
+                        onClick={() => handleApprove(item.transferObj!.id)}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+                      >
+                        Approve Allocation
+                      </button>
+                    )}
+
+                    {item.transferObj && item.displayStatus === 'APPROVED' && (
+                      <button
+                        onClick={() => handleDispatch(item.transferObj!.id)}
+                        className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+                      >
+                        Dispatch En Route
+                      </button>
+                    )}
+
+                    {item.transferObj && item.displayStatus === 'DISPATCHED' && (
+                      <button
+                        onClick={() => setConfirmReceiptTransfer(item.transferObj!)}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+                      >
+                        Confirm Receipt
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: CONFIRM RECEIPT ── */}
       {confirmReceiptTransfer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
-                    Confirm Stock Receipt
-                  </h3>
-                  <p className="text-[11px] text-slate-400">Requisition #{confirmReceiptTransfer.id}</p>
-                </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center text-emerald-600">
+                <CheckCircle2 className="w-5 h-5" />
               </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900 dark:text-white">
+                  Confirm Medicine Receipt
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Consignment #{confirmReceiptTransfer.id}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl space-y-2 text-xs border border-slate-200 dark:border-slate-700">
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Medicine:</span>
+                <span className="font-bold text-slate-900 dark:text-white">{confirmReceiptTransfer.medicineName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Quantity:</span>
+                <span className="font-bold text-purple-600 dark:text-purple-400">{confirmReceiptTransfer.requestedQuantity} Units</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Supplier:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{confirmReceiptTransfer.sourceFacilityName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Recipient Facility:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{confirmReceiptTransfer.destinationFacilityName}</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-500 text-center">
+              Confirming receipt will debit the source inventory and credit the destination facility in real time.
+            </p>
+
+            <div className="flex gap-3">
               <button
                 onClick={() => setConfirmReceiptTransfer(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-100 dark:border-slate-800 space-y-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Medicine Item:</span>
-                <strong className="text-slate-900 dark:text-white">{confirmReceiptTransfer.medicineName}</strong>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Quantity to Credit:</span>
-                <strong className="text-emerald-600 dark:text-emerald-400 font-bold">
-                  {confirmReceiptTransfer.requestedQuantity} Units
-                </strong>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Supplier Facility:</span>
-                <span className="text-slate-700 dark:text-slate-300 font-semibold">{confirmReceiptTransfer.sourceFacilityName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Receiving Destination:</span>
-                <span className="text-slate-700 dark:text-slate-300 font-semibold">{confirmReceiptTransfer.destinationFacilityName}</span>
-              </div>
-            </div>
-
-            <div className="p-3 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 text-[11px] text-blue-800 dark:text-blue-300 flex items-start gap-2">
-              <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-              <span>
-                Confirming receipt will automatically update the canonical inventory ledger: deducting from supplier and crediting to requesting facility.
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                onClick={() => setConfirmReceiptTransfer(null)}
-                className="flex-1 py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all cursor-pointer"
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmReceive}
-                className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md transition-colors cursor-pointer"
               >
-                <Check className="w-3.5 h-3.5" />
-                <span>Confirm &amp; Receive Stock</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── 6. REJECT REQUISITION MODAL ── */}
-      {rejectingTransfer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400">
-                  <AlertOctagon className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
-                    Reject Requisition
-                  </h3>
-                  <p className="text-[11px] text-slate-400">Requisition #{rejectingTransfer.id}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setRejectingTransfer(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                Reason for Rejection
-              </label>
-              <textarea
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                placeholder="e.g. Statutory buffer threshold constraint, upcoming local immunization drive..."
-                rows={3}
-                className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500/20"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                onClick={() => setRejectingTransfer(null)}
-                className="flex-1 py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleReject}
-                className="flex-1 py-2 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-                <span>Confirm Rejection</span>
+                Confirm &amp; Credit Stock
               </button>
             </div>
           </div>
