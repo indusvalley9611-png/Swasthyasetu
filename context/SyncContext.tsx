@@ -32,7 +32,7 @@ import {
   clearSyncQueue,
 } from '@/lib/idbStorage';
 import { getSafeTransferableQuantity, findHierarchicalSupplySources } from '@/lib/resourceManagement';
-import { isValidCanonicalFacilityId, resolveCanonicalFacilityName, validateStockTransfer, validateReplenishmentRequest } from '@/lib/mockData';
+import { isValidCanonicalFacilityId, resolveCanonicalFacility, resolveCanonicalFacilityName, validateStockTransfer, validateReplenishmentRequest } from '@/lib/mockData';
 
 interface SyncContextType {
   isOnline: boolean;
@@ -699,6 +699,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     destinationFacilityId: string,
     userDistrict: string = 'Pune'
   ) => {
+    const destFac = resolveCanonicalFacility(destinationFacilityId) || facilities.find(f => f.id === destinationFacilityId);
+    const effectiveDistrict = destFac?.district || userDistrict || 'Pune';
+
     const destStock = stocks.find(
       s => s.facilityId === destinationFacilityId &&
            (s.drugName.toLowerCase() === medicineName.toLowerCase() ||
@@ -723,7 +726,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       stocks,
       stockTransfers,
       facilities,
-      userDistrict,
+      effectiveDistrict,
       requestedQuantity
     );
 
@@ -823,7 +826,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           id: itemId,
           status: 'PENDING' as const,
           sourceFacilityId: undefined,
-          sourceFacilityName: 'No eligible supplier currently available',
+          sourceFacilityName: 'Awaiting Supplier Match',
           supplierAvailableSurplus: 0,
         };
       }
@@ -873,7 +876,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     } else if (newlyCreatedTransfers.length > 0) {
       showToast("Requisition " + newRequest.id + " created — " + newlyCreatedTransfers.length + "/" + processedItems.length + " medicine(s) auto-assigned to surplus suppliers.");
     } else {
-      showToast("Requisition " + newRequest.id + " created — No eligible supplier currently available with surplus above buffer.");
+      showToast("Requisition " + newRequest.id + " created — Awaiting supplier match in District Allocation Queue.");
     }
 
     return newRequest;

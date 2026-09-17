@@ -993,7 +993,7 @@ export function MedicineRequestsModule() {
 
                           {/* Source */}
                           <td className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">
-                            {req.sourceFacilityName || 'No eligible supplier currently available'}
+                            {req.sourceFacilityName || 'Awaiting Supplier Match'}
                           </td>
 
                           {/* Destination */}

@@ -1014,7 +1014,7 @@ export function PharmacistDashboard() {
                               className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer inline-flex items-center gap-1"
                             >
                               <Shield className="w-3.5 h-3.5" />
-                              <span>Review & Fulfill</span>
+                              <span>Review & Approve</span>
                             </button>
                           </td>
 
@@ -1103,7 +1103,7 @@ export function PharmacistDashboard() {
                         <td className="px-4 py-2.5">
                           <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                             <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span>{req.sourceFacilityName || 'No eligible supplier currently available'}</span>
+                            <span>{req.sourceFacilityName || 'Awaiting Supplier Match'}</span>
                           </div>
                           {req.rejectionReason && (
                             <div className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold mt-0.5">

@@ -72,6 +72,7 @@ export function DistrictTrackingCenter({
     referrals,
     patients,
     processStockTransfer,
+    allocateRequestSupplies,
   } = useSync();
 
   const isMr = language === 'mr';
@@ -141,7 +142,8 @@ export function DistrictTrackingCenter({
         st.sourceFacilityId &&
         st.sourceFacilityName &&
         !st.sourceFacilityName.toLowerCase().includes('no eligible') &&
-        !st.sourceFacilityName.toLowerCase().includes('unallocated')
+        !st.sourceFacilityName.toLowerCase().includes('unallocated') &&
+        !st.sourceFacilityName.toLowerCase().includes('awaiting')
       );
 
       list.push({
@@ -158,7 +160,7 @@ export function DistrictTrackingCenter({
         supplierFacilityId: st.sourceFacilityId,
         supplierFacilityName: hasSupplier
           ? (st.sourceFacilityName || resolveCanonicalFacilityName(st.sourceFacilityId))
-          : 'No eligible supplier available',
+          : 'Awaiting Supplier Match',
         supplierAvailableSurplus: st.supplierAvailableSurplus,
         hasEligibleSupplier: hasSupplier,
         supplyTier: st.supplyTier,
@@ -185,7 +187,8 @@ export function DistrictTrackingCenter({
           item.sourceFacilityId &&
           item.sourceFacilityName &&
           !item.sourceFacilityName.toLowerCase().includes('no eligible') &&
-          !item.sourceFacilityName.toLowerCase().includes('unallocated')
+          !item.sourceFacilityName.toLowerCase().includes('unallocated') &&
+          !item.sourceFacilityName.toLowerCase().includes('awaiting')
         );
 
         list.push({
@@ -202,7 +205,7 @@ export function DistrictTrackingCenter({
           supplierFacilityId: item.sourceFacilityId,
           supplierFacilityName: hasSupplier
             ? (item.sourceFacilityName || resolveCanonicalFacilityName(item.sourceFacilityId))
-            : 'No eligible supplier available',
+            : 'Awaiting Supplier Match',
           supplierAvailableSurplus: item.supplierAvailableSurplus,
           hasEligibleSupplier: hasSupplier,
           supplyTier: item.supplyTier,
@@ -1051,19 +1054,23 @@ export function DistrictTrackingCenter({
                       </span>
                     </div>
 
-                    {/* Route: Requesting Facility -> Supplier Facility */}
+                    {/* Route: Source [Supplier Facility] -> Destination [Requesting Facility] */}
                     <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 flex-wrap">
-                      <span className="flex items-center gap-1 text-slate-600 dark:text-slate-400">
-                        <Building2 className="w-3.5 h-3.5 text-blue-500" />
-                        {item.requestingFacilityName}
-                      </span>
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">Source:</span>
+                        <Building2 className="w-3.5 h-3.5 text-purple-500" />
+                        <span className={item.hasEligibleSupplier ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400 font-black'}>
+                          {item.supplierFacilityName}
+                        </span>
+                      </div>
                       <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-                      <span className={`flex items-center gap-1 font-bold ${
-                        item.hasEligibleSupplier ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'
-                      }`}>
-                        <Building2 className="w-3.5 h-3.5" />
-                        {item.supplierFacilityName}
-                      </span>
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">Destination:</span>
+                        <Building2 className="w-3.5 h-3.5 text-blue-500" />
+                        <span className="text-slate-800 dark:text-slate-200">
+                          {item.requestingFacilityName}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -1083,12 +1090,27 @@ export function DistrictTrackingCenter({
                       {item.displayStatus}
                     </span>
 
+                    {!item.hasEligibleSupplier && (
+                      <button
+                        onClick={() => {
+                          const res = allocateRequestSupplies(item.requestId, currentDistrict, user ? { id: user.id, name: user.name } : null);
+                          if (res) {
+                            setActionSuccessMsg('Supplier allocated from available surplus / routed to DHO Central Reserve.');
+                            setTimeout(() => setActionSuccessMsg(''), 4000);
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1"
+                      >
+                        <span>Auto-Allocate / Send to DHO</span>
+                      </button>
+                    )}
+
                     {item.transferObj && item.displayStatus === 'REQUESTED' && (
                       <button
                         onClick={() => handleApprove(item.transferObj!.id)}
                         className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
                       >
-                        Approve Allocation
+                        Review & Approve
                       </button>
                     )}
 
