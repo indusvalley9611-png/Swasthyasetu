@@ -1,9 +1,9 @@
 {
   "name": "SwasthyaSetu — Maharashtra Public Health",
   "short_name": "SwasthyaSetu",
-  "description": "Maharashtra Integrated Public Healthcare & Smart Referral System",
-  "start_url": "/",
-  "id": "/",
+  "description": "Maharashtra Integrated Public Healthcare & Emergency System",
+  "start_url": "/?mode=mobile",
+  "id": "/?mode=mobile",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",

@@ -23,6 +23,7 @@ import { AuditTrailModal } from '@/components/compliance/AuditTrailModal';
 import { EmergencyHelpModal } from '@/components/emergency/EmergencyHelpModal';
 import { LandingPitchPage } from '@/components/landing/LandingPitchPage';
 import { SignInPortalPage } from '@/components/auth/SignInPortalPage';
+import { MobileEntryPage } from '@/components/mobile/MobileEntryPage';
 
 export default function Home() {
   const { role, isAuthenticated, switchRole } = useAuth();
@@ -41,8 +42,9 @@ export default function Home() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isEmergencyOpen, setIsEmergencyOpen] = useState(false);
 
-  // Split Page 1 (Pitch / Landing) vs Page 2 (Sign In)
-  const [unauthView, setUnauthView] = useState<'pitch' | 'signin'>('pitch');
+  const [isMobile, setIsMobile] = useState(false);
+  // Unauthenticated view: 'pitch' (desktop page 1), 'signin' (page 2), or 'mobile_entry' (mobile 2-option hub)
+  const [unauthView, setUnauthView] = useState<'pitch' | 'signin' | 'mobile_entry'>('pitch');
 
   useEffect(() => {
     setMounted(true);
@@ -56,6 +58,32 @@ export default function Home() {
       document.documentElement.classList.remove('dark');
       document.documentElement.classList.add('light');
     }
+
+    // ── Mobile Device / PWA Display Mode Detection ──
+    const isStandalone = typeof window !== 'undefined' && (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true
+    );
+    const isMobileViewport = typeof window !== 'undefined' && window.innerWidth < 768;
+    const isMobileUA = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const forceMobile = urlParams?.get('mode') === 'mobile';
+
+    const mobileDetected = isStandalone || isMobileViewport || isMobileUA || forceMobile;
+    setIsMobile(mobileDetected);
+
+    if (mobileDetected) {
+      setUnauthView('mobile_entry');
+    } else {
+      setUnauthView('pitch');
+    }
+
+    const handleResize = () => {
+      const isMobileNow = window.innerWidth < 768 || window.matchMedia('(display-mode: standalone)').matches;
+      setIsMobile(isMobileNow);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const toggleDarkMode = () => {
@@ -101,8 +129,27 @@ export default function Home() {
     return null;
   }
 
-  // ── UNAUTHENTICATED STATE: SPLIT BETWEEN PAGE 1 (PITCH) & PAGE 2 (SIGN IN) ──
+  // ── UNAUTHENTICATED STATE: SPLIT BETWEEN MOBILE ENTRY, PAGE 1 (PITCH) & PAGE 2 (SIGN IN) ──
   if (!isAuthenticated || !role) {
+    // 1. MOBILE/PWA ENTRY: 2-Option Screen (Emergency & Sign In)
+    if (isMobile && unauthView === 'mobile_entry') {
+      return (
+        <>
+          <MobileEntryPage
+            onOpenEmergency={() => setIsEmergencyOpen(true)}
+            onNavigateToSignIn={() => setUnauthView('signin')}
+            isDarkMode={isDarkMode}
+            onToggleDarkMode={toggleDarkMode}
+          />
+
+          {isEmergencyOpen && (
+            <EmergencyHelpModal onClose={() => setIsEmergencyOpen(false)} />
+          )}
+        </>
+      );
+    }
+
+    // 2. DESKTOP PAGE 1: Landing Pitch / Marketing & Stats
     if (unauthView === 'pitch') {
       return (
         <LandingPitchPage
@@ -113,6 +160,7 @@ export default function Home() {
       );
     }
 
+    // 3. PAGE 2: Sign In Portal (Role Selection & Patient EHR ABHA)
     return (
       <>
         <SignInPortalPage
@@ -121,7 +169,13 @@ export default function Home() {
             setIsLoginModalOpen(true);
           }}
           onOpenEmergency={() => setIsEmergencyOpen(true)}
-          onNavigateToPitch={() => setUnauthView('pitch')}
+          onNavigateToPitch={() => {
+            if (isMobile) {
+              setUnauthView('mobile_entry');
+            } else {
+              setUnauthView('pitch');
+            }
+          }}
           isDarkMode={isDarkMode}
           onToggleDarkMode={toggleDarkMode}
         />
