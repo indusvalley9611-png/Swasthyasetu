@@ -636,7 +636,7 @@ export function DistrictTrackingCenter({
                           className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
                         >
                           <Eye className="w-3.5 h-3.5" />
-                          <span>Review &amp; Triage</span>
+                          <span>Review &amp; Coordinate</span>
                         </button>
                       )}
 
