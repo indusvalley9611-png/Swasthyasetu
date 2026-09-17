@@ -34,6 +34,8 @@ import { PatientDischargeModal } from '../specialist/PatientDischargeModal';
 import { FacilityTamperAuditView } from '../specialist/FacilityTamperAuditView';
 import { FacilityBloodDrugWidget } from '../specialist/FacilityBloodDrugWidget';
 import { DistrictQRScannerModal } from '../specialist/DistrictQRScannerModal';
+import { TertiaryStateEscalationsView } from '../specialist/TertiaryStateEscalationsView';
+import { ClinicalRecordsCaseHistoryView } from '../specialist/ClinicalRecordsCaseHistoryView';
 import {
   Users,
   Stethoscope,
@@ -55,6 +57,10 @@ import {
   Radio,
   FileText,
   QrCode,
+  ArrowLeftRight,
+  FileClock,
+  HeartHandshake,
+  BedDouble,
 } from 'lucide-react';
 
 export interface SpecialistDashboardProps {
@@ -73,7 +79,10 @@ export type SpecialistTab =
   | 'beds'
   | 'roster'
   | 'admitted'
+  | 'escalated'
+  | 'counter_referral'
   | 'discharges'
+  | 'history'
   | 'audit'
   | 'inventory_sla';
 
@@ -790,7 +799,7 @@ export function SpecialistDashboard({
       )}
 
       {/* ── 9. FEATURE 6: DISCHARGE & REFER-BACK CARE-CONTINUITY LOOP ── */}
-      {activeTab === 'discharges' && (
+      {(activeTab === 'discharges' || activeTab === 'counter_referral') && (
         <div className="space-y-4">
           <div className="bg-gradient-to-r from-slate-900 via-emerald-950 to-slate-900 border border-emerald-900/40 rounded-3xl p-5 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
@@ -874,6 +883,31 @@ export function SpecialistDashboard({
           bloodStock={bloodStock}
           drugStocks={myHospitalDrugStocks}
           referrals={myHospitalReferrals}
+        />
+      )}
+
+      {/* ── 12. TERTIARY STATE ESCALATIONS VIEW ── */}
+      {activeTab === 'escalated' && (
+        <TertiaryStateEscalationsView
+          hospitalName={currentHospitalName}
+          patients={patients}
+          bedSlots={bedSlots}
+          referrals={referrals}
+          doctorName={user?.name || 'Dr. Ananya Kulkarni'}
+          onOpenPatientTimeline={onOpenPatientTimeline}
+        />
+      )}
+
+      {/* ── 13. CLINICAL RECORDS & CASE HISTORY VIEW ── */}
+      {activeTab === 'history' && (
+        <ClinicalRecordsCaseHistoryView
+          hospitalName={currentHospitalName}
+          patients={patients}
+          bedSlots={bedSlots}
+          referrals={referrals}
+          dischargeRecords={dischargeRecords}
+          walkIns={walkIns}
+          onOpenPatientTimeline={onOpenPatientTimeline}
         />
       )}
 
