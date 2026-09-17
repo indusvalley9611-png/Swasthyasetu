@@ -5,12 +5,19 @@ import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
 import { useSync } from '@/context/SyncContext';
 import { recordAuditLog } from '@/lib/patientPrivacyService';
-import { getRankedDistrictHospitals, getRoadDistanceKm, getEstimatedTransitMinutes, formatTransitMinutes } from '@/lib/maharashtraGisEngine';
+import {
+  getRankedReferralFacilities,
+  DEMO_DISTRICTS,
+  HospitalRouteInfo,
+  getRoadDistanceKm,
+  getEstimatedTransitMinutes,
+  formatTransitMinutes,
+} from '@/lib/maharashtraGisEngine';
 import { MaharashtraNetworkMap } from '../maps/MaharashtraNetworkMap';
 import {
-  X, Send, Activity, AlertTriangle, CheckCircle2, ChevronRight, 
+  X, Send, Activity, AlertTriangle, CheckCircle2, ChevronRight,
   Stethoscope, Clock, ShieldCheck, MapPin, Navigation, Compass,
-  Bed, ArrowRight, Zap, Building2, Eye
+  Bed, ArrowRight, Zap, Building2, Eye, Layers, Filter
 } from 'lucide-react';
 
 interface SmartReferralModalProps {
@@ -34,6 +41,7 @@ export function SmartReferralModal({
 
   const [step, setStep] = useState<1 | 2>(1);
   const [showGisMapModal, setShowGisMapModal] = useState<boolean>(false);
+  const [tierFilter, setTierFilter] = useState<'all' | 'Sub-Centre' | 'PHC' | 'Rural Hospital' | 'District Hospital' | 'Medical College'>('all');
 
   const [selectedSpecialty, setSelectedSpecialty] = useState(
     patient.gender === 'Female' && patient.isHighRiskPregnancy ? 'Obstetrics & Gynaecology' : 'General Medicine'
@@ -47,15 +55,24 @@ export function SmartReferralModal({
       facilities[0];
   }, [facilities, user]);
 
-  // Calculate ranked district hospitals by distance & specialty
-  const rankedHospitals = useMemo(() => {
+  // Calculate ranked referral facilities across all 3 tiers (Sub-Centre, PHC, Hospitals) in the 5 demo districts
+  const rankedFacilities = useMemo(() => {
     if (!originFacility) return [];
-    return getRankedDistrictHospitals(originFacility, facilities, selectedSpecialty);
+    return getRankedReferralFacilities(originFacility, facilities, {
+      requiredSpecialty: selectedSpecialty,
+      limitToDemoDistricts: true,
+    });
   }, [originFacility, facilities, selectedSpecialty]);
 
-  const defaultHospital = rankedHospitals[0]?.destination;
+  // Filter by active tier filter if set
+  const displayedFacilities = useMemo(() => {
+    if (tierFilter === 'all') return rankedFacilities;
+    return rankedFacilities.filter((r) => r.tierCategory === tierFilter);
+  }, [rankedFacilities, tierFilter]);
 
-  const [selectedFacilityId, setSelectedFacilityId] = useState<string>(defaultHospital?.id || 'fac-dh-pune');
+  const defaultFacility = rankedFacilities[0]?.destination;
+
+  const [selectedFacilityId, setSelectedFacilityId] = useState<string>(defaultFacility?.id || 'fac-phc-nasrapur');
   const [priority, setPriority] = useState<'routine' | 'high'>(patient.isHighRiskPregnancy ? 'high' : 'routine');
   const [reason, setReason] = useState(
     patient.isHighRiskPregnancy ? 'High risk pregnancy with severe anemia. Needs immediate secondary care observation.' : ''
@@ -63,21 +80,21 @@ export function SmartReferralModal({
 
   // Selected Target Facility details
   const targetFacility = useMemo(() => {
-    return facilities.find(f => f.id === selectedFacilityId) || defaultHospital || facilities[0];
-  }, [facilities, selectedFacilityId, defaultHospital]);
+    return facilities.find(f => f.id === selectedFacilityId) || defaultFacility || facilities[0];
+  }, [facilities, selectedFacilityId, defaultFacility]);
 
-  // Target hospital road stats
-  const targetHospitalStats = useMemo(() => {
-    if (!originFacility || !targetFacility) return { distanceKm: 42, transitFormatted: '55 min', isShortest: true };
+  // Target facility road stats
+  const targetFacilityStats = useMemo(() => {
+    if (!originFacility || !targetFacility) return { distanceKm: 12, transitFormatted: '20 min', isShortest: true };
     const dist = getRoadDistanceKm(originFacility, targetFacility);
     const transitMin = getEstimatedTransitMinutes(dist, true);
-    const isShortest = rankedHospitals[0]?.destination.id === targetFacility.id;
+    const isShortest = rankedFacilities[0]?.destination.id === targetFacility.id;
     return {
       distanceKm: dist,
       transitFormatted: formatTransitMinutes(transitMin),
       isShortest,
     };
-  }, [originFacility, targetFacility, rankedHospitals]);
+  }, [originFacility, targetFacility, rankedFacilities]);
 
   if (existingActiveReferral) {
     return (
@@ -91,7 +108,7 @@ export function SmartReferralModal({
               </span>
               <h3 className="font-black text-slate-900 dark:text-white text-base">Active Referral In Progress</h3>
             </div>
-            <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg">
+            <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -131,7 +148,7 @@ export function SmartReferralModal({
 
           <button
             onClick={onClose}
-            className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-colors"
+            className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
           >
             Close
           </button>
@@ -139,6 +156,21 @@ export function SmartReferralModal({
       </div>
     );
   }
+
+  const getTierBadge = (type: string) => {
+    switch (type) {
+      case 'Sub-Centre':
+        return { label: 'Sub-Centre', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800' };
+      case 'PHC':
+        return { label: 'PHC', color: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300 dark:border-blue-800' };
+      case 'Rural Hospital':
+        return { label: 'Rural Hospital', color: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800' };
+      case 'Medical College':
+        return { label: 'Medical College (Apex)', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800' };
+      default:
+        return { label: 'District Hospital', color: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300 dark:border-purple-800' };
+    }
+  };
 
   const handleSubmit = () => {
     const selectedFacName = targetFacility?.name || 'District Hospital Aundh, Pune';
@@ -212,14 +244,16 @@ export function SmartReferralModal({
       patientName: patient.fullName,
       patientAbha: patient.abhaId,
       action: 'CREATE_REFERRAL',
-      resource: `Referral Token ${newRef.tokenCode} to ${selectedFacName} (${targetHospitalStats.distanceKm} km)`,
+      resource: 'Referral Token ' + newRef.tokenCode + ' to ' + selectedFacName + ' (' + targetFacilityStats.distanceKm + ' km)',
       accessGranted: true,
-      reason: `Clinical Referral Created: ${selectedSpecialty} - ${reason || 'Specialist Evaluation'}`,
+      reason: 'Clinical Referral Created: ' + selectedSpecialty + ' - ' + (reason || 'Specialist Evaluation'),
     });
 
     onReferralCreated(newRef);
     onClose();
   };
+
+  const badge = getTierBadge(targetFacility?.type || 'PHC');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 sm:p-6 animate-in fade-in duration-300">
@@ -238,7 +272,7 @@ export function SmartReferralModal({
               </div>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-all">
+          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-all cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -247,7 +281,7 @@ export function SmartReferralModal({
         <div className="px-6 py-3 border-b border-slate-100 dark:border-slate-800 flex justify-center items-center relative bg-white dark:bg-slate-900">
           <div className="w-full max-w-sm flex justify-between">
             {[
-              { num: 1, label: 'Routing & Shortest Distance' },
+              { num: 1, label: 'Tier & Shortest Distance' },
               { num: 2, label: 'Review & Dispatch' }
             ].map(s => {
               const isActive = step === s.num;
@@ -280,7 +314,7 @@ export function SmartReferralModal({
                   <div>
                     <div className="text-sm font-bold text-rose-900 dark:text-rose-200">High-Risk Pregnancy Flagged (Gestational Week {patient.gestationalWeeks})</div>
                     <div className="text-xs text-rose-700 dark:text-rose-400 font-medium mt-0.5">
-                      System automatically prioritizes District Hospitals with active OB-GYN and NICU facilities on emergency duty.
+                      System automatically prioritizes facilities with active OB-GYN and NICU capability on emergency duty.
                     </div>
                   </div>
                 </div>
@@ -291,47 +325,89 @@ export function SmartReferralModal({
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
                   <div className="flex items-center gap-2">
                     <Building2 className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">Maharashtra District Hospital Routing</h3>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">Healthcare Facility Routing (5 Demo Districts)</h3>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Covering registered Sub-Centres, PHCs, and Hospitals across Pune, Satara, Ahmednagar, Solapur, and Thane.
+                      </p>
+                    </div>
                   </div>
 
                   {/* Interactive GIS Map Trigger Button */}
                   <button
                     type="button"
                     onClick={() => setShowGisMapModal(true)}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-teal-50 dark:bg-teal-900/30 border border-teal-200 dark:border-teal-700/60 text-teal-700 dark:text-teal-300 font-bold text-xs hover:bg-teal-100 dark:hover:bg-teal-800/40 transition-all shadow-sm"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-teal-50 dark:bg-teal-900/30 border border-teal-200 dark:border-teal-700/60 text-teal-700 dark:text-teal-300 font-bold text-xs hover:bg-teal-100 dark:hover:bg-teal-800/40 transition-all shadow-sm cursor-pointer"
                   >
                     <Compass className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                    📍 View on Maharashtra GIS Map & Shortest Routes
+                    📍 View on GIS Map
                   </button>
                 </div>
 
-                {/* Ranked Shortest Hospital Card */}
+                {/* Tier Filter Quick Switcher */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1">
+                    <Filter className="w-3 h-3" /> Tier:
+                  </span>
+                  {[
+                    { id: 'all', label: 'All Tiers (' + rankedFacilities.length + ')' },
+                    { id: 'Sub-Centre', label: 'Sub-Centres (' + rankedFacilities.filter(r => r.tierCategory === 'Sub-Centre').length + ')' },
+                    { id: 'PHC', label: 'PHCs (' + rankedFacilities.filter(r => r.tierCategory === 'PHC').length + ')' },
+                    { id: 'Rural Hospital', label: 'Rural Hospitals (' + rankedFacilities.filter(r => r.tierCategory === 'Rural Hospital').length + ')' },
+                    { id: 'District Hospital', label: 'District Hospitals (' + rankedFacilities.filter(r => r.tierCategory === 'District Hospital').length + ')' },
+                    { id: 'Medical College', label: 'Medical Colleges (' + rankedFacilities.filter(r => r.tierCategory === 'Medical College').length + ')' },
+                  ].map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => {
+                        setTierFilter(t.id as any);
+                        const list = t.id === 'all' ? rankedFacilities : rankedFacilities.filter(r => r.tierCategory === t.id);
+                        if (list.length > 0 && !list.some(r => r.destination.id === selectedFacilityId)) {
+                          setSelectedFacilityId(list[0].destination.id);
+                        }
+                      }}
+                      className={'px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-all cursor-pointer ' + (
+                        tierFilter === t.id
+                          ? 'bg-teal-600 text-white shadow-xs'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                      )}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Ranked Shortest Hospital / Facility Card */}
                 {targetFacility && (
                   <div className="p-4 rounded-2xl bg-gradient-to-r from-teal-50/60 via-slate-50 to-blue-50/40 dark:from-teal-950/30 dark:via-slate-900 dark:to-blue-950/20 border border-teal-200 dark:border-teal-900/50 flex flex-wrap items-center justify-between gap-3">
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={'text-[10px] font-black uppercase px-2 py-0.5 rounded border ' + badge.color}>
+                          {badge.label}
+                        </span>
                         <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-teal-500/30">
-                          {targetHospitalStats.isShortest ? '⚡ Optimal Shortest Route' : 'Selected Hospital'}
+                          {targetFacilityStats.isShortest ? '⚡ Nearest Appropriate Facility' : 'Selected Facility'}
                         </span>
                         <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
-                          {targetHospitalStats.distanceKm} km from {originFacility?.name.split(' ')[0]}
+                          {targetFacilityStats.distanceKm} km from {originFacility?.name.split(' ')[0]}
                         </span>
                         <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
-                          (~{targetHospitalStats.transitFormatted} transit)
+                          (~{targetFacilityStats.transitFormatted} transit)
                         </span>
                       </div>
                       <div className="text-sm font-black text-slate-900 dark:text-white">
                         {targetFacility.name}
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400">
-                        {targetFacility.district} District • {targetFacility.icuBedsTotal - targetFacility.icuBedsOccupied} ICU Beds Available • {targetFacility.totalBeds - targetFacility.occupiedBeds} Total Beds Free
+                        {targetFacility.taluka} Taluka, {targetFacility.district} District • {targetFacility.totalBeds - targetFacility.occupiedBeds} Free Beds {targetFacility.icuBedsTotal > 0 ? '• ' + (targetFacility.icuBedsTotal - targetFacility.icuBedsOccupied) + ' ICU Available' : ''}
                       </div>
                     </div>
 
                     <div className="text-right">
                       <div className="text-[10px] font-bold text-slate-400 uppercase">Emergency Helpline</div>
                       <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
-                        {targetFacility.phone}
+                        {targetFacility.phone || '+91-20-27280300'}
                       </div>
                     </div>
                   </div>
@@ -341,16 +417,16 @@ export function SmartReferralModal({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5">
-                      Target District Hospital (Ranked by Distance)
+                      Target Healthcare Facility (Sorted by Road Distance)
                     </label>
                     <select
                       value={selectedFacilityId}
                       onChange={(e) => setSelectedFacilityId(e.target.value)}
                       className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none dark:bg-slate-800 bg-slate-50"
                     >
-                      {rankedHospitals.map((r, i) => (
+                      {displayedFacilities.map((r, i) => (
                         <option key={r.destination.id} value={r.destination.id}>
-                          {i === 0 ? '⚡ ' : ''}{r.destination.name} ({r.distanceKm} km, {r.transitTimeFormatted})
+                          {i === 0 ? '⚡ ' : ''}[{r.tierCategory}] {r.destination.name} — {r.destination.district} ({r.distanceKm} km, {r.transitTimeFormatted})
                         </option>
                       ))}
                     </select>
@@ -383,14 +459,14 @@ export function SmartReferralModal({
                     <button
                       type="button"
                       onClick={() => setPriority('high')}
-                      className={"flex-1 py-2.5 rounded-xl border flex items-center justify-center gap-2 font-bold text-xs transition-all " + (priority === 'high' ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-400 shadow-sm' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50')}
+                      className={"flex-1 py-2.5 rounded-xl border flex items-center justify-center gap-2 font-bold text-xs transition-all cursor-pointer " + (priority === 'high' ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-400 shadow-sm' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50')}
                     >
-                      <AlertTriangle className="w-4 h-4 text-rose-600" /> Critical / Red Priority (Immediate Casualty Triage)
+                      <AlertTriangle className="w-4 h-4 text-rose-600" /> Critical / Red Priority (Immediate Triage)
                     </button>
                     <button
                       type="button"
                       onClick={() => setPriority('routine')}
-                      className={"flex-1 py-2.5 rounded-xl border flex items-center justify-center gap-2 font-bold text-xs transition-all " + (priority === 'routine' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400 shadow-sm' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50')}
+                      className={"flex-1 py-2.5 rounded-xl border flex items-center justify-center gap-2 font-bold text-xs transition-all cursor-pointer " + (priority === 'routine' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400 shadow-sm' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50')}
                     >
                       <Clock className="w-4 h-4 text-blue-600" /> Routine / Elective Referral
                     </button>
@@ -416,7 +492,7 @@ export function SmartReferralModal({
                 <button
                   type="button"
                   onClick={() => setStep(2)}
-                  className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl shadow-md transition-colors flex justify-center items-center gap-2"
+                  className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl shadow-md transition-colors flex justify-center items-center gap-2 cursor-pointer"
                 >
                   Proceed to Final Confirmation <ChevronRight className="w-4 h-4" />
                 </button>
@@ -433,7 +509,7 @@ export function SmartReferralModal({
               <div>
                 <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Confirm & Route Referral</h3>
                 <p className="text-slate-500 dark:text-slate-400 text-xs font-medium mt-1">
-                  Referral token will be registered on the ABDM network and routed directly to the casualty intake queue at {targetFacility?.name}.
+                  Referral token will be registered on the ABDM network and routed directly to {targetFacility?.name}.
                 </p>
               </div>
               
@@ -443,17 +519,17 @@ export function SmartReferralModal({
                   <span className="font-bold text-slate-900 dark:text-white">{patient.fullName} (ABHA: {patient.abhaId})</span>
                 </div>
                 <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-2 text-xs">
-                  <span className="font-bold text-slate-500 dark:text-slate-400 uppercase">Referring PHC</span>
+                  <span className="font-bold text-slate-500 dark:text-slate-400 uppercase">Referring Facility</span>
                   <span className="font-bold text-slate-900 dark:text-white">{originFacility?.name}</span>
                 </div>
                 <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-2 text-xs">
-                  <span className="font-bold text-slate-500 dark:text-slate-400 uppercase">Target Hospital</span>
-                  <span className="font-bold text-teal-600 dark:text-teal-400">{targetFacility?.name}</span>
+                  <span className="font-bold text-slate-500 dark:text-slate-400 uppercase">Target Facility</span>
+                  <span className="font-bold text-teal-600 dark:text-teal-400">[{targetFacility?.type}] {targetFacility?.name}</span>
                 </div>
                 <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-2 text-xs">
                   <span className="font-bold text-slate-500 dark:text-slate-400 uppercase">Distance & Transit</span>
                   <span className="font-mono font-bold text-slate-900 dark:text-white">
-                    {targetHospitalStats.distanceKm} km (~{targetHospitalStats.transitFormatted})
+                    {targetFacilityStats.distanceKm} km (~{targetFacilityStats.transitFormatted})
                   </span>
                 </div>
                 <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-2 text-xs">
@@ -472,14 +548,14 @@ export function SmartReferralModal({
                 <button
                   type="button"
                   onClick={() => setStep(1)}
-                  className="px-6 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-50 transition-colors"
+                  className="px-6 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
                 >
                   Back
                 </button>
                 <button
                   type="button"
                   onClick={handleSubmit}
-                  className="flex-1 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors flex justify-center items-center gap-2"
+                  className="flex-1 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors flex justify-center items-center gap-2 cursor-pointer"
                 >
                   <Send className="w-4 h-4" /> Dispatch Referral to {targetFacility?.name.split(',')[0]}
                 </button>

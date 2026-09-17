@@ -12,7 +12,12 @@ export interface HospitalRouteInfo {
   occupancyRate: number;
   specialtiesAvailable: string[];
   isMatchSpecialty: boolean;
+  tierCategory: 'Sub-Centre' | 'PHC' | 'Rural Hospital' | 'District Hospital' | 'Medical College';
 }
+
+// 5 Selected Demo Districts (Focus Area for Distance & Multi-Tier Routing)
+export const DEMO_DISTRICTS = ['Pune', 'Satara', 'Ahmednagar', 'Solapur', 'Thane'] as const;
+export type DemoDistrict = (typeof DEMO_DISTRICTS)[number];
 
 // Bounding box covering Maharashtra state with padding
 export const MAHARASHTRA_GEO_BOUNDS = {
@@ -141,20 +146,39 @@ export function projectGeoToSvg(
   };
 }
 
+export interface RankedFacilityOptions {
+  requiredSpecialty?: string;
+  allowedDistricts?: readonly string[] | string[];
+  tierFilter?: 'all' | 'Sub-Centre' | 'PHC' | 'Rural Hospital' | 'District Hospital' | 'Medical College';
+  limitToDemoDistricts?: boolean;
+}
+
 /**
- * Ranks all Maharashtra District Hospitals and Medical Colleges relative to an origin facility
+ * Ranks all registered Maharashtra healthcare facilities (Sub-Centres, PHCs, Rural Hospitals, District Hospitals, Medical Colleges)
+ * relative to an origin facility, limited to the 5 demo districts (Pune, Satara, Ahmednagar, Solapur, Thane).
  */
-export function getRankedDistrictHospitals(
+export function getRankedReferralFacilities(
   origin: Facility,
   allFacilities: Facility[],
-  requiredSpecialty?: string
+  options?: RankedFacilityOptions
 ): HospitalRouteInfo[] {
-  // District Hospitals & Medical Colleges in Maharashtra
-  const referralTargets = allFacilities.filter(
-    (f) =>
-      (f.type === 'District Hospital' || f.type === 'Medical College') &&
-      f.id !== origin.id
-  );
+  const {
+    requiredSpecialty,
+    allowedDistricts = DEMO_DISTRICTS,
+    tierFilter = 'all',
+    limitToDemoDistricts = true,
+  } = options || {};
+
+  const referralTargets = allFacilities.filter((f) => {
+    if (!f || !f.id || !f.name || f.id === origin.id) return false;
+    if (limitToDemoDistricts && allowedDistricts && !allowedDistricts.includes(f.district)) {
+      return false;
+    }
+    if (tierFilter !== 'all' && f.type !== tierFilter) {
+      return false;
+    }
+    return true;
+  });
 
   const routes: HospitalRouteInfo[] = referralTargets.map((dest) => {
     const distKm = getRoadDistanceKm(origin, dest);
@@ -168,6 +192,12 @@ export function getRankedDistrictHospitals(
       ? true
       : specialties.some((s) => s.toLowerCase().includes(requiredSpecialty.toLowerCase()) || requiredSpecialty.toLowerCase().includes(s.toLowerCase()));
 
+    const tierCategory: HospitalRouteInfo['tierCategory'] =
+      dest.type === 'Sub-Centre' ? 'Sub-Centre' :
+      dest.type === 'PHC' ? 'PHC' :
+      dest.type === 'Rural Hospital' ? 'Rural Hospital' :
+      dest.type === 'Medical College' ? 'Medical College' : 'District Hospital';
+
     return {
       destination: dest,
       distanceKm: distKm,
@@ -180,10 +210,11 @@ export function getRankedDistrictHospitals(
       occupancyRate,
       specialtiesAvailable: specialties,
       isMatchSpecialty,
+      tierCategory,
     };
   });
 
-  // Sort primarily by distance, prioritizing specialty match if requested
+  // Sort primarily by distance in ascending order
   routes.sort((a, b) => {
     if (requiredSpecialty) {
       if (a.isMatchSpecialty && !b.isMatchSpecialty) return -1;
@@ -198,4 +229,18 @@ export function getRankedDistrictHospitals(
   }
 
   return routes;
+}
+
+/**
+ * Backward compatibility alias for legacy callers
+ */
+export function getRankedDistrictHospitals(
+  origin: Facility,
+  allFacilities: Facility[],
+  requiredSpecialty?: string
+): HospitalRouteInfo[] {
+  return getRankedReferralFacilities(origin, allFacilities, {
+    requiredSpecialty,
+    limitToDemoDistricts: true,
+  });
 }
