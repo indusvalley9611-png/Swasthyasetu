@@ -698,6 +698,8 @@ export interface HospitalBedSlot {
   bedId: string;
   bedNumber: string;
   wardName: string;
+  facilityId?: string;
+  facilityName?: string;
   department: HospitalDepartment;
   status: 'AVAILABLE' | 'OCCUPIED' | 'MAINTENANCE';
   patientId?: string;

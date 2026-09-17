@@ -61,7 +61,11 @@ export function BedMatrixModal({ onClose }: BedMatrixModalProps) {
   const { facilities } = useSync();
   const [detail, setDetail] = useState<Facility | null>(null);
 
-  const myFacility = facilities.find(f => f.id === user?.facilityId) ?? facilities.find(f => f.type === 'PHC') ?? facilities[0];
+  const myFacility =
+    facilities.find(f => f.id === user?.facilityId) ??
+    facilities.find(f => user?.facilityName && f.name.toLowerCase().includes(user.facilityName.toLowerCase())) ??
+    facilities.find(f => f.type === 'PHC') ??
+    facilities[0];
 
   // Referral facilities: exclude the user's own facility, and exclude Sub-Centres (can't refer to them)
   const referralFacilities = useMemo(() => {
@@ -117,9 +121,9 @@ export function BedMatrixModal({ onClose }: BedMatrixModalProps) {
               </div>
               <div>
                 <h3 className="text-sm font-black uppercase tracking-wider text-slate-800 dark:text-slate-100">
-                  My PHC Capacity
+                  {myFacility?.type === 'District Hospital' ? 'My Hospital Capacity' : myFacility?.type === 'Sub-Centre' ? 'My Sub-Centre Capacity' : 'My PHC Capacity'}
                 </h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">{myFacility?.name ?? 'Your Facility'} — What do we have?</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">{myFacility?.name ?? 'Your Facility'} — Live Real-Time Capacity</p>
               </div>
             </div>
 

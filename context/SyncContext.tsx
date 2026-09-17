@@ -291,6 +291,12 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     setPatients(updated);
     saveStoredPatients(updated);
 
+    // Live capacity decrement (Occupied +1) on patient registration/admission at facility
+    const facilityToUpdate = newPatient.registrationFacilityId || newPatient.assignedFacilityId;
+    if (facilityToUpdate) {
+      updateBedOccupancy(facilityToUpdate, 'occupiedBeds', 1);
+    }
+
     // Always add to queue. If online, effect will pick it up and process it idempotently
     const queued = addToSyncQueue({
       type: 'NEW_PATIENT',
@@ -350,6 +356,11 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     setReferrals(updatedRefs);
     saveStoredReferrals(updatedRefs);
 
+    // On referral-out, free up 1 bed at the referring facility
+    if (newRef.referringFacilityId) {
+      updateBedOccupancy(newRef.referringFacilityId, 'occupiedBeds', -1);
+    }
+
     // Also update patient activeReferralId
     const updatedPatients = patients.map(p => {
       if (p.id === newRef.patientId) {
@@ -372,28 +383,28 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     }
   };
 
-    const updateBedOccupancy = (
+  const updateBedOccupancy = (
     facilityIdentifier: string,
     field: 'occupiedBeds' | 'icuBedsOccupied' | 'ventilatorsOccupied' | 'oxygenBedsOccupied',
     delta: number
   ) => {
     if (!facilityIdentifier) return;
     setFacilities(prevFacilities => {
+      const targetLower = facilityIdentifier.toLowerCase().trim();
       const updated = prevFacilities.map(f => {
         const idLower = (f.id || '').toLowerCase();
         const nameLower = (f.name || '').toLowerCase();
-        const targetLower = facilityIdentifier.toLowerCase();
 
+        // Universal matching: match by ID exact, Name exact, or substring/token across any facility
         const isMatch =
           idLower === targetLower ||
           nameLower === targetLower ||
-          (targetLower.includes('aundh') && nameLower.includes('aundh')) ||
-          (targetLower.includes('velhe') && nameLower.includes('velhe')) ||
-          (targetLower.includes('bhor') && nameLower.includes('bhor')) ||
-          (targetLower.includes('sassoon') && nameLower.includes('sassoon')) ||
-          (targetLower.includes('nasrapur') && nameLower.includes('nasrapur')) ||
-          (targetLower.includes('kasurdi') && nameLower.includes('kasurdi')) ||
-          (targetLower.includes('pune') && targetLower.includes('district') && idLower === 'fac-dh-pune');
+          (targetLower.length > 2 && (
+            idLower.includes(targetLower) ||
+            targetLower.includes(idLower) ||
+            nameLower.includes(targetLower) ||
+            targetLower.includes(nameLower)
+          ));
 
         if (isMatch) {
           const currentField = f[field] || 0;
@@ -557,9 +568,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     saveStoredBedSlots(updatedBedSlots);
 
     // 3. Restore Bed Resource on the corresponding Facility (Occupied -1, Available +1)
-    const targetFacilityId = bedSlot.wardName?.toLowerCase().includes('aundh') || bedSlot.department
-      ? 'fac-dh-pune'
-      : 'fac-dh-pune';
+    const targetFacilityId = (bedSlot as any).facilityId || 'fac-dh-pune';
     const bedField = bedSlot.department === 'ICU' ? 'icuBedsOccupied' : 'occupiedBeds';
     updateBedOccupancy(targetFacilityId, bedField, -1);
 
