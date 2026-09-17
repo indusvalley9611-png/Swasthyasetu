@@ -129,6 +129,7 @@ export function SpecialistDashboard({
   // STRICT SINGLE-FACILITY DATA SCOPING (No district-wide leaks)
   const myHospitalReferrals = useMemo(() => {
     return (referrals || []).filter((r) => {
+      if (r.targetFacilityId && currentHospitalId && r.targetFacilityId === currentHospitalId) return true;
       if (!r.targetFacility) return false;
       const target = r.targetFacility.toLowerCase();
       const fac = currentHospitalName.toLowerCase();
@@ -140,7 +141,7 @@ export function SpecialistDashboard({
         (target.includes('nashik') && fac.includes('nashik') && target.includes('civil') && fac.includes('civil'))
       );
     });
-  }, [referrals, currentHospitalName]);
+  }, [referrals, currentHospitalName, currentHospitalId]);
 
   const pendingIncomingReferrals = useMemo(() => {
     return myHospitalReferrals.filter((r) => r.status === 'PENDING');

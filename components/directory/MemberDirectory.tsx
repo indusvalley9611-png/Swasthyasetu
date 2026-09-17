@@ -51,7 +51,7 @@ export default function MemberDirectory({
 }: MemberDirectoryProps) {
   const { language } = useLanguage();
   const { user } = useAuth();
-  const { referrals } = useSync();
+  const { referrals, updateReferralStatus } = useSync();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -82,6 +82,36 @@ export default function MemberDirectory({
       (ref.referringFacilityId && user?.facilityId && ref.referringFacilityId === user.facilityId) ||
       (ref.referringUserId && user?.id && ref.referringUserId === user.id)
     );
+  };
+
+  // A patient has an INCOMING referral directed TO the user's facility
+  const isReferredToMyFacility = (pat: Patient): boolean => {
+    return referrals.some(
+      (r) =>
+        r.patientId === pat.id &&
+        ['PENDING', 'ACCEPTED'].includes(r.status) &&
+        !!(
+          (r.targetFacilityId && user?.facilityId && r.targetFacilityId === user.facilityId) ||
+          (r.targetFacility && user?.facilityName && r.targetFacility.toLowerCase().includes(user.facilityName.toLowerCase()))
+        ) &&
+        // Exclude if this is also outgoing from the same facility (self-referral edge case)
+        !(
+          (r.referringFacilityId && user?.facilityId && r.referringFacilityId === user.facilityId)
+        )
+    );
+  };
+
+  // Get the specific incoming referral for a patient
+  const getIncomingReferralForPatient = (pat: Patient): Referral | null => {
+    return referrals.find(
+      (r) =>
+        r.patientId === pat.id &&
+        ['PENDING', 'ACCEPTED'].includes(r.status) &&
+        !!(
+          (r.targetFacilityId && user?.facilityId && r.targetFacilityId === user.facilityId) ||
+          (r.targetFacility && user?.facilityName && r.targetFacility.toLowerCase().includes(user.facilityName.toLowerCase()))
+        )
+    ) ?? null;
   };
 
   // Determine if a patient is assigned to this user's direct care
@@ -132,8 +162,10 @@ export default function MemberDirectory({
     return true;
   };
 
-  // Compute referred patients (those with active referrals from this facility)
-  const referredPatients = patients.filter(p => isReferredFromMyFacility(p));
+  // Compute referred patients (outgoing from this facility + incoming to this facility)
+  const outgoingReferredPatients = patients.filter(p => isReferredFromMyFacility(p));
+  const incomingReferredPatients = patients.filter(p => isReferredToMyFacility(p) && !isReferredFromMyFacility(p));
+  const referredPatients = [...outgoingReferredPatients, ...incomingReferredPatients];
   const referredPatientIds = new Set(referredPatients.map(p => p.id));
 
   // Pre-calculate counts for tabs (excluding referred patients from normal counts)
@@ -346,10 +378,10 @@ export default function MemberDirectory({
                 <tr className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
                   <th className="px-4 py-2.5 sm:py-3">Patient Member</th>
                   <th className="px-4 py-2.5 sm:py-3">Demographics & ABHA</th>
-                  <th className="px-4 py-2.5 sm:py-3">Destination Hospital</th>
-                  <th className="px-4 py-2.5 sm:py-3">Referral Reason</th>
+                  <th className="px-4 py-2.5 sm:py-3">Direction & Facility</th>
+                  <th className="px-4 py-2.5 sm:py-3">Referring Staff & Reason</th>
                   <th className="px-4 py-2.5 sm:py-3">Urgency</th>
-                  <th className="px-4 py-2.5 sm:py-3">Referral Date & Status</th>
+                  <th className="px-4 py-2.5 sm:py-3">Date & Status</th>
                   <th className="px-4 py-2.5 sm:py-3 text-right">Action</th>
                 </tr>
               ) : (
@@ -370,6 +402,13 @@ export default function MemberDirectory({
                   const activeReferral = getActiveReferralForPatient(pat);
 
                   if (scopeTab === 'REFERRED') {
+                    const isIncoming = !!(
+                      activeReferral &&
+                      ((activeReferral.targetFacilityId && user?.facilityId && activeReferral.targetFacilityId === user.facilityId) ||
+                       (activeReferral.targetFacility && user?.facilityName && activeReferral.targetFacility.toLowerCase().includes(user.facilityName.toLowerCase()))) &&
+                      !(activeReferral.referringFacilityId && user?.facilityId && activeReferral.referringFacilityId === user.facilityId)
+                    );
+
                     const priorityClass =
                       activeReferral?.triagePriority === 'red'
                         ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-800'
@@ -407,16 +446,26 @@ export default function MemberDirectory({
                       <tr
                         key={pat.id}
                         onClick={() => onSelectMember(pat)}
-                        className="hover:bg-amber-50/40 dark:hover:bg-amber-950/10 cursor-pointer transition-colors group"
+                        className={`cursor-pointer transition-colors group ${
+                          isIncoming
+                            ? 'hover:bg-blue-50/50 dark:hover:bg-blue-950/20 bg-blue-50/15 dark:bg-blue-950/5'
+                            : 'hover:bg-amber-50/40 dark:hover:bg-amber-950/10'
+                        }`}
                       >
                         {/* Patient Name & Location */}
                         <td className="px-4 py-2.5 sm:py-3">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 group-hover:bg-amber-200 shrink-0">
+                            <div
+                              className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                                isIncoming
+                                  ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 group-hover:bg-blue-200'
+                                  : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 group-hover:bg-amber-200'
+                              }`}
+                            >
                               {pat.fullName.charAt(0)}
                             </div>
                             <div className="min-w-0">
-                              <div className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm group-hover:text-amber-700 dark:group-hover:text-amber-400 transition-colors truncate">
+                              <div className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm group-hover:text-blue-700 dark:group-hover:text-blue-400 transition-colors truncate">
                                 {pat.fullName}
                               </div>
                               <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5 truncate">
@@ -436,22 +485,41 @@ export default function MemberDirectory({
                           </div>
                         </td>
 
-                        {/* Referral Destination */}
+                        {/* Referral Direction & Facility */}
                         <td className="px-4 py-2.5 sm:py-3">
-                          <div className="font-bold text-slate-900 dark:text-white text-xs flex items-center gap-1.5">
-                            <Building2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                            <span className="truncate max-w-[180px]">
-                              {activeReferral?.targetFacility || 'District Hospital'}
+                          <div className="flex flex-col gap-1">
+                            <span
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black w-fit uppercase tracking-wider ${
+                                isIncoming
+                                  ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200 border border-blue-300 dark:border-blue-700'
+                                  : 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700'
+                              }`}
+                            >
+                              {isIncoming ? 'INCOMING REFERRAL' : 'OUTGOING REFERRAL'}
                             </span>
-                          </div>
-                          <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 font-mono">
-                            Ref #{activeReferral?.tokenCode || activeReferral?.id}
+                            <div className="font-bold text-slate-900 dark:text-white text-xs flex items-center gap-1.5">
+                              <Building2 className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400 shrink-0" />
+                              <span className="truncate max-w-[180px]">
+                                {isIncoming
+                                  ? `From: ${activeReferral?.referringFacility || 'Originating Facility'}`
+                                  : `To: ${activeReferral?.targetFacility || 'District Hospital'}`}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                              Token: #{activeReferral?.tokenCode || activeReferral?.id}
+                            </div>
                           </div>
                         </td>
 
-                        {/* Referral Reason & Specialty */}
+                        {/* Referring Staff & Reason */}
                         <td className="px-4 py-2.5 sm:py-3">
-                          <div className="font-medium text-slate-800 dark:text-slate-200 text-xs max-w-[200px] truncate">
+                          <div className="font-semibold text-slate-900 dark:text-white text-xs flex items-center gap-1">
+                            <Stethoscope className="w-3 h-3 text-blue-600 shrink-0" />
+                            <span className="truncate max-w-[180px]">
+                              {activeReferral?.referringDoctorName || 'Referring Medical Staff'}
+                            </span>
+                          </div>
+                          <div className="font-medium text-slate-700 dark:text-slate-300 text-xs max-w-[200px] truncate mt-0.5">
                             {activeReferral?.referralReason || 'Specialist Evaluation'}
                           </div>
                           <div className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold mt-0.5">
@@ -479,18 +547,36 @@ export default function MemberDirectory({
                           </div>
                         </td>
 
-                        {/* Action Button */}
+                        {/* Action Buttons */}
                         <td className="px-4 py-2.5 sm:py-3 text-right">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSelectMember(pat);
-                            }}
-                            className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all border bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100 flex items-center gap-1 ml-auto cursor-pointer"
-                          >
-                            <span>Open Referral</span>
-                            <ArrowUpRight className="w-3 h-3" />
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                            {isIncoming && activeReferral && ['PENDING', 'ACCEPTED'].includes(activeReferral.status) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateReferralStatus(activeReferral.id, 'ADMITTED', {
+                                    admittedAt: new Date().toISOString(),
+                                    admittedByDoctorName: user?.name,
+                                  });
+                                }}
+                                className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs flex items-center gap-1 cursor-pointer"
+                                title="Accept & Admit Patient into this Facility"
+                              >
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>Accept & Admit</span>
+                              </button>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSelectMember(pat);
+                              }}
+                              className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all border bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 flex items-center gap-1 cursor-pointer"
+                            >
+                              <span>{isIncoming ? 'Review' : 'Open'}</span>
+                              <ArrowUpRight className="w-3 h-3" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

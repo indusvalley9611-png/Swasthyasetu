@@ -635,7 +635,14 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       if (p.id === targetPatientId) {
         let pUpdates: Partial<Patient> = {};
         if (status === 'ADMITTED') {
-          pUpdates.activeCareOwner = 'DISTRICT';
+          const isPhcTier = targetRef.targetFacility?.toLowerCase().includes('phc') || 
+                            targetRef.targetFacility?.toLowerCase().includes('sub-centre') || 
+                            targetRef.targetFacilityId?.toLowerCase().includes('phc') ||
+                            targetRef.targetFacilityId?.toLowerCase().includes('sub');
+          pUpdates.activeCareOwner = isPhcTier ? 'PHC' : 'DISTRICT';
+          if (targetRef.targetFacilityId) pUpdates.assignedFacilityId = targetRef.targetFacilityId;
+          if (targetRef.targetFacility) pUpdates.assignedFacilityName = targetRef.targetFacility;
+          if (updates?.admittedByDoctorName) pUpdates.assignedDoctorName = updates.admittedByDoctorName;
         }
         if (status === 'COMPLETED' || status === 'CANCELLED') {
           if (p.activeReferralId === referralId) pUpdates.activeReferralId = undefined;

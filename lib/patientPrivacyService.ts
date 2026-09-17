@@ -83,19 +83,26 @@ export function canAccessPatientReport(
       };
     }
 
-    // Check if doctor created an active referral for this patient
+    // Check if doctor has active referral relationship (referring or receiving doctor)
     if (options?.referrals) {
       const activeReferral = options.referrals.find(
         (r) =>
           r.patientId === patient.id &&
-          (r.referringUserId === user.id || (r.referringFacilityId && r.referringFacilityId === user.facilityId)) &&
-          ['PENDING', 'ACCEPTED', 'ADMITTED'].includes(r.status)
+          ['PENDING', 'ACCEPTED', 'ADMITTED'].includes(r.status) &&
+          (r.referringUserId === user.id ||
+           (r.referringFacilityId && r.referringFacilityId === user.facilityId) ||
+           (r.targetFacilityId && r.targetFacilityId === user.facilityId) ||
+           (r.targetFacility && user.facilityName && r.targetFacility.toLowerCase().includes(user.facilityName.toLowerCase())))
       );
 
       if (activeReferral) {
+        const isReceiving = (activeReferral.targetFacilityId && activeReferral.targetFacilityId === user.facilityId) ||
+                            (activeReferral.targetFacility && user.facilityName && activeReferral.targetFacility.toLowerCase().includes(user.facilityName.toLowerCase()));
         return {
           allowed: true,
-          reason: `Authorized referring doctor for active referral (${activeReferral.tokenCode}).`,
+          reason: isReceiving
+            ? `Authorized receiving medical officer for incoming referral (${activeReferral.tokenCode || activeReferral.id}) from ${activeReferral.referringFacility}.`
+            : `Authorized referring doctor for active referral (${activeReferral.tokenCode || activeReferral.id}).`,
           accessLevel: 'FULL_CLINICAL',
         };
       }
@@ -138,7 +145,7 @@ export function canAccessPatientReport(
           r.patientId === patient.id &&
           ['PENDING', 'ACCEPTED', 'ADMITTED'].includes(r.status) &&
           ((r.targetFacilityId && r.targetFacilityId === user.facilityId) ||
-            false)
+           (r.targetFacility && user.facilityName && r.targetFacility.toLowerCase().includes(user.facilityName.toLowerCase())))
       );
 
       if (activeReferral) {
@@ -314,22 +321,49 @@ export function filterPatientsForUser(
   }
 
   if (user.role === 'phc_doctor') {
+    // Patients with incoming referrals targeting this facility
+    const incomingReferralPatientIds = new Set(
+      (referrals || [])
+        .filter(
+          (r) =>
+            ['PENDING', 'ACCEPTED', 'ADMITTED'].includes(r.status) &&
+            ((r.targetFacilityId && r.targetFacilityId === user.facilityId) ||
+             (r.targetFacility && user.facilityName && r.targetFacility.toLowerCase().includes(user.facilityName.toLowerCase())))
+        )
+        .map((r) => r.patientId)
+    );
+    // Patients with outgoing referrals from this facility
+    const outgoingReferralPatientIds = new Set(
+      (referrals || [])
+        .filter(
+          (r) =>
+            ['PENDING', 'ACCEPTED', 'ADMITTED', 'ESCALATED'].includes(r.status) &&
+            ((r.referringFacilityId && r.referringFacilityId === user.facilityId) ||
+             (r.referringUserId && r.referringUserId === user.id))
+        )
+        .map((r) => r.patientId)
+    );
     const assignedPatients = patients.filter(
       (p) =>
         p.assignedDoctorId === user.id ||
         (user.assignedPatientIds && user.assignedPatientIds.includes(p.id)) ||
-        (p.registrationFacilityId && p.registrationFacilityId === user.facilityId)
+        (p.registrationFacilityId && p.registrationFacilityId === user.facilityId) ||
+        incomingReferralPatientIds.has(p.id)
     );
     const facilityPatients = patients.filter(
       (p) =>
         (p.assignedFacilityId && p.assignedFacilityId === user.facilityId) ||
-        (p.registrationFacilityId && p.registrationFacilityId === user.facilityId)
+        (p.registrationFacilityId && p.registrationFacilityId === user.facilityId) ||
+        incomingReferralPatientIds.has(p.id)
+    );
+    const referralPatients = patients.filter(
+      (p) => incomingReferralPatientIds.has(p.id) || outgoingReferralPatientIds.has(p.id)
     );
     return {
       assignedPatients,
       facilityPatients,
-      referralPatients: [],
-      allPatients: Array.from(new Set([...assignedPatients, ...facilityPatients])),
+      referralPatients,
+      allPatients: Array.from(new Set([...assignedPatients, ...facilityPatients, ...referralPatients])),
     };
   }
 
@@ -364,17 +398,43 @@ export function filterPatientsForUser(
   }
 
   if (user.role === 'asha') {
+    // Incoming referrals (e.g. counter-referrals/discharges back to this ASHA's facility)
+    const incomingReferralPatientIds = new Set(
+      (referrals || [])
+        .filter(
+          (r) =>
+            ['PENDING', 'ACCEPTED', 'ADMITTED'].includes(r.status) &&
+            ((r.targetFacilityId && r.targetFacilityId === user.facilityId) ||
+             (r.targetFacility && user.facilityName && r.targetFacility.toLowerCase().includes(user.facilityName.toLowerCase())))
+        )
+        .map((r) => r.patientId)
+    );
+    // Outgoing referrals created by this ASHA
+    const outgoingReferralPatientIds = new Set(
+      (referrals || [])
+        .filter(
+          (r) =>
+            ['PENDING', 'ACCEPTED', 'ADMITTED', 'ESCALATED'].includes(r.status) &&
+            ((r.referringFacilityId && r.referringFacilityId === user.facilityId) ||
+             (r.referringUserId && r.referringUserId === user.id))
+        )
+        .map((r) => r.patientId)
+    );
     const communityPatients = patients.filter(
       (p) =>
         (p.assignedFacilityId && p.assignedFacilityId === user.facilityId) ||
         (p.registrationFacilityId && p.registrationFacilityId === user.facilityId) ||
-        (user.villageId && p.villageId && p.villageId === user.villageId)
+        (user.villageId && p.villageId && p.villageId === user.villageId) ||
+        incomingReferralPatientIds.has(p.id)
+    );
+    const referralPatients = patients.filter(
+      (p) => incomingReferralPatientIds.has(p.id) || outgoingReferralPatientIds.has(p.id)
     );
     return {
       assignedPatients: communityPatients,
       facilityPatients: communityPatients,
-      referralPatients: [],
-      allPatients: communityPatients,
+      referralPatients,
+      allPatients: Array.from(new Set([...communityPatients, ...referralPatients])),
     };
   }
 

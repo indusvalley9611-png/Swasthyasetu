@@ -221,6 +221,8 @@ export interface Referral {
   qrPayload: string;
   assignedBed?: string;
   assignedBedType?: 'icuBedsOccupied' | 'ventilatorsOccupied' | 'oxygenBedsOccupied' | 'occupiedBeds';
+  admittedAt?: string;
+  admittedByDoctorName?: string;
   cancelledAt?: string;
   cancelledBy?: string;
   cancelledByRole?: string;

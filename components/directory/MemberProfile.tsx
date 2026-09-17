@@ -72,29 +72,62 @@ export default function MemberProfile({ patient, role, onBack, onOpenAction }: M
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <h4 className="font-black text-slate-900 dark:text-white text-lg">REFERRAL ACTIVE</h4>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider `}>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700`}>
                   {activeReferral.status}
                 </span>
+                {activeReferral.triagePriority && (
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                    activeReferral.triagePriority === 'red'
+                      ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200'
+                      : activeReferral.triagePriority === 'yellow'
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200'
+                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200'
+                  }`}>
+                    {activeReferral.triagePriority}
+                  </span>
+                )}
               </div>
               <div className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                Current destination: <strong className="text-slate-900 dark:text-white">{activeReferral.targetFacility}</strong>
+                From: <strong className="text-slate-900 dark:text-white">{activeReferral.referringFacility}</strong> ({activeReferral.referringDoctorName || 'Referring Staff'}) &rarr; Target: <strong className="text-slate-900 dark:text-white">{activeReferral.targetFacility}</strong>
               </div>
+              {activeReferral.referralReason && (
+                <div className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                  Reason: <span className="font-semibold text-slate-800 dark:text-slate-200">{activeReferral.referralReason}</span> ({activeReferral.specialtyRequired || 'General Medicine'})
+                </div>
+              )}
               <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Ref ID: <span className="font-mono font-bold">{activeReferral.id}</span> &bull; {new Date(activeReferral.createdAt).toLocaleString()}
+                Token: <span className="font-mono font-bold">#{activeReferral.tokenCode || activeReferral.id}</span> &bull; {new Date(activeReferral.createdAt).toLocaleString()}
               </div>
             </div>
           </div>
           <div className="flex flex-col gap-2">
+            {/* If user is at destination facility and status is PENDING or ACCEPTED, show Accept & Admit */}
+            {['PENDING', 'ACCEPTED'].includes(activeReferral.status) &&
+             ((activeReferral.targetFacilityId && user?.facilityId && activeReferral.targetFacilityId === user.facilityId) ||
+              (activeReferral.targetFacility && user?.facilityName && activeReferral.targetFacility.toLowerCase().includes(user.facilityName.toLowerCase()))) && (
+              <button 
+                onClick={() => {
+                  updateReferralStatus(activeReferral.id, 'ADMITTED', {
+                    admittedAt: new Date().toISOString(),
+                    admittedByDoctorName: user?.name,
+                  });
+                }}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-colors shadow-2xs whitespace-nowrap flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span>Accept &amp; Admit Patient</span>
+              </button>
+            )}
             <button 
               onClick={() => onOpenAction('REFERRAL_STATUS')}
-              className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm font-bold rounded-xl transition-colors border border-slate-200 dark:border-slate-700 whitespace-nowrap"
+              className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm font-bold rounded-xl transition-colors border border-slate-200 dark:border-slate-700 whitespace-nowrap cursor-pointer text-center"
             >
               View Referral Timeline
             </button>
             {['PENDING', 'ACCEPTED', 'ESCALATED'].includes(activeReferral.status) && (
               <button 
                 onClick={() => setIsCancelModalOpen(true)}
-                className="px-4 py-2 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-400 text-sm font-bold rounded-xl transition-colors border border-rose-200 dark:border-rose-800/30 whitespace-nowrap"
+                className="px-4 py-2 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-400 text-sm font-bold rounded-xl transition-colors border border-rose-200 dark:border-rose-800/30 whitespace-nowrap cursor-pointer text-center"
               >
                 Cancel Request
               </button>

@@ -46,15 +46,17 @@ export function PhcDoctorDashboard({
 
   const { assignedPatients, facilityPatients, allPatients } = filterPatientsForUser(user, patients, referrals);
 
-  // Active referrals originating from or relevant to this PHC / doctor
+  // Active referrals originating from OR targeting this PHC / doctor (incoming & outgoing)
   const activeReferralsList = (referrals || []).filter(r => {
-    const isFromMyFacility =
+    const isRelevantToMyFacility =
       !user?.facilityId ||
       r.referringFacilityId === user?.facilityId ||
       r.referringFacility?.toLowerCase().includes(user?.facilityName?.toLowerCase() || '') ||
-      r.referringUserId === user?.id;
+      r.referringUserId === user?.id ||
+      r.targetFacilityId === user?.facilityId ||
+      r.targetFacility?.toLowerCase().includes(user?.facilityName?.toLowerCase() || '');
     const isActive = !['COMPLETED', 'CANCELLED'].includes(r.status);
-    return isFromMyFacility && isActive;
+    return isRelevantToMyFacility && isActive;
   });
 
   const [queueScope, setQueueScope] = useState<'ASSIGNED' | 'FACILITY' | 'REFERRALS' | 'ALL'>('ASSIGNED');
@@ -85,10 +87,18 @@ export function PhcDoctorDashboard({
     setselectedPatient(patient);
   };
 
-  const referredPatients = facilityPatients.filter(p =>
+  const referredPatients = allPatients.filter(p =>
     Boolean(
       p.activeReferralId ||
-      referrals.some(r => r.patientId === p.id && !['COMPLETED', 'CANCELLED'].includes(r.status))
+      referrals.some(r =>
+        r.patientId === p.id &&
+        !['COMPLETED', 'CANCELLED'].includes(r.status) &&
+        (r.referringFacilityId === user?.facilityId ||
+         r.referringUserId === user?.id ||
+         r.targetFacilityId === user?.facilityId ||
+         (r.targetFacility && user?.facilityName && r.targetFacility.toLowerCase().includes(user.facilityName.toLowerCase())) ||
+         (r.referringFacility && user?.facilityName && r.referringFacility.toLowerCase().includes(user.facilityName.toLowerCase())))
+      )
     )
   );
 
