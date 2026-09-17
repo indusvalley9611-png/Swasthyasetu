@@ -97,6 +97,11 @@ interface SyncContextType {
     districtUser?: { id: string; name: string } | null,
     specificItemId?: string
   ) => boolean;
+  escalateRequestToStateProcurement: (
+    requestId: string,
+    specificItemId?: string,
+    dhoUser?: { id: string; name: string } | null
+  ) => boolean;
   allocateStockTransferDonor: (
     transferId: string,
     sourceStock: DrugStockItem,
@@ -1083,6 +1088,91 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     return newTransfer;
   };
 
+    /**
+   * Escalate an unallocated/stuck requisition to State Procurement (State Reserve Depot).
+   */
+  const escalateRequestToStateProcurement = (
+    requestId: string,
+    specificItemId?: string,
+    dhoUser?: { id: string; name: string } | null
+  ): boolean => {
+    const req = medicineRequests.find(r => r.id === requestId);
+    if (!req) {
+      showToast('Requisition not found.');
+      return false;
+    }
+
+    const stateReserveFacilityId = 'fac-state-reserve';
+    const stateReserveName = 'State Medical Reserve Depot, Pune';
+    const newlyCreatedTransfers: StockTransfer[] = [];
+
+    const updatedItems = req.items.map((item, idx) => {
+      if (specificItemId && item.id !== specificItemId) return item;
+
+      const transferId = "TRF-2026-" + String(Date.now() + idx).slice(-4);
+      const stateTransfer: StockTransfer = {
+        id: transferId,
+        medicineName: item.medicineName,
+        sourceStockId: 'stk-state-reserve-' + (idx + 1),
+        destinationStockId: item.stockId || ("stk-" + req.destinationFacilityId + "-" + (idx + 1)),
+        sourceFacilityId: stateReserveFacilityId,
+        sourceFacilityName: stateReserveName,
+        destinationFacilityId: req.destinationFacilityId,
+        destinationFacilityName: req.destinationFacilityName,
+        requestedQuantity: item.requestedQuantity,
+        urgency: item.urgency,
+        reason: (item.reason || '') + ' [Escalated to State Procurement / Emergency Central Reserve]',
+        isEmergency: true,
+        transportMode: '108_AMBULANCE',
+        donorAllocated: true,
+        allocatedByDistrictUserId: dhoUser?.id,
+        allocatedByDistrictUserName: dhoUser?.name,
+        allocatedAt: new Date().toISOString(),
+        supplyTier: 'STATE',
+        supplierAvailableSurplus: 150,
+        requestId: req.id,
+        requestItemId: item.id,
+        createdAt: new Date().toISOString(),
+        status: 'PENDING_SOURCE_APPROVAL',
+      };
+
+      newlyCreatedTransfers.push(stateTransfer);
+
+      return {
+        ...item,
+        status: 'PENDING_SOURCE_APPROVAL' as const,
+        sourceFacilityId: stateReserveFacilityId,
+        sourceFacilityName: stateReserveName,
+        supplyTier: 'STATE' as const,
+        supplierAvailableSurplus: 150,
+        transferId: transferId,
+      };
+    });
+
+    if (newlyCreatedTransfers.length > 0) {
+      const updatedTransfers = [...newlyCreatedTransfers, ...stockTransfers];
+      setStockTransfers(updatedTransfers);
+      saveStoredStockTransfers(updatedTransfers);
+
+      const updatedRequests = medicineRequests.map(r => {
+        if (r.id === requestId) {
+          return {
+            ...r,
+            items: updatedItems,
+            overallStatus: deriveOverallStatus(updatedItems),
+          };
+        }
+        return r;
+      });
+      setMedicineRequests(updatedRequests);
+      saveStoredMedicineRequests(updatedRequests);
+
+      showToast("Requisition " + req.id + " escalated to State Procurement / State Medical Reserve Depot.");
+      return true;
+    }
+    return false;
+  };
+
   const allocateStockTransferDonor = (
     transferId: string,
     sourceStock: DrugStockItem,
@@ -1397,6 +1487,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         createReplenishmentRequest,
         linkTransferToRequestItem,
         allocateRequestSupplies,
+        escalateRequestToStateProcurement,
         allocateStockTransferDonor,
         forwardStockTransfer,
         processStockTransfer,

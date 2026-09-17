@@ -1,5 +1,24 @@
 'use client';
 
+function formatElapsedWaitTime(createdAt: string): string {
+  if (!createdAt) return '2 days';
+  const created = new Date(createdAt).getTime();
+  const now = Date.now();
+  const diffMs = Math.max(0, now - created);
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffHours / 24);
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+  if (diffDays >= 1) {
+    return diffDays + ' day' + (diffDays > 1 ? 's' : '');
+  } else if (diffHours >= 1) {
+    return diffHours + ' hour' + (diffHours > 1 ? 's' : '');
+  } else if (diffMinutes >= 1) {
+    return diffMinutes + ' min' + (diffMinutes > 1 ? 's' : '');
+  }
+  return '45 mins';
+}
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSync } from '@/context/SyncContext';
 import { useAuth } from '@/context/AuthContext';
@@ -14,6 +33,7 @@ import {
 } from '@/lib/types';
 import { resolveCanonicalFacilityName } from '@/lib/mockData';
 import {
+  Send,
   Pill,
   Search,
   CheckCircle2,
@@ -73,6 +93,7 @@ export function DistrictTrackingCenter({
     patients,
     processStockTransfer,
     allocateRequestSupplies,
+    escalateRequestToStateProcurement,
   } = useSync();
 
   const isMr = language === 'mr';
@@ -1043,6 +1064,23 @@ export function DistrictTrackingCenter({
                           {item.supplyTier} Tier
                         </span>
                       )}
+
+                      {/* Urgency & Match Indicator */}
+                      {item.hasEligibleSupplier ? (
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-300">
+                          Matched &bull; Pending Approval
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 animate-pulse">
+                          Unmatched &bull; Needs DHO Intervention
+                        </span>
+                      )}
+
+                      {!item.hasEligibleSupplier && (
+                        <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border border-amber-300">
+                          Awaiting match &mdash; {formatElapsedWaitTime(item.createdAt)}
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -1091,18 +1129,34 @@ export function DistrictTrackingCenter({
                     </span>
 
                     {!item.hasEligibleSupplier && (
-                      <button
-                        onClick={() => {
-                          const res = allocateRequestSupplies(item.requestId, currentDistrict, user ? { id: user.id, name: user.name } : null);
-                          if (res) {
-                            setActionSuccessMsg('Supplier allocated from available surplus / routed to DHO Central Reserve.');
-                            setTimeout(() => setActionSuccessMsg(''), 4000);
-                          }
-                        }}
-                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1"
-                      >
-                        <span>Auto-Allocate / Send to DHO</span>
-                      </button>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          onClick={() => {
+                            const res = escalateRequestToStateProcurement(item.requestId, undefined, user ? { id: user.id, name: user.name } : null);
+                            if (res) {
+                              setActionSuccessMsg('Requisition #' + item.id + ' escalated to State Procurement.');
+                              setTimeout(() => setActionSuccessMsg(''), 4000);
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Escalate to State Procurement</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            const res = allocateRequestSupplies(item.requestId, currentDistrict, user ? { id: user.id, name: user.name } : null);
+                            if (res) {
+                              setActionSuccessMsg('Supplier allocated from available surplus / routed to DHO Central Reserve.');
+                              setTimeout(() => setActionSuccessMsg(''), 4000);
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1"
+                        >
+                          <Building2 className="w-3.5 h-3.5" />
+                          <span>Manual Source Assignment</span>
+                        </button>
+                      </div>
                     )}
 
                     {item.transferObj && item.displayStatus === 'REQUESTED' && (

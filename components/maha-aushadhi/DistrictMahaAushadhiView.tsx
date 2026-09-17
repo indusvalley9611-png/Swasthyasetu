@@ -1,5 +1,24 @@
 'use client';
 
+function formatElapsedWaitTime(createdAt: string): string {
+  if (!createdAt) return '2 days';
+  const created = new Date(createdAt).getTime();
+  const now = Date.now();
+  const diffMs = Math.max(0, now - created);
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffHours / 24);
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+  if (diffDays >= 1) {
+    return diffDays + ' day' + (diffDays > 1 ? 's' : '');
+  } else if (diffHours >= 1) {
+    return diffHours + ' hour' + (diffHours > 1 ? 's' : '');
+  } else if (diffMinutes >= 1) {
+    return diffMinutes + ' min' + (diffMinutes > 1 ? 's' : '');
+  }
+  return '45 mins';
+}
+
 import React, { useState, useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useSync } from '@/context/SyncContext';
@@ -77,6 +96,7 @@ export function DistrictMahaAushadhiView({ isSpecialist = false }: DistrictMahaA
     createReplenishmentRequest,
     linkTransferToRequestItem,
     allocateRequestSupplies,
+    escalateRequestToStateProcurement,
   } = useSync();
 
   // Primary 3-Action Navigation
@@ -106,6 +126,8 @@ export function DistrictMahaAushadhiView({ isSpecialist = false }: DistrictMahaA
   // Modals & Notifications
   const [isNewRequestModalOpen, setIsNewRequestModalOpen] = useState(false);
   const [confirmingReceiptTransfer, setConfirmingReceiptTransfer] = useState<StockTransfer | null>(null);
+  const [manualAssignItem, setManualAssignItem] = useState<any | null>(null);
+  const [manualSelectedFacilityId, setManualSelectedFacilityId] = useState<string>('fac-dh-pune');
   const [otpCode, setOtpCode] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -1640,6 +1662,94 @@ export function DistrictMahaAushadhiView({ isSpecialist = false }: DistrictMahaA
                 className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50"
               >
                 {isProcessing ? 'Verifying...' : 'Confirm & Credit Inventory'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      
+      {/* ── MANUAL SOURCE ASSIGNMENT MODAL ── */}
+      {manualAssignItem && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">
+                    Manual Source Assignment
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    DHO Direct Facility Allocation
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setManualAssignItem(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Medicine:</span>
+                <span className="font-bold text-slate-900 dark:text-white">{manualAssignItem.medicineName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Requested Qty:</span>
+                <span className="font-mono font-bold text-amber-600">{manualAssignItem.quantity} {manualAssignItem.unit}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Recipient PHC:</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">{manualAssignItem.destinationFacilityName}</span>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                Select Supplying Facility / Depot:
+              </label>
+              <select
+                value={manualSelectedFacilityId}
+                onChange={(e) => setManualSelectedFacilityId(e.target.value)}
+                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium focus:ring-2 focus:ring-amber-500 outline-none"
+              >
+                {facilities.map((fac) => (
+                  <option key={fac.id} value={fac.id}>
+                    {fac.name} ({fac.type} &bull; {fac.district})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setManualAssignItem(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const donorFac = facilities.find(f => f.id === manualSelectedFacilityId);
+                  if (donorFac) {
+                    const reqId = manualAssignItem.requestId;
+                    const res = allocateRequestSupplies(reqId, donorFac.district, user ? { id: user.id, name: user.name } : null, manualAssignItem.requestItemId || manualAssignItem.id);
+                    if (!res) {
+                      escalateRequestToStateProcurement(reqId, manualAssignItem.requestItemId || manualAssignItem.id, user ? { id: user.id, name: user.name } : null);
+                    }
+                    setSuccessMessage('Assigned supplier ' + donorFac.name + ' to requisition.');
+                  }
+                  setManualAssignItem(null);
+                }}
+                className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
+              >
+                Confirm Allocation
               </button>
             </div>
           </div>
