@@ -34,7 +34,6 @@ import { PatientDischargeModal } from '../specialist/PatientDischargeModal';
 import { FacilityTamperAuditView } from '../specialist/FacilityTamperAuditView';
 import { FacilityBloodDrugWidget } from '../specialist/FacilityBloodDrugWidget';
 import { DistrictQRScannerModal } from '../specialist/DistrictQRScannerModal';
-import { TertiaryStateEscalationsView } from '../specialist/TertiaryStateEscalationsView';
 import { ClinicalRecordsCaseHistoryView } from '../specialist/ClinicalRecordsCaseHistoryView';
 import {
   Users,
@@ -79,7 +78,6 @@ export type SpecialistTab =
   | 'beds'
   | 'roster'
   | 'admitted'
-  | 'escalated'
   | 'counter_referral'
   | 'discharges'
   | 'history'
@@ -883,18 +881,6 @@ export function SpecialistDashboard({
           bloodStock={bloodStock}
           drugStocks={myHospitalDrugStocks}
           referrals={myHospitalReferrals}
-        />
-      )}
-
-      {/* ── 12. TERTIARY STATE ESCALATIONS VIEW ── */}
-      {activeTab === 'escalated' && (
-        <TertiaryStateEscalationsView
-          hospitalName={currentHospitalName}
-          patients={patients}
-          bedSlots={bedSlots}
-          referrals={referrals}
-          doctorName={user?.name || 'Dr. Ananya Kulkarni'}
-          onOpenPatientTimeline={onOpenPatientTimeline}
         />
       )}
 

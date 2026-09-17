@@ -262,7 +262,6 @@ export function Sidebar({
             items: [
               { id: 'incoming', labelEn: 'Casualty & Inbound Referrals', labelMr: 'कॅज्युअल्टी व आगमन संदर्भ', icon: Siren, badge: pendingSpecialistReferralsCount > 0 ? pendingSpecialistReferralsCount : undefined, badgeColor: 'bg-blue-600 text-white' },
               { id: 'admitted', labelEn: 'Inpatient Admissions & Wards', labelMr: 'दाखल रुग्ण व वॉर्ड', icon: BedDouble },
-              { id: 'escalated', labelEn: 'Tertiary State Escalations', labelMr: 'राज्य रुग्णालय संदर्भ', icon: ArrowLeftRight },
               { id: 'counter_referral', labelEn: 'Counter-Referrals & Follow-Up', labelMr: 'उलटा संदर्भ व पाठपुरावा', icon: HeartHandshake },
               { id: 'history', labelEn: 'Clinical Records & Case History', labelMr: 'संदर्भ व वैद्यकीय इतिहास', icon: FileClock },
             ],
