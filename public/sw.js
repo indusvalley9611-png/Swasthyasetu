@@ -1,4 +1,4 @@
-const CACHE_NAME = 'swasthyasetu-v1';
+const CACHE_NAME = 'swasthyasetu-v2';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
